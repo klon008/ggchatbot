@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Persistent queue / runtime data
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

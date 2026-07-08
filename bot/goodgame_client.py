@@ -1,0 +1,168 @@
+"""WebSocket-клиент чата GoodGame (протокол v2).
+
+Док: https://github.com/GoodGame/API/blob/master/Chat/protocol2.md
+
+Умеет: логин через chatlogin -> получение user_id/token, подключение к
+wss://chat-1.goodgame.ru/chat2/, auth, join канала, приём сообщений с
+колбэком, отправка ответов, heartbeat и авто-reconnect с backoff.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from dataclasses import dataclass
+from typing import Awaitable, Callable, Optional
+
+import aiohttp
+import websockets
+
+log = logging.getLogger("goodgame")
+
+WS_URL = "wss://chat-1.goodgame.ru/chat2/"
+CHATLOGIN_URL = "https://goodgame.ru/ajax/chatlogin"
+
+# Уровни прав (protocol2): casual=0, stream_moder=10, streamer=20,
+# moderator=30, smoderator=40, admin=50.
+RIGHTS_STREAM_MODER = 10
+
+
+@dataclass
+class ChatMessage:
+    channel_id: str
+    user_id: str
+    user_name: str
+    user_rights: int
+    text: str
+
+    @property
+    def is_moderator(self) -> bool:
+        return self.user_rights >= RIGHTS_STREAM_MODER
+
+
+MessageHandler = Callable[[ChatMessage], Awaitable[None]]
+
+
+class GoodGameClient:
+    def __init__(
+        self,
+        login: str,
+        password: str,
+        channel_id: str,
+        on_message: MessageHandler,
+        user_id: str = "",
+    ) -> None:
+        self.login = login
+        self.password = password
+        self.channel_id = str(channel_id)
+        self.user_id = str(user_id)
+        self.token: str = ""
+        self._on_message = on_message
+        self._ws: Optional[websockets.WebSocketClientProtocol] = None
+        self._stop = False
+
+    # --- авторизация -----------------------------------------------------
+    async def _fetch_token(self) -> bool:
+        if not self.login or not self.password:
+            log.warning("GG_LOGIN/GG_PASSWORD не заданы — бот работает как гость (readonly).")
+            return False
+        try:
+            async with aiohttp.ClientSession() as session:
+                form = aiohttp.FormData()
+                form.add_field("login", self.login)
+                form.add_field("password", self.password)
+                async with session.post(CHATLOGIN_URL, data=form) as resp:
+                    data = await resp.json(content_type=None)
+        except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError) as exc:
+            log.error("Ошибка chatlogin: %s", exc)
+            return False
+
+        if not data.get("result"):
+            log.error("chatlogin отклонён: %s", data.get("response"))
+            return False
+
+        self.user_id = str(data.get("user_id") or self.user_id)
+        self.token = str(data.get("token") or "")
+        log.info("Авторизация в GG успешна: user_id=%s (%s)", self.user_id, data.get("response"))
+        return bool(self.token)
+
+    # --- основной цикл ---------------------------------------------------
+    async def run(self) -> None:
+        await self._fetch_token()
+        backoff = 1
+        while not self._stop:
+            try:
+                await self._connect_and_listen()
+                backoff = 1  # успешная сессия — сбрасываем задержку
+            except (websockets.WebSocketException, OSError) as exc:
+                log.warning("Соединение с GG прервано: %s. Reconnect через %dс.", exc, backoff)
+            except Exception:  # noqa: BLE001
+                log.exception("Непредвиденная ошибка GG-клиента. Reconnect через %dс.", backoff)
+            if self._stop:
+                break
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 30)
+            # Токен мог протухнуть — перелогиниваемся.
+            await self._fetch_token()
+
+    async def _connect_and_listen(self) -> None:
+        async with websockets.connect(WS_URL, ping_interval=20, ping_timeout=20) as ws:
+            self._ws = ws
+            log.info("Подключение к чату GG установлено.")
+            # Авторизация (если есть токен), иначе гость.
+            if self.token and self.user_id:
+                await self._send({"type": "auth", "data": {"user_id": int(self.user_id), "token": self.token}})
+            await self._send({"type": "join", "data": {"channel_id": self.channel_id, "hidden": 0}})
+            log.info("Присоединились к каналу %s.", self.channel_id)
+
+            async for raw in ws:
+                await self._handle_raw(raw)
+
+    async def _handle_raw(self, raw: str) -> None:
+        try:
+            packet = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+        ptype = packet.get("type")
+        data = packet.get("data", {}) or {}
+
+        if ptype == "success_auth":
+            self.user_id = str(data.get("user_id") or self.user_id)
+            log.info("auth OK: %s", data.get("user_name"))
+        elif ptype == "error":
+            log.warning("GG error: %s", data.get("errorMsg"))
+        elif ptype == "message":
+            await self._handle_message(data)
+
+    async def _handle_message(self, data: dict) -> None:
+        msg = ChatMessage(
+            channel_id=str(data.get("channel_id", self.channel_id)),
+            user_id=str(data.get("user_id", "0")),
+            user_name=str(data.get("user_name", "")),
+            user_rights=int(data.get("user_rights", 0) or 0),
+            text=str(data.get("text", "")),
+        )
+        # Игнорируем собственные сообщения — иначе петля на ответах бота.
+        if self.user_id and msg.user_id == self.user_id:
+            return
+        await self._on_message(msg)
+
+    # --- отправка --------------------------------------------------------
+    async def _send(self, obj: dict) -> None:
+        if self._ws is None:
+            return
+        await self._ws.send(json.dumps(obj, ensure_ascii=False))
+
+    async def send_message(self, text: str) -> None:
+        """Отправить сообщение в канал (нужна авторизация; гости readonly)."""
+        if not self.token:
+            log.debug("Пропуск ответа в чат (гость): %s", text)
+            return
+        await self._send(
+            {"type": "send_message", "data": {"channel_id": self.channel_id, "text": text, "mobile": 0}}
+        )
+
+    async def close(self) -> None:
+        self._stop = True
+        if self._ws is not None:
+            await self._ws.close()
