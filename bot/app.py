@@ -88,6 +88,7 @@ class SongRequestBot:
         track = Track(
             video_id=result.video_id,
             requested_by=msg.user_id,
+            requested_by_name=msg.user_name,
             url=canonical_url(result.video_id),
             title="",
         )
@@ -127,9 +128,21 @@ class SongRequestBot:
 
     async def _cmd_song(self, msg: ChatMessage) -> None:
         if self.queue.current:
-            await self._reply(f"сейчас играет: {self.queue.current.url}")
+            cur = self.queue.current
+            who = cur.requested_by_name or cur.requested_by
+            label = cur.title or cur.url
+            await self._reply(f"сейчас играет: {who} — {label}")
         else:
             await self._reply("сейчас ничего не играет")
+
+    async def _send_play(self, track: Track, token: str) -> None:
+        await self.obs.send_play(
+            track.video_id,
+            token,
+            self.cfg.max_duration_sec,
+            requested_by_name=track.requested_by_name,
+            title=track.title,
+        )
 
     # --- OBS -------------------------------------------------------------
     async def _on_obs_status(self, data: dict) -> None:
@@ -139,9 +152,7 @@ class SongRequestBot:
             # Ресинк: если что-то должно играть — перезапустим текущий,
             # иначе стартуем следующий из очереди.
             if self.queue.is_playing and self.queue.current:
-                await self.obs.send_play(
-                    self.queue.current.video_id, self.queue.current_token, self.cfg.max_duration_sec
-                )
+                await self._send_play(self.queue.current, self.queue.current_token or "")
                 self._arm_watchdog(self.queue.current_token)
             else:
                 await self._advance(expected_token=None)
@@ -179,7 +190,7 @@ class SongRequestBot:
 
             track, token = nxt
             log.info("Воспроизведение: %s (token=%s)", track.video_id, token)
-            await self.obs.send_play(track.video_id, token, self.cfg.max_duration_sec)
+            await self._send_play(track, token)
             self._arm_watchdog(token)
 
     # --- watchdog: страховка от «зависших» треков -----------------------

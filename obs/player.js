@@ -7,7 +7,7 @@
  * до первого play (lazy-init), после ENDED плеер скрывается и очищается.
  *
  * Протокол с Python:
- *   Python -> плеер: {action:"play", videoId, token, maxDurationSec}
+ *   Python -> плеер: {action:"play", videoId, token, maxDurationSec, requestedBy, title}
  *                    {action:"skip", token}
  *                    {action:"queue_state", playing, queueLength, current}
  *   плеер  -> Python: {status:"ready"}
@@ -19,9 +19,10 @@
   "use strict";
 
   var WS_PATH = "/ws";
-  var statusEl = document.getElementById("status");
   var playerWrap = document.getElementById("playerWrap");
   var playerInner = document.getElementById("playerInner");
+  var npUser = document.getElementById("npUser");
+  var npTitle = document.getElementById("npTitle");
 
   var ANIM_MS = 480;
   var hideTimer = null;
@@ -36,11 +37,33 @@
   var ws = null;
   var wsReconnectDelay = 1000;
 
-  var current = { token: null, videoId: null, maxDurationSec: 0 };
+  var current = {
+    token: null,
+    videoId: null,
+    maxDurationSec: 0,
+    requestedBy: "",
+    title: ""
+  };
   var durationChecked = false;
 
-  function setStatus(text) {
-    if (statusEl) statusEl.textContent = text;
+  function updateNowPlaying(requestedBy, title) {
+    if (npUser) {
+      npUser.textContent = requestedBy || "Зритель";
+    }
+    if (npTitle) {
+      npTitle.textContent = title || "Загрузка…";
+    }
+  }
+
+  function refreshTitleFromPlayer() {
+    if (!player || !player.getVideoData) return;
+    try {
+      var data = player.getVideoData();
+      if (data && data.title) {
+        current.title = data.title;
+        updateNowPlaying(current.requestedBy, current.title);
+      }
+    } catch (e) {}
   }
 
   function showPlayer() {
@@ -107,7 +130,6 @@
   }
 
   function connectWs() {
-    setStatus("Подключение к боту…");
     try {
       ws = new WebSocket(wsUrl());
     } catch (e) {
@@ -117,7 +139,6 @@
 
     ws.onopen = function () {
       wsReconnectDelay = 1000;
-      setStatus("Подключено. Ожидание трека…");
       hidePlayer(true);
       send({ status: "ready" });
     };
@@ -133,7 +154,6 @@
     };
 
     ws.onclose = function () {
-      setStatus("Соединение потеряно, переподключение…");
       scheduleReconnect();
     };
 
@@ -165,15 +185,14 @@
       case "queue_state":
         if (!data.playing) {
           hidePlayer();
-          setStatus("Очередь: " + (data.queueLength || 0) + " • ожидание…");
         }
         break;
     }
   }
 
   function startPlayback() {
+    updateNowPlaying(current.requestedBy, current.title || "Загрузка…");
     showPlayer();
-    setStatus("Загрузка: " + current.videoId);
     try {
       player.mute();
       player.loadVideoById(current.videoId);
@@ -186,7 +205,9 @@
     current = {
       token: cmd.token || null,
       videoId: cmd.videoId || null,
-      maxDurationSec: cmd.maxDurationSec || 0
+      maxDurationSec: cmd.maxDurationSec || 0,
+      requestedBy: cmd.requestedBy || "",
+      title: cmd.title || ""
     };
     durationChecked = false;
     ensurePlayer(startPlayback);
@@ -194,7 +215,6 @@
 
   function skipVideo() {
     hidePlayer();
-    setStatus("Пропуск трека…");
     send({ status: "ended", token: current.token, videoId: current.videoId, skipped: true });
   }
 
@@ -210,7 +230,6 @@
       } else {
         durationChecked = true;
         hidePlayer();
-        setStatus("Похоже на live-стрим — пропуск");
         send({ status: "too_long", token: current.token, videoId: current.videoId, durationSec: 0 });
       }
       return;
@@ -219,14 +238,12 @@
     durationChecked = true;
     if (current.maxDurationSec > 0 && dur > current.maxDurationSec) {
       hidePlayer();
-      setStatus("Слишком длинное (" + Math.round(dur) + "с) — пропуск");
       send({ status: "too_long", token: current.token, videoId: current.videoId, durationSec: Math.round(dur) });
     }
   }
 
   function reportError(code) {
     hidePlayer();
-    setStatus("Ошибка плеера (код " + code + ") — пропуск");
     send({ status: "error", token: current.token, videoId: current.videoId, code: code });
   }
 
@@ -258,6 +275,7 @@
         rel: 0,
         playsinline: 1,
         enablejsapi: 1,
+        cc_load_policy: 0,
         origin: location.origin
       },
       events: {
@@ -289,12 +307,16 @@
   function onPlayerStateChange(evt) {
     switch (evt.data) {
       case YT.PlayerState.PLAYING:
-        setStatus("Играет: " + current.videoId);
+        refreshTitleFromPlayer();
         try {
           player.unMute();
           player.setVolume(100);
+          player.setOption("captions", "track", {});
         } catch (e) {}
         checkDuration(0);
+        break;
+      case YT.PlayerState.BUFFERING:
+        refreshTitleFromPlayer();
         break;
       case YT.PlayerState.ENDED:
         hidePlayer();

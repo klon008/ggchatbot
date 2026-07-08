@@ -27,6 +27,7 @@ class Track:
     requested_by: str
     url: str
     title: str = ""
+    requested_by_name: str = ""
     added_at: float = field(default_factory=time.time)
 
 

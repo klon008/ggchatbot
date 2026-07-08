@@ -117,13 +117,22 @@ class ObsServer:
         for ws in dead:
             self._clients.discard(ws)
 
-    async def send_play(self, video_id: str, token: str, max_duration_sec: int) -> None:
+    async def send_play(
+        self,
+        video_id: str,
+        token: str,
+        max_duration_sec: int,
+        requested_by_name: str = "",
+        title: str = "",
+    ) -> None:
         await self.broadcast(
             {
                 "action": "play",
                 "videoId": video_id,
                 "token": token,
                 "maxDurationSec": max_duration_sec,
+                "requestedBy": requested_by_name,
+                "title": title,
             }
         )
 
