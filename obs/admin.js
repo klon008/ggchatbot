@@ -6,8 +6,11 @@
   const pointsFilter = document.getElementById("pointsFilter");
   const queueBody = document.getElementById("queueBody");
   const queuePlaying = document.getElementById("queuePlaying");
+  const ordersStatus = document.getElementById("ordersStatus");
+  const ordersToggle = document.getElementById("ordersToggle");
 
   let allPoints = [];
+  let ordersEnabled = true;
 
   function setStatus(text, kind) {
     statusBar.textContent = text;
@@ -162,6 +165,46 @@
   pointsFilter.addEventListener("input", renderPoints);
   document.getElementById("pointsRefresh").addEventListener("click", loadPoints);
 
+  function renderOrdersControl() {
+    if (ordersEnabled) {
+      ordersStatus.textContent = "Статус: заказы включены";
+      ordersStatus.className = "orders-status on";
+      ordersToggle.textContent = "ОТКЛЮЧИТЬ ЗАКАЗ МУЗЫКИ";
+      ordersToggle.className = "danger";
+    } else {
+      ordersStatus.textContent = "Статус: заказы отключены";
+      ordersStatus.className = "orders-status off";
+      ordersToggle.textContent = "Включить заказы музыки";
+      ordersToggle.className = "primary";
+    }
+  }
+
+  async function loadOrdersState() {
+    const data = await api("GET", "/api/song-request");
+    ordersEnabled = !!data.orders_enabled;
+    renderOrdersControl();
+  }
+
+  async function toggleOrders() {
+    const next = !ordersEnabled;
+    if (!next) {
+      const ok = confirm(
+        "Отключить заказы музыки?\n\nОчередь будет очищена, принцессы вернутся заказчикам."
+      );
+      if (!ok) return;
+    }
+    setStatus(next ? "Включение заказов…" : "Отключение заказов…");
+    try {
+      const data = await api("PUT", "/api/song-request", { orders_enabled: next });
+      ordersEnabled = !!data.orders_enabled;
+      renderOrdersControl();
+      await loadQueue();
+      setStatus(ordersEnabled ? "Заказы включены" : "Заказы отключены, очередь очищена", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  }
+
   function formatPlaying(track) {
     if (!track) return '<span class="empty">ничего не играет</span>';
     const who = track.requested_by_name || track.requested_by || "?";
@@ -172,6 +215,7 @@
   async function loadQueue() {
     setStatus("Загрузка очереди…");
     try {
+      await loadOrdersState();
       const data = await api("GET", "/api/queue");
       queuePlaying.innerHTML = formatPlaying(data.playing);
       const waiting = data.waiting || [];
@@ -218,6 +262,7 @@
   });
 
   document.getElementById("queueRefresh").addEventListener("click", loadQueue);
+  ordersToggle.addEventListener("click", toggleOrders);
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {

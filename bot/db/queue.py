@@ -21,6 +21,20 @@ def _track_from_row(row) -> dict[str, Any]:
     }
 
 
+async def get_orders_enabled(db: Database) -> bool:
+    row = await db.fetchone("SELECT orders_enabled FROM queue_meta WHERE id = 1")
+    if row is None:
+        return True
+    return bool(row["orders_enabled"])
+
+
+async def set_orders_enabled(db: Database, enabled: bool) -> None:
+    await db.execute(
+        "UPDATE queue_meta SET orders_enabled = ? WHERE id = 1",
+        (1 if enabled else 0,),
+    )
+
+
 async def load_meta(db: Database) -> tuple[Optional[dict], Optional[str], int]:
     row = await db.fetchone(
         "SELECT current_json, current_token, token_counter FROM queue_meta WHERE id = 1"

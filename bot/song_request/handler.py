@@ -7,6 +7,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from bot.db import Database
+from bot.db import queue as queue_db
 from bot.goodgame import ChatMessage
 from bot.princess.economy import pluralize_princess
 from bot.princess.storage import PointsStore
@@ -48,6 +49,7 @@ class SongRequestHandler:
             on_status=self._on_obs_status,
             db=db,
             queue=self.queue,
+            sr_handler=self,
         )
         self._advance_lock = asyncio.Lock()
         self._cooldowns: dict[str, float] = {}
@@ -55,11 +57,13 @@ class SongRequestHandler:
         self._reply: Optional[ReplyFn] = None
         self._points: Optional[PointsStore] = None
         self._youtube_api_warned = False
+        self._orders_enabled = True
 
     async def start(self) -> None:
         await self.queue.load()
+        self._orders_enabled = await queue_db.get_orders_enabled(self._db)
         await self.obs.start()
-        log.info("Song-request модуль запущен.")
+        log.info("Song-request модуль запущен (заказы: %s).", "вкл" if self._orders_enabled else "выкл")
 
     async def close(self) -> None:
         if self._watchdog:
@@ -71,6 +75,27 @@ class SongRequestHandler:
 
     def bind_points(self, store: PointsStore) -> None:
         self._points = store
+
+    @property
+    def orders_enabled(self) -> bool:
+        return self._orders_enabled
+
+    async def set_orders_enabled(self, enabled: bool) -> None:
+        if enabled == self._orders_enabled:
+            return
+        await queue_db.set_orders_enabled(self._db, enabled)
+        self._orders_enabled = enabled
+        if not enabled:
+            refunded = await self._clear_queue_with_refunds()
+            if refunded > 0:
+                await self._say(
+                    "Заказы музыки отключены. Очередь очищена, принцессы возвращены."
+                )
+            else:
+                await self._say("Заказы музыки отключены. Очередь очищена.")
+        else:
+            log.info("Заказы музыки включены.")
+            await self._say("Заказы музыки снова доступны.")
 
     async def handle_message(self, msg: ChatMessage) -> bool:
         text = msg.text.strip()
@@ -95,6 +120,10 @@ class SongRequestHandler:
         return True
 
     async def _cmd_sr(self, msg: ChatMessage, arg: str) -> None:
+        if not self._orders_enabled:
+            await self._say(f"{msg.user_name}, заказ песен временно отключён")
+            return
+
         if self.cfg.user_cooldown_sec > 0:
             last = self._cooldowns.get(msg.user_id, 0.0)
             wait = self.cfg.user_cooldown_sec - (time.time() - last)
@@ -287,6 +316,38 @@ class SongRequestHandler:
             )
         else:
             await self._say(f"@{name}, не удалось воспроизвести: {reason}")
+
+    async def _refund_track(self, track: Track) -> int:
+        cost = track.paid_cost
+        if cost > 0 and self._points is not None:
+            await self._points.add(track.requested_by, cost)
+            return cost
+        return 0
+
+    async def _clear_queue_with_refunds(self) -> int:
+        async with self._advance_lock:
+            tracks = self.queue.all_tracks()
+            if self._watchdog:
+                self._watchdog.cancel()
+                self._watchdog = None
+            if self.queue.is_playing:
+                await self.obs.send_skip(self.queue.current_token)
+            total_refunded = 0
+            for track in tracks:
+                refunded = await self._refund_track(track)
+                if refunded:
+                    name = track.requested_by_name or track.requested_by
+                    log.info(
+                        "Возврат %d принцесс пользователю %s (%s) при отключении заказов",
+                        refunded,
+                        track.requested_by,
+                        name,
+                    )
+                    total_refunded += refunded
+            await self.queue.clear()
+            await self.obs.send_queue_state(self.queue.snapshot())
+            log.info("Очередь очищена (%d трек(ов)), заказы отключены.", len(tracks))
+            return total_refunded
 
     async def _send_play(self, track: Track, token: str) -> None:
         await self.obs.send_play(

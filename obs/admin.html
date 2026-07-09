@@ -165,6 +165,12 @@
       gap: 6px;
       color: #b8b8d0;
     }
+    .orders-status {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+    .orders-status.on { color: #8fd48f; }
+    .orders-status.off { color: #ffb0b0; }
   </style>
 </head>
 <body>
@@ -206,6 +212,12 @@
     </section>
 
     <section id="panel-queue" class="panel">
+      <div class="card" id="ordersControlCard">
+        <h3>Заказы музыки</h3>
+        <p id="ordersStatus" class="orders-status">—</p>
+        <button type="button" id="ordersToggle" class="danger">ОТКЛЮЧИТЬ ЗАКАЗ МУЗЫКИ</button>
+      </div>
+
       <div class="toolbar">
         <button type="button" id="queueRefresh">Обновить</button>
       </div>

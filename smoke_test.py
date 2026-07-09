@@ -28,9 +28,10 @@ async def main() -> int:
     cfg.obs_port = 18765
     bot = SongRequestBot(cfg)
     await bot.db.open()
-    await bot.queue.clear()
     bot.sr.bind_points(bot.princess.points)
-    await bot.obs.start()
+    await bot.sr.start()
+    await bot.queue.clear()
+    await bot.sr.set_orders_enabled(True)
 
     base = f"http://{cfg.obs_host}:{cfg.obs_port}"
     ok = True
@@ -171,10 +172,45 @@ async def main() -> int:
             assert r.status == 200, await r.text()
             print("[OK] DELETE /api/points")
 
+        disable_uid = "smoke-disable-user"
+        await bot.princess.points.set_balance(disable_uid, 0)
+        await bot.queue.clear()
+        await bot.queue.add(
+            Track(
+                video_id="eeeeeeeeeee",
+                requested_by=disable_uid,
+                requested_by_name="DisableUser",
+                url="w",
+                paid_cost=100,
+            )
+        )
+        async with s.put(
+            f"{base}/api/song-request",
+            json={"orders_enabled": False},
+        ) as r:
+            assert r.status == 200, await r.text()
+            body = await r.json()
+            assert body["orders_enabled"] is False
+            print("[OK] PUT /api/song-request (disable)")
+        refunded = await bot.princess.points.get_balance(disable_uid)
+        assert refunded == 100, f"ожидали возврат 100 при отключении, баланс={refunded}"
+        print("[OK] возврат принцесс при отключении заказов")
+        async with s.get(f"{base}/api/queue") as r:
+            qdata = await r.json()
+            assert qdata["playing"] is None
+            assert len(qdata["waiting"]) == 0
+            print("[OK] очередь пуста после отключения заказов")
+        async with s.put(
+            f"{base}/api/song-request",
+            json={"orders_enabled": True},
+        ) as r:
+            assert r.status == 200, await r.text()
+            print("[OK] PUT /api/song-request (enable)")
+
     if bot._watchdog:
         bot._watchdog.cancel()
     await bot.queue.clear()
-    await bot.obs.stop()
+    await bot.sr.close()
     await bot.db.close()
     print("RESULT:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

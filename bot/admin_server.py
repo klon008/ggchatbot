@@ -13,6 +13,7 @@ from bot.db import Database
 from bot.db import points as points_db
 
 if TYPE_CHECKING:
+    from bot.song_request.handler import SongRequestHandler
     from bot.song_request.queue import QueueManager
 
 log = logging.getLogger("admin")
@@ -21,9 +22,15 @@ OBS_DIR = Path(__file__).resolve().parent.parent / "obs"
 
 
 class AdminServer:
-    def __init__(self, db: Database, queue: "QueueManager") -> None:
+    def __init__(
+        self,
+        db: Database,
+        queue: "QueueManager",
+        sr_handler: "SongRequestHandler",
+    ) -> None:
         self._db = db
         self._queue = queue
+        self._sr = sr_handler
 
     def register(self, app: web.Application) -> None:
         app.add_routes(
@@ -37,6 +44,8 @@ class AdminServer:
                 web.delete("/api/points/{user_id}", self._api_points_delete),
                 web.get("/api/queue", self._api_queue_get),
                 web.delete("/api/queue/waiting/{index}", self._api_queue_delete),
+                web.get("/api/song-request", self._api_sr_get),
+                web.put("/api/song-request", self._api_sr_put),
             ]
         )
 
@@ -169,3 +178,16 @@ class AdminServer:
         if not removed:
             return self._error("Трек не найден", status=404)
         return self._json_response({"deleted": True, "index": index})
+
+    async def _api_sr_get(self, request: web.Request) -> web.Response:
+        return self._json_response({"orders_enabled": self._sr.orders_enabled})
+
+    async def _api_sr_put(self, request: web.Request) -> web.Response:
+        data = await self._read_json(request)
+        if data is None:
+            return self._error("Некорректный JSON")
+        raw = data.get("orders_enabled")
+        if not isinstance(raw, bool):
+            return self._error("orders_enabled должен быть true или false")
+        await self._sr.set_orders_enabled(raw)
+        return self._json_response({"orders_enabled": self._sr.orders_enabled})

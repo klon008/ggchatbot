@@ -12,6 +12,7 @@ from bot.admin_server import AdminServer
 from bot.db import Database
 
 if TYPE_CHECKING:
+    from bot.song_request.handler import SongRequestHandler
     from bot.song_request.queue import QueueManager
 
 log = logging.getLogger("song_request.obs")
@@ -29,13 +30,14 @@ class ObsServer:
         on_status: StatusHandler,
         db: Optional[Database] = None,
         queue: Optional["QueueManager"] = None,
+        sr_handler: Optional["SongRequestHandler"] = None,
     ) -> None:
         self.host = host
         self.port = port
         self._on_status = on_status
         self._clients: set[web.WebSocketResponse] = set()
         self._runner: Optional[web.AppRunner] = None
-        self._has_admin = db is not None and queue is not None
+        self._has_admin = db is not None and queue is not None and sr_handler is not None
         self._app = web.Application()
         self._app.add_routes(
             [
@@ -46,7 +48,7 @@ class ObsServer:
             ]
         )
         if self._has_admin:
-            AdminServer(db, queue).register(self._app)
+            AdminServer(db, queue, sr_handler).register(self._app)
 
     async def start(self) -> None:
         self._runner = web.AppRunner(self._app)

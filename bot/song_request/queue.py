@@ -132,6 +132,12 @@ class QueueManager:
     def upcoming(self, limit: int = 5) -> list[Track]:
         return self._queue[:limit]
 
+    def all_tracks(self) -> list[Track]:
+        tracks = list(self._queue)
+        if self.current is not None:
+            tracks.insert(0, self.current)
+        return tracks
+
     def list_waiting(self) -> list[dict]:
         return [
             {

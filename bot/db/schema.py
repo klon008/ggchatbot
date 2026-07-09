@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiosqlite
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS queue_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     current_json TEXT,
     current_token TEXT,
-    token_counter INTEGER NOT NULL DEFAULT 1
+    token_counter INTEGER NOT NULL DEFAULT 1,
+    orders_enabled INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS queue_items (
@@ -89,6 +90,16 @@ async def _migrate_schema(conn: aiosqlite.Connection) -> None:
                 "ALTER TABLE queue_items ADD COLUMN paid_cost INTEGER NOT NULL DEFAULT 0"
             )
         await conn.execute("UPDATE schema_version SET version = 2 WHERE id = 1")
+
+    if version < 3:
+        async with conn.execute("PRAGMA table_info(queue_meta)") as cursor:
+            cols = await cursor.fetchall()
+        col_names = {c[1] for c in cols}
+        if "orders_enabled" not in col_names:
+            await conn.execute(
+                "ALTER TABLE queue_meta ADD COLUMN orders_enabled INTEGER NOT NULL DEFAULT 1"
+            )
+        await conn.execute("UPDATE schema_version SET version = 3 WHERE id = 1")
 
 
 async def init_schema(conn: aiosqlite.Connection) -> None:
