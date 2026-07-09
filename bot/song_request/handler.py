@@ -187,8 +187,7 @@ class SongRequestHandler:
             return
         self._youtube_api_warned = True
         await self._say(
-            "Плеер OBS не может подключиться к YouTube (сеть или блокировка). "
-            "Нужен VPN на ПК стримера. Для диагностики: player.html?debug=1"
+            "Плеер OBS не может подключиться к YouTube (Проблемы с сетью). "
         )
 
     async def _on_obs_status(self, data: dict) -> None:
