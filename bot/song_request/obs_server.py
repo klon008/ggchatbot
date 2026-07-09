@@ -4,9 +4,15 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 from aiohttp import WSMsgType, web
+
+from bot.admin_server import AdminServer
+from bot.db import Database
+
+if TYPE_CHECKING:
+    from bot.song_request.queue import QueueManager
 
 log = logging.getLogger("song_request.obs")
 
@@ -16,12 +22,20 @@ StatusHandler = Callable[[dict], Awaitable[None]]
 
 
 class ObsServer:
-    def __init__(self, host: str, port: int, on_status: StatusHandler) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        on_status: StatusHandler,
+        db: Optional[Database] = None,
+        queue: Optional["QueueManager"] = None,
+    ) -> None:
         self.host = host
         self.port = port
         self._on_status = on_status
         self._clients: set[web.WebSocketResponse] = set()
         self._runner: Optional[web.AppRunner] = None
+        self._has_admin = db is not None and queue is not None
         self._app = web.Application()
         self._app.add_routes(
             [
@@ -31,6 +45,8 @@ class ObsServer:
                 web.get("/ws", self._handle_ws),
             ]
         )
+        if self._has_admin:
+            AdminServer(db, queue).register(self._app)
 
     async def start(self) -> None:
         self._runner = web.AppRunner(self._app)
@@ -38,6 +54,8 @@ class ObsServer:
         site = web.TCPSite(self._runner, self.host, self.port)
         await site.start()
         log.info("OBS-сервер запущен: http://%s:%d/player.html", self.host, self.port)
+        if self._has_admin:
+            log.info("Admin-панель: http://%s:%d/admin.html", self.host, self.port)
 
     async def stop(self) -> None:
         for ws in list(self._clients):

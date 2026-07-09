@@ -1,23 +1,51 @@
-# Secrets
-.env
-
-# Persistent queue / runtime data
-data/
-oldbot/
-
-# Release build output
-dist/
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-env/
-
-# IDE / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+# Secrets
+
+.env
+
+# Local balance tuning (copied from *.example.py on install)
+
+bot/princess/settings.py
+bot/song_request/settings.py
+
+
+
+# Persistent queue / runtime data
+
+data/
+
+oldbot/
+
+
+
+# Release build output
+
+dist/
+
+
+
+# Python
+
+__pycache__/
+
+*.py[cod]
+
+*.egg-info/
+
+.venv/
+
+venv/
+
+env/
+
+
+
+# IDE / OS
+
+.vscode/
+
+.idea/
+
+.DS_Store
+
+Thumbs.db
+

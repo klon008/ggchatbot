@@ -20,6 +20,7 @@ class Track:
     title: str = ""
     requested_by_name: str = ""
     added_at: float = field(default_factory=time.time)
+    paid_cost: int = 0
 
 
 def _track_from_dict(item: dict) -> Track:
@@ -130,6 +131,27 @@ class QueueManager:
 
     def upcoming(self, limit: int = 5) -> list[Track]:
         return self._queue[:limit]
+
+    def list_waiting(self) -> list[dict]:
+        return [
+            {
+                "index": i,
+                "video_id": t.video_id,
+                "title": t.title,
+                "requested_by": t.requested_by,
+                "requested_by_name": t.requested_by_name,
+                "url": t.url,
+                "added_at": t.added_at,
+            }
+            for i, t in enumerate(self._queue)
+        ]
+
+    async def remove_waiting(self, index: int) -> bool:
+        if index < 0 or index >= len(self._queue):
+            return False
+        del self._queue[index]
+        await self._save()
+        return True
 
     async def clear(self) -> None:
         self._queue.clear()

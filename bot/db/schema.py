@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiosqlite
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS queue_items (
     requested_by_name TEXT NOT NULL DEFAULT '',
     url TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT '',
-    added_at REAL NOT NULL
+    added_at REAL NOT NULL,
+    paid_cost INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS prison (
@@ -74,6 +75,22 @@ CREATE TABLE IF NOT EXISTS dice_cooldowns (
 """
 
 
+async def _migrate_schema(conn: aiosqlite.Connection) -> None:
+    async with conn.execute("SELECT version FROM schema_version WHERE id = 1") as cursor:
+        row = await cursor.fetchone()
+    version = int(row[0]) if row else 1
+
+    if version < 2:
+        async with conn.execute("PRAGMA table_info(queue_items)") as cursor:
+            cols = await cursor.fetchall()
+        col_names = {c[1] for c in cols}
+        if "paid_cost" not in col_names:
+            await conn.execute(
+                "ALTER TABLE queue_items ADD COLUMN paid_cost INTEGER NOT NULL DEFAULT 0"
+            )
+        await conn.execute("UPDATE schema_version SET version = 2 WHERE id = 1")
+
+
 async def init_schema(conn: aiosqlite.Connection) -> None:
     await conn.executescript(TABLES_SQL)
     await conn.execute(
@@ -85,4 +102,5 @@ async def init_schema(conn: aiosqlite.Connection) -> None:
         "INSERT OR IGNORE INTO queue_meta (id, current_json, current_token, token_counter) "
         "VALUES (1, NULL, NULL, 1)"
     )
+    await _migrate_schema(conn)
     await conn.commit()

@@ -117,6 +117,29 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Ok "Код обновлён"
 
+function Ensure-SettingsFile([string]$ProjectRoot, [string]$RelativeDir) {
+    $settingsPath = Join-Path $ProjectRoot (Join-Path $RelativeDir "settings.py")
+    $examplePath = Join-Path $ProjectRoot (Join-Path $RelativeDir "settings.example.py")
+
+    if (Test-Path $settingsPath) {
+        return
+    }
+
+    if (Test-Path $examplePath) {
+        Copy-Item $examplePath $settingsPath
+        Write-Warn "Создан $RelativeDir\settings.py из шаблона — проверьте баланс под свой канал"
+    }
+    else {
+        Write-Warn "$RelativeDir\settings.example.py не найден — создайте settings.py вручную"
+    }
+}
+
+Ensure-SettingsFile $projectDir "bot\princess"
+Ensure-SettingsFile $projectDir "bot\song_request"
+Write-Host ""
+Write-Host "Настройки баланса: bot\princess\settings.py и bot\song_request\settings.py" -ForegroundColor Yellow
+Write-Host "сохраняются при обновлении. Сравните с *.example.py, если в репо появились новые параметры." -ForegroundColor Yellow
+
 $venvPython = Join-Path $projectDir ".venv\Scripts\python.exe"
 if (Test-Path $venvPython) {
     Write-Step "Обновление зависимостей Python"

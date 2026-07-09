@@ -17,6 +17,7 @@ def _track_from_row(row) -> dict[str, Any]:
         "url": row["url"],
         "title": row["title"],
         "added_at": float(row["added_at"]),
+        "paid_cost": int(row["paid_cost"]) if "paid_cost" in row.keys() else 0,
     }
 
 
@@ -47,7 +48,7 @@ async def save_meta(
 
 async def load_items(db: Database) -> list[dict[str, Any]]:
     rows = await db.fetchall(
-        "SELECT video_id, requested_by, requested_by_name, url, title, added_at "
+        "SELECT video_id, requested_by, requested_by_name, url, title, added_at, paid_cost "
         "FROM queue_items ORDER BY position ASC"
     )
     return [_track_from_row(row) for row in rows]
@@ -59,8 +60,8 @@ async def replace_items(db: Database, items: list[dict[str, Any]]) -> None:
         for pos, item in enumerate(items):
             await conn.execute(
                 "INSERT INTO queue_items "
-                "(position, video_id, requested_by, requested_by_name, url, title, added_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "(position, video_id, requested_by, requested_by_name, url, title, added_at, paid_cost) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     pos,
                     item["video_id"],
@@ -69,6 +70,7 @@ async def replace_items(db: Database, items: list[dict[str, Any]]) -> None:
                     item["url"],
                     item.get("title", ""),
                     float(item.get("added_at", 0)),
+                    int(item.get("paid_cost", 0)),
                 ),
             )
 
@@ -85,8 +87,8 @@ async def persist_queue(
         for pos, item in enumerate(queue_items):
             await conn.execute(
                 "INSERT INTO queue_items "
-                "(position, video_id, requested_by, requested_by_name, url, title, added_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "(position, video_id, requested_by, requested_by_name, url, title, added_at, paid_cost) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     pos,
                     item["video_id"],
@@ -95,6 +97,7 @@ async def persist_queue(
                     item["url"],
                     item.get("title", ""),
                     float(item.get("added_at", 0)),
+                    int(item.get("paid_cost", 0)),
                 ),
             )
         current_json = json.dumps(current, ensure_ascii=False) if current else None

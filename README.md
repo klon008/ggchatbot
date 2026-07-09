@@ -51,6 +51,8 @@ cd ggchatbot
 python -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
 copy .env.example .env
+copy bot\princess\settings.example.py bot\princess\settings.py
+copy bot\song_request\settings.example.py bot\song_request\settings.py
 .\.venv\Scripts\python.exe main.py
 ```
 
@@ -73,6 +75,22 @@ copy .env.example .env
 | `MAX_DURATION_SEC` | Лимит длительности трека (проверяется в плеере). |
 | `TRACK_WATCHDOG_EXTRA_SEC` | Запас к лимиту для watchdog принудительного перехода. |
 | `USER_COOLDOWN_SEC` | Антиспам: пауза между `!sr` одного пользователя (`0` = выкл). |
+
+## Настройка баланса (принцессы, !sr)
+
+Баланс игры (очки за сообщения, кража, дейлики, стоимость `!sr` и т.д.) задаётся
+в локальных файлах, которые **не попадают в git** и **сохраняются при `update.cmd`**:
+
+| Файл | Шаблон в репозитории |
+|------|----------------------|
+| `bot/princess/settings.py` | `bot/princess/settings.example.py` |
+| `bot/song_request/settings.py` | `bot/song_request/settings.example.py` |
+
+При первой установке (`install.cmd` или ручное копирование) создаётся `settings.py`
+из `settings.example.py`. Меняйте только свой `settings.py`.
+
+После обновления кода сравните `*.example.py` с вашим `settings.py` — если в репо
+появились новые параметры, перенесите их вручную.
 
 ### Как узнать `GG_CHANNEL_ID`
 

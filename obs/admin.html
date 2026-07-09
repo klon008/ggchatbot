@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bot Admin — bot.db</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: #0d0d14;
+      color: #e8e8f0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 22px;
+      font-weight: 600;
+      color: #9ecbff;
+    }
+    .subtitle {
+      margin: 0 0 20px;
+      color: #8888a0;
+      font-size: 13px;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      padding: 8px 16px;
+      border: 1px solid #3d3d5c;
+      border-radius: 6px;
+      background: #1c1c2e;
+      color: #b8b8d0;
+      cursor: pointer;
+      font: inherit;
+    }
+    .tab.active {
+      background: #2a3a5c;
+      border-color: #5a7ab0;
+      color: #fff;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    input[type="text"],
+    input[type="number"] {
+      padding: 7px 10px;
+      border: 1px solid #3d3d5c;
+      border-radius: 6px;
+      background: #14141f;
+      color: #e8e8f0;
+      font: inherit;
+    }
+    input[type="text"] { min-width: 160px; }
+    input[type="number"] { width: 100px; }
+    button {
+      padding: 7px 14px;
+      border: 1px solid #3d3d5c;
+      border-radius: 6px;
+      background: #2a2a40;
+      color: #e8e8f0;
+      cursor: pointer;
+      font: inherit;
+    }
+    button:hover { background: #353550; }
+    button.primary {
+      background: #2a4a7a;
+      border-color: #4a7ab0;
+    }
+    button.danger {
+      background: #4a2020;
+      border-color: #804040;
+      color: #ffb0b0;
+    }
+    button.small {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #14141f;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+    }
+    th {
+      background: #1c1c2e;
+      color: #9ecbff;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    tr{
+      border-bottom: 1px solid #222233;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background: #1a1a28; }
+    .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    #statusBar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      margin-bottom: 14px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: #1c1c2e;
+      color: #b8b8d0;
+      font-size: 13px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+    }
+    #statusBar.ok { color: #8fd48f; }
+    #statusBar.err { color: #ff7b7b; }
+    .card {
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      background: #14141f;
+      border: 1px solid #2a2a40;
+      border-radius: 8px;
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #9ecbff;
+    }
+    .empty { color: #666680; font-style: italic; }
+    .add-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 12px;
+      background: #1c1c2e;
+      border-radius: 8px;
+      margin-bottom: 14px;
+    }
+    .add-form label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #b8b8d0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Bot Admin</h1>
+    <p class="subtitle">Локальная панель для data/bot.db (доступна только пока запущен бот)</p>
+
+    <div id="statusBar">Готово</div>
+
+    <div class="tabs">
+      <button type="button" class="tab active" data-tab="points">Принцессы (points)</button>
+      <button type="button" class="tab" data-tab="queue">Очередь</button>
+    </div>
+
+    <section id="panel-points" class="panel active">
+      <div class="toolbar">
+        <input type="text" id="pointsFilter" placeholder="Поиск по user_id…" />
+        <button type="button" id="pointsRefresh">Обновить</button>
+      </div>
+
+      <form class="add-form" id="pointsAddForm">
+        <label>user_id <input type="text" id="addUserId" required /></label>
+        <label>balance <input type="number" id="addBalance" min="0" value="0" required /></label>
+        <button type="submit" class="primary">Добавить</button>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th>user_id</th>
+            <th>balance</th>
+            <th>действия</th>
+          </tr>
+        </thead>
+        <tbody id="pointsBody">
+          <tr><td colspan="3" class="empty">Загрузка…</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="panel-queue" class="panel">
+      <div class="toolbar">
+        <button type="button" id="queueRefresh">Обновить</button>
+      </div>
+
+      <div class="card" id="queuePlayingCard">
+        <h3>Сейчас играет</h3>
+        <div id="queuePlaying" class="empty">—</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>название</th>
+            <th>заказал</th>
+            <th>video_id</th>
+            <th>действия</th>
+          </tr>
+        </thead>
+        <tbody id="queueBody">
+          <tr><td colspan="5" class="empty">Загрузка…</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

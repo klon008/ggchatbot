@@ -12,6 +12,21 @@ async def ensure_user(db: Database, user_id: str) -> None:
     )
 
 
+async def list_all(db: Database) -> list[dict[str, int | str]]:
+    rows = await db.fetchall(
+        "SELECT user_id, balance FROM points ORDER BY balance DESC, user_id ASC"
+    )
+    return [{"user_id": row["user_id"], "balance": int(row["balance"])} for row in rows]
+
+
+async def delete_user(db: Database, user_id: str) -> bool:
+    cursor = await db.execute(
+        "DELETE FROM points WHERE user_id = ?",
+        (str(user_id),),
+    )
+    return cursor.rowcount > 0
+
+
 async def get_balance(db: Database, user_id: str) -> int:
     row = await db.fetchone(
         "SELECT balance FROM points WHERE user_id = ?",

@@ -37,7 +37,13 @@ class SongRequestHandler:
         self.cfg = cfg
         self._db = db
         self.queue = QueueManager(db, max_size=cfg.max_queue_size)
-        self.obs = ObsServer(cfg.obs_host, cfg.obs_port, on_status=self._on_obs_status)
+        self.obs = ObsServer(
+            cfg.obs_host,
+            cfg.obs_port,
+            on_status=self._on_obs_status,
+            db=db,
+            queue=self.queue,
+        )
         self._advance_lock = asyncio.Lock()
         self._cooldowns: dict[str, float] = {}
         self._watchdog: Optional[asyncio.Task] = None
@@ -119,6 +125,7 @@ class SongRequestHandler:
             requested_by_name=msg.user_name,
             url=canonical_url(result.video_id),
             title="",
+            paid_cost=SR_COST if SR_COST > 0 else 0,
         )
         position = await self.queue.add(track)
         self._cooldowns[msg.user_id] = time.time()
@@ -242,11 +249,14 @@ class SongRequestHandler:
     async def advance(self, expected_token: Optional[str], skip_reason: Optional[str] = None) -> None:
         async with self._advance_lock:
             if self.queue.is_playing:
+                finished_track = self.queue.current
                 if expected_token is not None:
                     if not await self.queue.finish_current(expected_token):
                         return
                     if skip_reason:
                         await self._say(f"Пропуск: {skip_reason}")
+                        if finished_track is not None:
+                            await self._refund_track(finished_track, skip_reason)
                 elif self.queue.current is not None:
                     await self.queue.force_skip()
 
@@ -260,6 +270,16 @@ class SongRequestHandler:
             log.info("Воспроизведение: %s (token=%s)", track.video_id, token)
             await self._send_play(track, token)
             self._arm_watchdog(token)
+
+    async def _refund_track(self, track: Track, reason: str) -> None:
+        cost = track.paid_cost
+        if cost <= 0 or self._points is None:
+            return
+        await self._points.add(track.requested_by, cost)
+        name = track.requested_by_name or track.requested_by
+        await self._say(
+            f"@{name}, возвращено {cost} {pluralize_princess(cost)} — {reason}"
+        )
 
     async def _send_play(self, track: Track, token: str) -> None:
         await self.obs.send_play(

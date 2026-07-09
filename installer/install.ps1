@@ -356,6 +356,24 @@ function Install-VirtualEnvironment([string]$ProjectRoot, [hashtable]$Python) {
     return $venvPython
 }
 
+function Ensure-SettingsFile([string]$ProjectRoot, [string]$RelativeDir) {
+    $settingsPath = Join-Path $ProjectRoot (Join-Path $RelativeDir "settings.py")
+    $examplePath = Join-Path $ProjectRoot (Join-Path $RelativeDir "settings.example.py")
+
+    if (Test-Path $settingsPath) {
+        Write-Ok "$RelativeDir\settings.py уже существует (не перезаписываем)"
+        return
+    }
+
+    if (Test-Path $examplePath) {
+        Copy-Item $examplePath $settingsPath
+        Write-Ok "Создан $RelativeDir\settings.py — настройте баланс под свой канал"
+    }
+    else {
+        Write-Warn "$RelativeDir\settings.example.py не найден — создайте settings.py вручную"
+    }
+}
+
 function Ensure-EnvFile([string]$ProjectRoot) {
     $dataDir = Join-Path $ProjectRoot "data"
     if (-not (Test-Path $dataDir)) {
@@ -417,6 +435,8 @@ try {
     $null = Test-RequirementsFile $projectRoot
     $null = Install-VirtualEnvironment $projectRoot $python
     Ensure-EnvFile $projectRoot
+    Ensure-SettingsFile $projectRoot "bot\princess"
+    Ensure-SettingsFile $projectRoot "bot\song_request"
     Show-FinishMessage $launcherDir $projectRoot
 }
 catch {
