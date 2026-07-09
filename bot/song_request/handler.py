@@ -99,26 +99,26 @@ class SongRequestHandler:
             last = self._cooldowns.get(msg.user_id, 0.0)
             wait = self.cfg.user_cooldown_sec - (time.time() - last)
             if wait > 0:
-                await self._say(f"@{msg.user_name}, подожди ещё {int(wait) + 1}с перед следующим заказом")
+                await self._say(f"{msg.user_name}, подожди ещё {int(wait) + 1}с перед следующим заказом")
                 return
 
         if self.queue.is_full():
-            await self._say(f"@{msg.user_name}, очередь заполнена ({self.cfg.max_queue_size})")
+            await self._say(f"{msg.user_name}, очередь заполнена ({self.cfg.max_queue_size})")
             return
 
         result = validate_request(arg)
         if not result.ok:
-            await self._say(f"@{msg.user_name}, {result.reason}")
+            await self._say(f"{msg.user_name}, {result.reason}")
             return
 
         if SR_COST > 0:
             if self._points is None:
-                await self._say(f"@{msg.user_name}, заказ песен временно недоступен")
+                await self._say(f"{msg.user_name}, заказ песен временно недоступен")
                 return
             balance = await self._points.get_balance(msg.user_id)
             if balance < SR_COST:
                 await self._say(
-                    f"@{msg.user_name}, недостаточно принцесс: "
+                    f"{msg.user_name}, недостаточно принцесс: "
                     f"нужно {SR_COST}, у тебя {balance} {pluralize_princess(balance)}"
                 )
                 return
@@ -136,24 +136,24 @@ class SongRequestHandler:
         self._cooldowns[msg.user_id] = time.time()
         if SR_COST > 0:
             await self._say(
-                f"@{msg.user_name}, добавлено в очередь (#{position}), "
+                f"{msg.user_name}, добавлено в очередь (#{position}), "
                 f"списано {SR_COST} {pluralize_princess(SR_COST)}"
             )
         else:
-            await self._say(f"@{msg.user_name}, добавлено в очередь (#{position})")
+            await self._say(f"{msg.user_name}, добавлено в очередь (#{position})")
 
         if not self.queue.is_playing:
             await self.advance(expected_token=None)
 
     async def _cmd_skip(self, msg: ChatMessage) -> None:
         if not msg.is_moderator:
-            await self._say(f"@{msg.user_name}, команда !пропуск доступна только модераторам")
+            await self._say(f"{msg.user_name}, команда !пропуск доступна только модераторам")
             return
         if not self.queue.is_playing:
             await self._say("Сейчас ничего не играет")
             return
         await self.obs.send_skip(self.queue.current_token)
-        await self._say(f"@{msg.user_name} пропустил трек")
+        await self._say(f"{msg.user_name} пропустил трек")
         if not self.obs.has_clients:
             await self.queue.force_skip()
             await self.advance(expected_token=None)
@@ -258,10 +258,10 @@ class SongRequestHandler:
                 if expected_token is not None:
                     if not await self.queue.finish_current(expected_token):
                         return
-                    if skip_reason:
+                    if skip_reason and finished_track is not None:
+                        await self._notify_playback_failure(finished_track, skip_reason)
+                    elif skip_reason:
                         await self._say(f"Пропуск: {skip_reason}")
-                        if finished_track is not None:
-                            await self._refund_track(finished_track, skip_reason)
                 elif self.queue.current is not None:
                     await self.queue.force_skip()
 
@@ -276,15 +276,17 @@ class SongRequestHandler:
             await self._send_play(track, token)
             self._arm_watchdog(token)
 
-    async def _refund_track(self, track: Track, reason: str) -> None:
-        cost = track.paid_cost
-        if cost <= 0 or self._points is None:
-            return
-        await self._points.add(track.requested_by, cost)
+    async def _notify_playback_failure(self, track: Track, reason: str) -> None:
         name = track.requested_by_name or track.requested_by
-        await self._say(
-            f"@{name}, возвращено {cost} {pluralize_princess(cost)} — {reason}"
-        )
+        cost = track.paid_cost
+        if cost > 0 and self._points is not None:
+            await self._points.add(track.requested_by, cost)
+            await self._say(
+                f"@{name}, не удалось воспроизвести: {reason}. "
+                f"Возвращено {cost} {pluralize_princess(cost)}"
+            )
+        else:
+            await self._say(f"@{name}, не удалось воспроизвести: {reason}")
 
     async def _send_play(self, track: Track, token: str) -> None:
         await self.obs.send_play(
