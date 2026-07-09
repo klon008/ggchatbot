@@ -30,7 +30,7 @@ async def main() -> int:
     async with aiohttp.ClientSession() as s:
         async with s.get(f"{base}/player.html") as r:
             html = await r.text()
-            assert r.status == 200 and "iframe_api" in html, "player.html не отдался"
+            assert r.status == 200 and "player.js" in html, "player.html не отдался"
             print("[OK] HTTP player.html")
         async with s.get(f"{base}/player.js") as r:
             assert r.status == 200, "player.js не отдался"

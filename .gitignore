@@ -18,3 +18,10 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+install.cmd
+install.ps1
+migrate.cmd
+start.cmd
+update.cmd
+update.ps1
+ИНСТРУКЦИЯ.txt
