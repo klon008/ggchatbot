@@ -13,12 +13,16 @@ import time
 
 import aiohttp
 
-from bot.app import SongRequestBot
+from bot.app import PUBLIC_COMMANDS, SongRequestBot
 from bot.song_request import Track
 from config import Config
 
 
 async def main() -> int:
+    assert "!заказ" in PUBLIC_COMMANDS
+    assert "!пропуск" not in PUBLIC_COMMANDS
+    assert "!списать" not in PUBLIC_COMMANDS
+    print("[OK] PUBLIC_COMMANDS")
     cfg = Config.load()
     cfg.gg_channel_id = ""  # не подключаемся к GG
     cfg.obs_port = 18765

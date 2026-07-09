@@ -12,6 +12,28 @@ from .song_request import SongRequestHandler
 
 log = logging.getLogger("app")
 
+HELP_COMMAND = "!команды"
+
+PUBLIC_COMMANDS = (
+    "!баллы",
+    "!дейлик",
+    "!дайс",
+    "!кража",
+    "!карман",
+    "!срок",
+    "!дисней",
+    "!нейро",
+    "!звук",
+    "!коллекция",
+    "!заказ",
+    "!очередь",
+    "!играет",
+)
+
+
+def _format_commands() -> str:
+    return "Команды: " + " ".join(PUBLIC_COMMANDS)
+
 
 class StreamBot:
     def __init__(self, cfg: Config) -> None:
@@ -48,6 +70,10 @@ class StreamBot:
         await self.db.close()
 
     async def _on_chat_message(self, msg) -> None:
+        cmd = msg.text.strip().split(maxsplit=1)[0].lower()
+        if cmd == HELP_COMMAND:
+            await self._reply(f"{msg.user_name}, {_format_commands()}")
+            return
         if await self.princess.handle_message(msg):
             return
         await self.sr.handle_message(msg)
