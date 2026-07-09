@@ -35,28 +35,30 @@
 
 ### Быстрый способ (для клиента)
 
-Подробная инструкция: [ИНСТРУКЦИЯ_ДЛЯ_КЛИЕНТА.txt](ИНСТРУКЦИЯ_ДЛЯ_КЛИЕНТА.txt)
+Подробная инструкция: [installer/ИНСТРУКЦИЯ.txt](installer/ИНСТРУКЦИЯ.txt)
 
-1. Положите `install.cmd` + `install.ps1` в пустую папку (или клонируйте репозиторий).
-2. Дважды нажмите **install.cmd**.
+1. Скачайте архив установщика из [GitHub Releases](https://github.com/klon008/ggchatbot/releases).
+2. Распакуйте и дважды нажмите **install.cmd**.
 3. Напишите разработчику — он настроит `.env`.
 4. Перед стримом — **start.cmd**.
-5. Обновление — **update.cmd**.
+5. Обновление кода бота — **update.cmd**.
+
+### Ручная установка (для разработчика)
 
 ```powershell
 git clone https://github.com/klon008/ggchatbot.git
 cd ggchatbot
-.\install.cmd
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+copy .env.example .env
+.\.venv\Scripts\python.exe main.py
 ```
 
-### Ручная установка (PowerShell)
+Сборка zip для Releases:
 
 ```powershell
-git clone https://github.com/klon008/ggchatbot.git
-cd ggchatbot
-.\install.ps1
-# отредактируйте .env (см. ниже)
-.\.venv\Scripts\python.exe main.py
+.\scripts\package-installer.ps1
+# → dist\ggchatbot-installer.zip
 ```
 
 ## Настройка `.env`
@@ -162,6 +164,8 @@ ID канала — числовой идентификатор стрима (н
 
 ```
 botmsc/
+  installer/              # установщик для клиента (→ zip в Releases)
+    install.cmd, start.cmd, update.cmd, …
   main.py                 # точка входа
   config.py               # загрузка .env
   bot/

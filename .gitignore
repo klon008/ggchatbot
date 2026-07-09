@@ -1,27 +1,23 @@
-# Secrets
-.env
-
-# Persistent queue / runtime data
-data/
-oldbot/
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-env/
-
-# IDE / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-install.cmd
-install.ps1
-migrate.cmd
-start.cmd
-update.cmd
-update.ps1
-ИНСТРУКЦИЯ.txt
+# Secrets
+.env
+
+# Persistent queue / runtime data
+data/
+oldbot/
+
+# Release build output
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
