@@ -26,6 +26,7 @@ class Config:
     gg_user_id: str
     gg_channel_id: str
     gg_channel_key: str
+    gg_admin_user_id: str
 
     obs_host: str
     obs_port: int
@@ -45,6 +46,7 @@ class Config:
             gg_user_id=os.getenv("GG_USER_ID", "").strip(),
             gg_channel_id=os.getenv("GG_CHANNEL_ID", "").strip(),
             gg_channel_key=os.getenv("GG_CHANNEL_KEY", "").strip(),
+            gg_admin_user_id=os.getenv("GG_ADMIN_USER_ID", "").strip(),
             obs_host=os.getenv("OBS_WS_HOST", "127.0.0.1").strip() or "127.0.0.1",
             obs_port=_get_int("OBS_WS_PORT", 8765),
             max_queue_size=_get_int("MAX_QUEUE_SIZE", 50),

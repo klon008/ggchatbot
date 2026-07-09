@@ -13,7 +13,7 @@ import sys
 import aiohttp
 
 from bot.app import SongRequestBot
-from bot.queue_manager import Track
+from bot.song_request import Track
 from config import Config
 
 
@@ -21,7 +21,8 @@ async def main() -> int:
     cfg = Config.load()
     cfg.gg_channel_id = ""  # не подключаемся к GG
     bot = SongRequestBot(cfg)
-    bot.queue.clear()
+    await bot.db.open()
+    await bot.queue.clear()
     await bot.obs.start()
 
     base = f"http://{cfg.obs_host}:{cfg.obs_port}"
@@ -52,8 +53,8 @@ async def main() -> int:
             await asyncio.sleep(0.2)
 
             # Кладём два трека; ready при пустой очереди прислал queue_state.
-            bot.queue.add(Track(video_id="aaaaaaaaaaa", requested_by="u1", url="x"))
-            bot.queue.add(Track(video_id="bbbbbbbbbbb", requested_by="u2", url="y"))
+            await bot.queue.add(Track(video_id="aaaaaaaaaaa", requested_by="u1", url="x"))
+            await bot.queue.add(Track(video_id="bbbbbbbbbbb", requested_by="u2", url="y"))
             await bot._advance(expected_token=None)
 
             msg = await wait_action(ws, "play")
@@ -85,8 +86,9 @@ async def main() -> int:
 
     if bot._watchdog:
         bot._watchdog.cancel()
-    bot.queue.clear()
+    await bot.queue.clear()
     await bot.obs.stop()
+    await bot.db.close()
     print("RESULT:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

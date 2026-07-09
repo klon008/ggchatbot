@@ -1,10 +1,6 @@
 """WebSocket-клиент чата GoodGame (протокол v2).
 
 Док: https://github.com/GoodGame/API/blob/master/Chat/protocol2.md
-
-Умеет: логин через chatlogin -> получение user_id/token, подключение к
-wss://chat-1.goodgame.ru/chat2/, auth, join канала, приём сообщений с
-колбэком, отправка ответов, heartbeat и авто-reconnect с backoff.
 """
 from __future__ import annotations
 
@@ -21,9 +17,8 @@ log = logging.getLogger("goodgame")
 
 WS_URL = "wss://chat-1.goodgame.ru/chat2/"
 CHATLOGIN_URL = "https://goodgame.ru/ajax/chatlogin"
+USERS_LIST_TIMEOUT_SEC = 10.0
 
-# Уровни прав (protocol2): casual=0, stream_moder=10, streamer=20,
-# moderator=30, smoderator=40, admin=50.
 RIGHTS_STREAM_MODER = 10
 
 
@@ -60,8 +55,9 @@ class GoodGameClient:
         self._on_message = on_message
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._stop = False
+        self._users_list_lock = asyncio.Lock()
+        self._users_list_future: Optional[asyncio.Future] = None
 
-    # --- авторизация -----------------------------------------------------
     async def _fetch_token(self) -> bool:
         if not self.login or not self.password:
             log.warning("GG_LOGIN/GG_PASSWORD не заданы — бот работает как гость (readonly).")
@@ -86,14 +82,13 @@ class GoodGameClient:
         log.info("Авторизация в GG успешна: user_id=%s (%s)", self.user_id, data.get("response"))
         return bool(self.token)
 
-    # --- основной цикл ---------------------------------------------------
     async def run(self) -> None:
         await self._fetch_token()
         backoff = 1
         while not self._stop:
             try:
                 await self._connect_and_listen()
-                backoff = 1  # успешная сессия — сбрасываем задержку
+                backoff = 1
             except (websockets.WebSocketException, OSError) as exc:
                 log.warning("Соединение с GG прервано: %s. Reconnect через %dс.", exc, backoff)
             except Exception:  # noqa: BLE001
@@ -102,21 +97,25 @@ class GoodGameClient:
                 break
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 30)
-            # Токен мог протухнуть — перелогиниваемся.
             await self._fetch_token()
 
     async def _connect_and_listen(self) -> None:
-        async with websockets.connect(WS_URL, ping_interval=20, ping_timeout=20) as ws:
-            self._ws = ws
-            log.info("Подключение к чату GG установлено.")
-            # Авторизация (если есть токен), иначе гость.
-            if self.token and self.user_id:
-                await self._send({"type": "auth", "data": {"user_id": int(self.user_id), "token": self.token}})
-            await self._send({"type": "join", "data": {"channel_id": self.channel_id, "hidden": 0}})
-            log.info("Присоединились к каналу %s.", self.channel_id)
+        try:
+            async with websockets.connect(WS_URL, ping_interval=20, ping_timeout=20) as ws:
+                self._ws = ws
+                log.info("Подключение к чату GG установлено.")
+                if self.token and self.user_id:
+                    await self._send(
+                        {"type": "auth", "data": {"user_id": int(self.user_id), "token": self.token}}
+                    )
+                await self._send({"type": "join", "data": {"channel_id": self.channel_id, "hidden": 0}})
+                log.info("Присоединились к каналу %s.", self.channel_id)
 
-            async for raw in ws:
-                await self._handle_raw(raw)
+                async for raw in ws:
+                    await self._handle_raw(raw)
+        finally:
+            self._cancel_users_list_waiter()
+            self._ws = None
 
     async def _handle_raw(self, raw: str) -> None:
         try:
@@ -131,6 +130,8 @@ class GoodGameClient:
             log.info("auth OK: %s", data.get("user_name"))
         elif ptype == "error":
             log.warning("GG error: %s", data.get("errorMsg"))
+        elif ptype == "users_list":
+            self._resolve_users_list(data.get("users") or [])
         elif ptype == "message":
             await self._handle_message(data)
 
@@ -142,19 +143,45 @@ class GoodGameClient:
             user_rights=int(data.get("user_rights", 0) or 0),
             text=str(data.get("text", "")),
         )
-        # Игнорируем собственные сообщения — иначе петля на ответах бота.
         if self.user_id and msg.user_id == self.user_id:
             return
         await self._on_message(msg)
 
-    # --- отправка --------------------------------------------------------
     async def _send(self, obj: dict) -> None:
         if self._ws is None:
             return
         await self._ws.send(json.dumps(obj, ensure_ascii=False))
 
+    def _resolve_users_list(self, users: list) -> None:
+        if self._users_list_future is not None and not self._users_list_future.done():
+            self._users_list_future.set_result(users)
+
+    def _cancel_users_list_waiter(self) -> None:
+        if self._users_list_future is not None and not self._users_list_future.done():
+            self._users_list_future.set_exception(ConnectionError("WebSocket отключён"))
+        self._users_list_future = None
+
+    async def get_users_list(self) -> list[dict]:
+        """Запросить список авторизованных зрителей в чате канала (get_users_list2)."""
+        if self._ws is None:
+            raise ConnectionError("WebSocket не подключён")
+
+        async with self._users_list_lock:
+            if self._users_list_future is not None and not self._users_list_future.done():
+                raise RuntimeError("get_users_list уже выполняется")
+
+            fut: asyncio.Future = asyncio.get_running_loop().create_future()
+            self._users_list_future = fut
+            try:
+                await self._send(
+                    {"type": "get_users_list2", "data": {"channel_id": self.channel_id}}
+                )
+                return await asyncio.wait_for(fut, timeout=USERS_LIST_TIMEOUT_SEC)
+            finally:
+                if self._users_list_future is fut:
+                    self._users_list_future = None
+
     async def send_message(self, text: str) -> None:
-        """Отправить сообщение в канал (нужна авторизация; гости readonly)."""
         if not self.token:
             log.debug("Пропуск ответа в чат (гость): %s", text)
             return

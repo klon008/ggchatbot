@@ -1,16 +1,6 @@
-"""Локальный сервер для OBS Browser Source.
-
-aiohttp на одном порту:
-  * ``GET /``, ``/player.html``, ``/player.js`` — статика из obs/ (нужен валидный
-    origin/referer, иначе YouTube отдаёт error 153 при open как top-level).
-  * ``GET /ws`` — WebSocket для двусторонней связи с плеером.
-
-Python шлёт плееру ``play``/``skip``/``queue_state``; плеер рапортует
-``ready``/``ended``/``error``/``too_long`` с тем же ``token``.
-"""
+"""Локальный HTTP + WebSocket сервер для OBS Browser Source."""
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from pathlib import Path
@@ -18,11 +8,10 @@ from typing import Awaitable, Callable, Optional
 
 from aiohttp import WSMsgType, web
 
-log = logging.getLogger("obs")
+log = logging.getLogger("song_request.obs")
 
-OBS_DIR = Path(__file__).resolve().parent.parent / "obs"
+OBS_DIR = Path(__file__).resolve().parent.parent.parent / "obs"
 
-# Тип колбэка обработки входящего статуса от плеера.
 StatusHandler = Callable[[dict], Awaitable[None]]
 
 
@@ -43,7 +32,6 @@ class ObsServer:
             ]
         )
 
-    # --- lifecycle -------------------------------------------------------
     async def start(self) -> None:
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
@@ -57,7 +45,6 @@ class ObsServer:
         if self._runner:
             await self._runner.cleanup()
 
-    # --- HTTP статика ----------------------------------------------------
     async def _handle_index(self, request: web.Request) -> web.StreamResponse:
         return await self._serve_file("player.html", "text/html; charset=utf-8")
 
@@ -68,10 +55,12 @@ class ObsServer:
         path = OBS_DIR / name
         if not path.exists():
             return web.Response(status=404, text=f"{name} not found")
-        return web.Response(body=path.read_bytes(), content_type=content_type.split(";")[0],
-                            charset="utf-8")
+        return web.Response(
+            body=path.read_bytes(),
+            content_type=content_type.split(";")[0],
+            charset="utf-8",
+        )
 
-    # --- WebSocket -------------------------------------------------------
     @property
     def has_clients(self) -> bool:
         return len(self._clients) > 0
@@ -102,7 +91,6 @@ class ObsServer:
             return
         await self._on_status(data)
 
-    # --- отправка команд плееру -----------------------------------------
     async def broadcast(self, payload: dict) -> None:
         if not self._clients:
             log.debug("Нет подключённых плееров, команда %s пропущена", payload.get("action"))

@@ -1,4 +1,4 @@
-"""Точка входа: запуск song-request бота для OBS.
+"""Точка входа: song-request + princess-бот для OBS и чата GoodGame.
 
 Запуск (PowerShell):
     python main.py
@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from bot.app import SongRequestBot
+from bot.app import StreamBot
 from config import Config
 
 
@@ -31,7 +31,7 @@ async def main() -> None:
             "GG_CHANNEL_ID не задан в .env — бот не сможет присоединиться к каналу."
         )
 
-    bot = SongRequestBot(cfg)
+    bot = StreamBot(cfg)
     try:
         await bot.run()
     except (KeyboardInterrupt, asyncio.CancelledError):

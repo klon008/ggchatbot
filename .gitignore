@@ -3,6 +3,7 @@
 
 # Persistent queue / runtime data
 data/
+oldbot/
 
 # Python
 __pycache__/

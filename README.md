@@ -1,5 +1,7 @@
 # OBS Song Request Bot (GoodGame)
 
+> Документация для разработчиков: [README_DEV.md](README_DEV.md)
+
 Чат-бот для стриминга: зрители заказывают музыку командой `!sr <ссылка YouTube>`,
 бот проверяет ссылку, ведёт очередь и по локальному WebSocket проигрывает видео
 в источнике «Браузер» в OBS. Когда трек заканчивается, автоматически играет
@@ -126,7 +128,7 @@ ID канала — числовой идентификатор стрима (н
 ## Дальнейшие улучшения (TODO)
 
 - YouTube Data API: pre-check длительности/18+/стоп-слов **до** добавления
-  (заготовка — `bot/youtube_validator.py`, ключ `YOUTUBE_API_KEY`).
+  (заготовка — `bot/song_request/youtube.py`, ключ `YOUTUBE_API_KEY`).
 - Чёрный список названий/каналов.
 - Донат-приоритет очереди (в GG-сообщениях есть поле `payments`).
 - Переход на OAuth2 вместо логина/пароля.
@@ -138,14 +140,24 @@ botmsc/
   main.py                 # точка входа
   config.py               # загрузка .env
   bot/
-    app.py                # оркестратор (чат -> очередь -> OBS -> обратная связь)
-    goodgame_client.py    # WS-клиент чата GoodGame v2
-    obs_server.py         # aiohttp: статика player.html/js + WebSocket
-    queue_manager.py      # очередь + атомарная персистентность
-    youtube_validator.py  # извлечение/валидация videoId
+    app.py                # оркестратор (StreamBot)
+    goodgame/             # общий WS-клиент чата GoodGame v2
+      client.py
+    song_request/         # заказ музыки через YouTube + OBS
+      handler.py          # команды !sr / !skip / очередь / watchdog
+      queue.py            # очередь + атомарная персистентность
+      obs_server.py       # aiohttp: статика player.html/js + WebSocket
+      youtube.py          # извлечение/валидация videoId
+    princess/             # игровая экономика «принцесс»
+      handler.py          # команды !кража / !баллы / …
+      storage.py          # JSON в data/
+      economy.py
+      prison.py
   obs/
     player.html
     player.js             # YouTube IFrame API + WS
   data/
-    queue.json            # создаётся автоматически (в .gitignore)
+    queue.json            # song-request (в .gitignore)
+    princess_points.json  # princess (в .gitignore)
+    …
 ```
