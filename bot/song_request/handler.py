@@ -1,4 +1,4 @@
-"""Song-request: очередь YouTube, OBS-плеер, команды !sr / !skip."""
+"""Song-request: очередь YouTube, OBS-плеер, команды заказа музыки."""
 from __future__ import annotations
 
 import asyncio
@@ -20,6 +20,11 @@ from .youtube import canonical_url, validate_request
 log = logging.getLogger("song_request")
 
 ReplyFn = Callable[[str], Awaitable[None]]
+
+_ORDER_CMDS = ("!заказ", "!зм", "!sr")
+_SKIP_CMDS = ("!пропуск", "!skip")
+_QUEUE_CMDS = ("!очередь",)
+_NOW_CMDS = ("!играет", "!сейчас")
 
 _YT_ERROR_LABELS: dict[int | str, str] = {
     2: "неверный параметр запроса",
@@ -76,13 +81,13 @@ class SongRequestHandler:
         cmd = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        if cmd == "!sr":
+        if cmd in _ORDER_CMDS:
             await self._cmd_sr(msg, arg)
-        elif cmd == "!skip":
+        elif cmd in _SKIP_CMDS:
             await self._cmd_skip(msg)
-        elif cmd in ("!queue", "!q"):
+        elif cmd in _QUEUE_CMDS:
             await self._cmd_queue(msg)
-        elif cmd in ("!song", "!now"):
+        elif cmd in _NOW_CMDS:
             await self._cmd_song(msg)
         else:
             return False
@@ -142,7 +147,7 @@ class SongRequestHandler:
 
     async def _cmd_skip(self, msg: ChatMessage) -> None:
         if not msg.is_moderator:
-            await self._say(f"@{msg.user_name}, команда !skip доступна только модераторам")
+            await self._say(f"@{msg.user_name}, команда !пропуск доступна только модераторам")
             return
         if not self.queue.is_playing:
             await self._say("Сейчас ничего не играет")

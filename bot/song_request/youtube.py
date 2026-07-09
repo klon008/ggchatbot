@@ -1,4 +1,4 @@
-"""Валидация YouTube-ссылок для !sr.
+"""Валидация YouTube-ссылок для !заказ.
 
 MVP: извлекаем 11-символьный videoId без Data API.
 Проверки длительности / live / embeddable — на стороне плеера (obs/player.js).
@@ -70,7 +70,7 @@ def _extract_video_id(raw: str) -> Optional[str]:
 
 def validate_request(raw: str) -> ValidationResult:
     if not raw or not raw.strip():
-        return ValidationResult(False, reason="укажи ссылку на YouTube после !sr")
+        return ValidationResult(False, reason="укажи ссылку на YouTube после !заказ")
 
     video_id = _extract_video_id(raw)
     if video_id is None:
