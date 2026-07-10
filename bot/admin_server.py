@@ -1,11 +1,12 @@
 """Маршруты админ-панели (points CRUD, queue delete) для общего OBS HTTP-сервера."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 from aiohttp import web
 
@@ -14,12 +15,15 @@ from bot.db import points as points_db
 from bot.db import users as users_db
 
 if TYPE_CHECKING:
+    from bot.princess.storage import PointsStore
     from bot.song_request.handler import SongRequestHandler
     from bot.song_request.queue import QueueManager
 
 log = logging.getLogger("admin")
 
 OBS_DIR = Path(__file__).resolve().parent.parent / "obs"
+
+ViewersFetchFn = Callable[[], Awaitable[list[dict]]]
 
 
 class AdminServer:
@@ -32,6 +36,16 @@ class AdminServer:
         self._db = db
         self._queue = queue
         self._sr = sr_handler
+        self._fetch_viewers: Optional[ViewersFetchFn] = None
+        self._points: Optional["PointsStore"] = None
+
+    def bind_user_names(
+        self,
+        fetch_viewers: ViewersFetchFn,
+        points: "PointsStore",
+    ) -> None:
+        self._fetch_viewers = fetch_viewers
+        self._points = points
 
     def register(self, app: web.Application) -> None:
         app.add_routes(
@@ -47,6 +61,7 @@ class AdminServer:
                 web.delete("/api/queue/waiting/{index}", self._api_queue_delete),
                 web.get("/api/song-request", self._api_sr_get),
                 web.put("/api/song-request", self._api_sr_put),
+                web.post("/api/user-names/sync", self._api_user_names_sync),
             ]
         )
 
@@ -146,6 +161,8 @@ class AdminServer:
         await points_db.set_balance(self._db, user_id, balance)
         if user_name:
             await users_db.touch_user_name(self._db, user_id, user_name)
+            if self._points is not None:
+                self._points.mark_known(user_id)
         entry = await points_db.get_user_entry(self._db, user_id)
         assert entry is not None
         return self._json_response(entry, status=201)
@@ -203,3 +220,19 @@ class AdminServer:
             return self._error("orders_enabled должен быть true или false")
         await self._sr.set_orders_enabled(raw)
         return self._json_response({"orders_enabled": self._sr.orders_enabled})
+
+    async def _api_user_names_sync(self, request: web.Request) -> web.Response:
+        if self._fetch_viewers is None or self._points is None:
+            return self._error("Синхронизация ников недоступна", status=503)
+        try:
+            users = await self._fetch_viewers()
+        except ConnectionError:
+            return self._error("Бот не подключён к чату GoodGame", status=503)
+        except RuntimeError as exc:
+            return self._error(str(exc), status=409)
+        except asyncio.TimeoutError:
+            return self._error("Таймаут запроса списка зрителей", status=504)
+
+        updated, total = await self._points.sync_online_names(users)
+        log.info("Синхронизация ников из админки: %d из %d онлайн", updated, total)
+        return self._json_response({"updated": updated, "total_online": total})

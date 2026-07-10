@@ -8,8 +8,8 @@ from bot.db import Database
 from bot.db import cooldowns as cooldowns_db
 from bot.db import daily as daily_db
 from bot.db import points as points_db
-from bot.db import users as users_db
 from bot.db import steal as steal_db
+from bot.db import users as users_db
 
 _DATE_KEY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -17,9 +17,10 @@ _DATE_KEY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 class PointsStore:
     def __init__(self, db: Database) -> None:
         self._db = db
+        self._known_ids: set[str] = set()
 
     async def load(self) -> None:
-        return None
+        self._known_ids = set(await users_db.list_user_ids_with_names(self._db))
 
     async def flush(self) -> None:
         return None
@@ -33,8 +34,29 @@ class PointsStore:
     async def set_balance(self, user_id: str, amount: int) -> None:
         await points_db.set_balance(self._db, user_id, amount)
 
-    async def touch_name(self, user_id: str, user_name: str) -> None:
-        await users_db.touch_user_name(self._db, user_id, user_name)
+    def mark_known(self, user_id: str) -> None:
+        self._known_ids.add(str(user_id))
+
+    async def touch_name_if_new(self, user_id: str, user_name: str) -> bool:
+        """Записать ник в БД только при первом сообщении пользователя (нет в кэше)."""
+        uid = str(user_id)
+        if uid in self._known_ids:
+            return False
+        name = str(user_name).strip()
+        if not name:
+            return False
+        await users_db.touch_user_name(self._db, uid, name)
+        self._known_ids.add(uid)
+        return True
+
+    async def sync_online_names(self, users: list[dict]) -> tuple[int, int]:
+        updated, total = await users_db.sync_online_users(self._db, users)
+        for user in users:
+            uid = str(user.get("id", ""))
+            name = str(user.get("name", "")).strip()
+            if uid and name:
+                self._known_ids.add(uid)
+        return updated, total
 
 
 class StealStore:

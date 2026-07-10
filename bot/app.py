@@ -58,6 +58,10 @@ class StreamBot:
     async def run(self) -> None:
         await self.db.open()
         await self.sr.start()
+        self.sr.obs.bind_admin_user_names(
+            self.gg.get_users_list,
+            self.princess.points,
+        )
         self.princess.bind_viewers_fetch(self.gg.get_users_list)
         self.princess.bind_reply(self._princess_reply)
         self.sr.bind_reply(self._reply)

@@ -38,6 +38,7 @@ class ObsServer:
         self._clients: set[web.WebSocketResponse] = set()
         self._runner: Optional[web.AppRunner] = None
         self._has_admin = db is not None and queue is not None and sr_handler is not None
+        self._admin: Optional[AdminServer] = None
         self._app = web.Application()
         self._app.add_routes(
             [
@@ -48,7 +49,16 @@ class ObsServer:
             ]
         )
         if self._has_admin:
-            AdminServer(db, queue, sr_handler).register(self._app)
+            self._admin = AdminServer(db, queue, sr_handler)
+            self._admin.register(self._app)
+
+    def bind_admin_user_names(
+        self,
+        fetch_viewers: Callable[[], Awaitable[list[dict]]],
+        points: object,
+    ) -> None:
+        if self._admin is not None:
+            self._admin.bind_user_names(fetch_viewers, points)  # type: ignore[arg-type]
 
     async def start(self) -> None:
         self._runner = web.AppRunner(self._app)

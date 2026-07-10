@@ -143,7 +143,7 @@ class PrincessHandler:
 
         cmd = text.split(maxsplit=1)[0].lower() if text.startswith("!") else ""
 
-        await self.points.touch_name(user_id, user_name)
+        await self.points.touch_name_if_new(user_id, user_name)
 
         if await self.prison.is_in_prison(user_id):
             if cmd == "!срок":
@@ -188,8 +188,6 @@ class PrincessHandler:
                 for uid in list(self._viewers.keys()):
                     if await self.prison.is_in_prison(uid):
                         continue
-                    viewer = self._viewers[uid]
-                    await self.points.touch_name(uid, viewer["user_name"])
                     await self.points.add(uid, PASSIVE_INCOME_PER_MIN)
         except asyncio.CancelledError:
             raise

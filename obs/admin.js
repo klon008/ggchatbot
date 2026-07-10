@@ -225,6 +225,20 @@
     }
   }
 
+  async function syncUserNames() {
+    setStatus("Запрос списка зрителей из чата…");
+    try {
+      const data = await api("POST", "/api/user-names/sync");
+      await loadPoints();
+      setStatus(
+        `Ники обновлены: ${data.updated} из ${data.total_online} онлайн`,
+        "ok"
+      );
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  }
+
   function formatPlaying(track) {
     if (!track) return '<span class="empty">ничего не играет</span>';
     const who = track.requested_by_name || track.requested_by || "?";
@@ -282,6 +296,7 @@
   });
 
   document.getElementById("queueRefresh").addEventListener("click", loadQueue);
+  document.getElementById("syncUserNames").addEventListener("click", syncUserNames);
   ordersToggle.addEventListener("click", toggleOrders);
 
   document.querySelectorAll(".tab").forEach((tab) => {

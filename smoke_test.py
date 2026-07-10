@@ -8,6 +8,8 @@
   5. Устаревший ended(t-1) игнорируется (проверка защиты от двойного скипа).
 """
 import asyncio
+import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -16,8 +18,60 @@ from pathlib import Path
 import aiohttp
 
 from bot.app import PUBLIC_COMMANDS, SongRequestBot
+from bot.db import users as users_db
 from bot.song_request import Track
 from config import Config
+
+
+def find_main_py_pids() -> list[int]:
+    """PID процессов Python, запущенных с main.py (не smoke_test)."""
+    if sys.platform == "win32":
+        ps_script = (
+            "Get-CimInstance Win32_Process | "
+            "Where-Object { $_.CommandLine -and "
+            "($_.CommandLine -match 'main\\.py') -and "
+            "($_.CommandLine -notmatch 'smoke_test\\.py') } | "
+            "ForEach-Object { $_.ProcessId }"
+        )
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_script],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return []
+        return [int(line.strip()) for line in result.stdout.splitlines() if line.strip().isdigit()]
+
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", r"main\.py"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    own_pid = str(os.getpid())
+    pids: list[int] = []
+    for line in result.stdout.splitlines():
+        pid = line.strip()
+        if pid.isdigit() and pid != own_pid:
+            pids.append(int(pid))
+    return pids
+
+
+def ensure_main_not_running() -> None:
+    pids = find_main_py_pids()
+    if not pids:
+        return
+    print("[SKIP] Основной бот (main.py) уже запущен.")
+    print(f"       PID: {', '.join(map(str, pids))}")
+    print("       Закройте окно start.cmd и повторите smoke_test.")
+    sys.exit(2)
 
 
 async def main() -> int:
@@ -36,6 +90,12 @@ async def main() -> int:
     await bot.db.open()
     bot.sr.bind_points(bot.princess.points)
     await bot.sr.start()
+
+    async def fake_online_users() -> list[dict]:
+        return [{"id": "smoke-sync-user", "name": "SyncedUser"}]
+
+    bot.sr.obs.bind_admin_user_names(fake_online_users, bot.princess.points)
+    await bot.princess.points.load()
     await bot.queue.clear()
     await bot.sr.set_orders_enabled(True)
 
@@ -157,15 +217,16 @@ async def main() -> int:
             print("[OK] GET /api/points (user_name)")
 
         touch_uid = "smoke-touch-user"
-        await bot.princess.points.touch_name(touch_uid, "TouchUser")
         await bot.princess.points.set_balance(touch_uid, 10)
+        assert await bot.princess.points.touch_name_if_new(touch_uid, "TouchUser")
+        assert not await bot.princess.points.touch_name_if_new(touch_uid, "Renamed")
         async with s.get(f"{base}/api/points") as r:
             data = await r.json()
             assert any(
                 p["user_id"] == touch_uid and p.get("user_name") == "TouchUser"
                 for p in data["items"]
             )
-            print("[OK] touch_name в API")
+            print("[OK] touch_name_if_new в API")
         await bot.princess.points.set_balance(touch_uid, 0)
         row = await bot.db.fetchone("SELECT 1 FROM points WHERE user_id = ?", (touch_uid,))
         if row:
@@ -179,6 +240,17 @@ async def main() -> int:
             body = await r.json()
             assert body["balance"] == 100
             print("[OK] PUT /api/points")
+
+        async with s.post(f"{base}/api/user-names/sync") as r:
+            assert r.status == 200, await r.text()
+            sync_body = await r.json()
+            assert sync_body["updated"] == 1
+            assert sync_body["total_online"] == 1
+            print("[OK] POST /api/user-names/sync")
+
+        synced_name = await users_db.get_user_name(bot.db, "smoke-sync-user")
+        assert synced_name == "SyncedUser", synced_name
+        print("[OK] sync user_name в БД")
 
         await bot.queue.add(Track(video_id="ccccccccccc", requested_by="u3", url="z", title="Smoke"))
         async with s.get(f"{base}/api/queue") as r:
@@ -254,4 +326,5 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    ensure_main_not_running()
     sys.exit(asyncio.run(main()))
