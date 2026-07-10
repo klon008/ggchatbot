@@ -187,12 +187,13 @@
 
     <section id="panel-points" class="panel active">
       <div class="toolbar">
-        <input type="text" id="pointsFilter" placeholder="Поиск по user_id…" />
+        <input type="text" id="pointsFilter" placeholder="Поиск по user_id или нику…" />
         <button type="button" id="pointsRefresh">Обновить</button>
       </div>
 
       <form class="add-form" id="pointsAddForm">
         <label>user_id <input type="text" id="addUserId" required /></label>
+        <label>user_name <input type="text" id="addUserName" placeholder="необязательно" /></label>
         <label>balance <input type="number" id="addBalance" min="0" value="0" required /></label>
         <button type="submit" class="primary">Добавить</button>
       </form>
@@ -201,12 +202,13 @@
         <thead>
           <tr>
             <th>user_id</th>
+            <th>user_name</th>
             <th>balance</th>
             <th>действия</th>
           </tr>
         </thead>
         <tbody id="pointsBody">
-          <tr><td colspan="3" class="empty">Загрузка…</td></tr>
+          <tr><td colspan="4" class="empty">Загрузка…</td></tr>
         </tbody>
       </table>
     </section>

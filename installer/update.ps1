@@ -157,6 +157,16 @@ if (Test-Path $venvPython) {
     }
 
     Write-Ok "Зависимости обновлены"
+
+    Write-Step "Миграция базы данных"
+    & $venvPython scripts\migrate_db.py
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Миграция bot.db не удалась."
+        Write-Host "Закройте окно бота (start.cmd) и запустите update.cmd снова." -ForegroundColor Yellow
+        Pause-Script
+        exit 1
+    }
+    Write-Ok "База данных обновлена"
 }
 else {
     Write-Warn ".venv не найден - запустите install.cmd для полной установки."

@@ -9,7 +9,9 @@
 """
 import asyncio
 import sys
+import tempfile
 import time
+from pathlib import Path
 
 import aiohttp
 
@@ -26,7 +28,11 @@ async def main() -> int:
     cfg = Config.load()
     cfg.gg_channel_id = ""  # не подключаемся к GG
     cfg.obs_port = 18765
-    bot = SongRequestBot(cfg)
+    tmp_db = Path(tempfile.gettempdir()) / f"smoke-botmsc-{int(time.time())}.db"
+    for path in (tmp_db, Path(str(tmp_db) + "-wal"), Path(str(tmp_db) + "-shm")):
+        if path.exists():
+            path.unlink()
+    bot = SongRequestBot(cfg, db_path=tmp_db)
     await bot.db.open()
     bot.sr.bind_points(bot.princess.points)
     await bot.sr.start()
@@ -133,15 +139,37 @@ async def main() -> int:
         test_uid = f"smoke-test-{int(time.time())}"
         async with s.post(
             f"{base}/api/points",
-            json={"user_id": test_uid, "balance": 42},
+            json={"user_id": test_uid, "balance": 42, "user_name": "SmokeNick"},
         ) as r:
             assert r.status == 201, await r.text()
+            body = await r.json()
+            assert body.get("user_name") == "SmokeNick", body
             print("[OK] POST /api/points")
 
         async with s.get(f"{base}/api/points") as r:
             data = await r.json()
-            assert any(p["user_id"] == test_uid and p["balance"] == 42 for p in data["items"])
-            print("[OK] GET /api/points")
+            assert any(
+                p["user_id"] == test_uid
+                and p["balance"] == 42
+                and p.get("user_name") == "SmokeNick"
+                for p in data["items"]
+            )
+            print("[OK] GET /api/points (user_name)")
+
+        touch_uid = "smoke-touch-user"
+        await bot.princess.points.touch_name(touch_uid, "TouchUser")
+        await bot.princess.points.set_balance(touch_uid, 10)
+        async with s.get(f"{base}/api/points") as r:
+            data = await r.json()
+            assert any(
+                p["user_id"] == touch_uid and p.get("user_name") == "TouchUser"
+                for p in data["items"]
+            )
+            print("[OK] touch_name в API")
+        await bot.princess.points.set_balance(touch_uid, 0)
+        row = await bot.db.fetchone("SELECT 1 FROM points WHERE user_id = ?", (touch_uid,))
+        if row:
+            await bot.db.execute("DELETE FROM points WHERE user_id = ?", (touch_uid,))
 
         async with s.put(
             f"{base}/api/points/{test_uid}",
@@ -211,7 +239,16 @@ async def main() -> int:
         bot._watchdog.cancel()
     await bot.queue.clear()
     await bot.sr.close()
+    from bot.db.migrate import get_schema_version
+    from bot.db.schema import SCHEMA_VERSION
+
+    version = await get_schema_version(bot.db.conn)
+    assert version == SCHEMA_VERSION, f"schema version {version}, expected {SCHEMA_VERSION}"
+    print(f"[OK] schema version {version}")
     await bot.db.close()
+    for path in (tmp_db, Path(str(tmp_db) + "-wal"), Path(str(tmp_db) + "-shm")):
+        if path.exists():
+            path.unlink()
     print("RESULT:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

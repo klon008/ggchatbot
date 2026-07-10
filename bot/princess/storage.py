@@ -8,6 +8,7 @@ from bot.db import Database
 from bot.db import cooldowns as cooldowns_db
 from bot.db import daily as daily_db
 from bot.db import points as points_db
+from bot.db import users as users_db
 from bot.db import steal as steal_db
 
 _DATE_KEY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -31,6 +32,9 @@ class PointsStore:
 
     async def set_balance(self, user_id: str, amount: int) -> None:
         await points_db.set_balance(self._db, user_id, amount)
+
+    async def touch_name(self, user_id: str, user_name: str) -> None:
+        await users_db.touch_user_name(self._db, user_id, user_name)
 
 
 class StealStore:

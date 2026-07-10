@@ -11,6 +11,7 @@ from aiohttp import web
 
 from bot.db import Database
 from bot.db import points as points_db
+from bot.db import users as users_db
 
 if TYPE_CHECKING:
     from bot.song_request.handler import SongRequestHandler
@@ -106,20 +107,24 @@ class AdminServer:
             return None
         return uid
 
+    @staticmethod
+    def _parse_user_name(raw: Any) -> Optional[str]:
+        if raw is None:
+            return None
+        if not isinstance(raw, str):
+            return None
+        return raw.strip()
+
     async def _api_points_list(self, request: web.Request) -> web.Response:
         items = await points_db.list_all(self._db)
         return self._json_response({"items": items})
 
     async def _api_points_get(self, request: web.Request) -> web.Response:
         user_id = request.match_info["user_id"]
-        balance = await points_db.get_balance(self._db, user_id)
-        row = await self._db.fetchone(
-            "SELECT 1 FROM points WHERE user_id = ?",
-            (user_id,),
-        )
-        if row is None:
+        entry = await points_db.get_user_entry(self._db, user_id)
+        if entry is None:
             return self._error("Пользователь не найден", status=404)
-        return self._json_response({"user_id": user_id, "balance": balance})
+        return self._json_response(entry)
 
     async def _api_points_create(self, request: web.Request) -> web.Response:
         data = await self._read_json(request)
@@ -127,6 +132,7 @@ class AdminServer:
             return self._error("Некорректный JSON")
         user_id = self._parse_user_id(data.get("user_id"))
         balance = self._parse_balance(data.get("balance", 0))
+        user_name = self._parse_user_name(data.get("user_name"))
         if user_id is None:
             return self._error("user_id обязателен")
         if balance is None:
@@ -138,7 +144,11 @@ class AdminServer:
         if existing is not None:
             return self._error("Пользователь уже существует", status=409)
         await points_db.set_balance(self._db, user_id, balance)
-        return self._json_response({"user_id": user_id, "balance": balance}, status=201)
+        if user_name:
+            await users_db.touch_user_name(self._db, user_id, user_name)
+        entry = await points_db.get_user_entry(self._db, user_id)
+        assert entry is not None
+        return self._json_response(entry, status=201)
 
     async def _api_points_update(self, request: web.Request) -> web.Response:
         user_id = request.match_info["user_id"]
@@ -155,7 +165,9 @@ class AdminServer:
         if existing is None:
             return self._error("Пользователь не найден", status=404)
         await points_db.set_balance(self._db, user_id, balance)
-        return self._json_response({"user_id": user_id, "balance": balance})
+        entry = await points_db.get_user_entry(self._db, user_id)
+        assert entry is not None
+        return self._json_response(entry)
 
     async def _api_points_delete(self, request: web.Request) -> web.Response:
         user_id = request.match_info["user_id"]

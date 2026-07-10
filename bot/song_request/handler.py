@@ -120,6 +120,9 @@ class SongRequestHandler:
         return True
 
     async def _cmd_sr(self, msg: ChatMessage, arg: str) -> None:
+        if self._points is not None:
+            await self._points.touch_name(msg.user_id, msg.user_name)
+
         if not self._orders_enabled:
             await self._say(f"{msg.user_name}, заказ песен временно отключён")
             return
@@ -320,6 +323,8 @@ class SongRequestHandler:
     async def _refund_track(self, track: Track) -> int:
         cost = track.paid_cost
         if cost > 0 and self._points is not None:
+            if track.requested_by_name:
+                await self._points.touch_name(track.requested_by, track.requested_by_name)
             await self._points.add(track.requested_by, cost)
             return cost
         return 0

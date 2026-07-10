@@ -44,15 +44,24 @@
     return d.innerHTML;
   }
 
+  function displayName(p) {
+    const name = p.user_name == null ? "" : String(p.user_name).trim();
+    return name || "—";
+  }
+
   function renderPoints() {
     const q = pointsFilter.value.trim().toLowerCase();
     const items = q
-      ? allPoints.filter((p) => p.user_id.toLowerCase().includes(q))
+      ? allPoints.filter(
+          (p) =>
+            p.user_id.toLowerCase().includes(q) ||
+            (p.user_name && p.user_name.toLowerCase().includes(q))
+        )
       : allPoints;
 
     if (!items.length) {
       pointsBody.innerHTML =
-        '<tr><td colspan="3" class="empty">' +
+        '<tr><td colspan="4" class="empty">' +
         (q ? "Ничего не найдено" : "Нет записей") +
         "</td></tr>";
       return;
@@ -63,6 +72,7 @@
         (p) => `
       <tr data-user-id="${esc(p.user_id)}">
         <td class="mono">${esc(p.user_id)}</td>
+        <td>${esc(displayName(p))}</td>
         <td>
           <input type="number" class="balance-input" min="0" value="${esc(p.balance)}" data-user-id="${esc(p.user_id)}" />
         </td>
@@ -84,7 +94,7 @@
       setStatus(`Загружено записей: ${allPoints.length}`, "ok");
     } catch (e) {
       pointsBody.innerHTML =
-        '<tr><td colspan="3" class="empty">Ошибка загрузки</td></tr>';
+        '<tr><td colspan="4" class="empty">Ошибка загрузки</td></tr>';
       setStatus(e.message, "err");
     }
   }
@@ -124,6 +134,7 @@
   document.getElementById("pointsAddForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const userId = document.getElementById("addUserId").value.trim();
+    const userName = document.getElementById("addUserName").value.trim();
     const balance = parseInt(document.getElementById("addBalance").value, 10);
     if (!userId) {
       setStatus("user_id обязателен", "err");
@@ -135,11 +146,20 @@
     }
     setStatus(`Создание ${userId}…`);
     try {
-      const data = await api("POST", "/api/points", { user_id: userId, balance });
-      allPoints.push({ user_id: data.user_id, balance: data.balance });
-      allPoints.sort((a, b) => b.balance - a.balance || a.user_id.localeCompare(b.user_id));
+      const body = { user_id: userId, balance };
+      if (userName) body.user_name = userName;
+      const data = await api("POST", "/api/points", body);
+      allPoints.push({
+        user_id: data.user_id,
+        user_name: data.user_name || "",
+        balance: data.balance,
+      });
+      allPoints.sort(
+        (a, b) => b.balance - a.balance || a.user_id.localeCompare(b.user_id)
+      );
       renderPoints();
       document.getElementById("addUserId").value = "";
+      document.getElementById("addUserName").value = "";
       document.getElementById("addBalance").value = "0";
       setStatus(`Добавлено: ${data.user_id} → ${data.balance}`, "ok");
     } catch (e) {

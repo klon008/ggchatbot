@@ -14,9 +14,44 @@ async def ensure_user(db: Database, user_id: str) -> None:
 
 async def list_all(db: Database) -> list[dict[str, int | str]]:
     rows = await db.fetchall(
-        "SELECT user_id, balance FROM points ORDER BY balance DESC, user_id ASC"
+        """
+        SELECT p.user_id,
+               COALESCE(u.user_name, '') AS user_name,
+               p.balance
+        FROM points p
+        LEFT JOIN user_names u ON u.user_id = p.user_id
+        ORDER BY p.balance DESC, p.user_id ASC
+        """
     )
-    return [{"user_id": row["user_id"], "balance": int(row["balance"])} for row in rows]
+    return [
+        {
+            "user_id": row["user_id"],
+            "user_name": row["user_name"],
+            "balance": int(row["balance"]),
+        }
+        for row in rows
+    ]
+
+
+async def get_user_entry(db: Database, user_id: str) -> dict[str, int | str] | None:
+    row = await db.fetchone(
+        """
+        SELECT p.user_id,
+               COALESCE(u.user_name, '') AS user_name,
+               p.balance
+        FROM points p
+        LEFT JOIN user_names u ON u.user_id = p.user_id
+        WHERE p.user_id = ?
+        """,
+        (str(user_id),),
+    )
+    if row is None:
+        return None
+    return {
+        "user_id": row["user_id"],
+        "user_name": row["user_name"],
+        "balance": int(row["balance"]),
+    }
 
 
 async def delete_user(db: Database, user_id: str) -> bool:

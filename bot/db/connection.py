@@ -42,7 +42,7 @@ class Database:
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._conn.execute("PRAGMA busy_timeout=5000")
-        await init_schema(self._conn)
+        await init_schema(self._conn, db_path=self.path)
         log.info("SQLite opened: %s", self.path)
 
     async def close(self) -> None:

@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Optional
+
 import aiosqlite
 
-SCHEMA_VERSION = 3
+from .migrations import MIGRATIONS
+
+SCHEMA_VERSION = max(m.VERSION for m in MIGRATIONS)
 
 TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     version INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_names (
+    user_id TEXT PRIMARY KEY,
+    user_name TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS points (
@@ -76,33 +86,11 @@ CREATE TABLE IF NOT EXISTS dice_cooldowns (
 """
 
 
-async def _migrate_schema(conn: aiosqlite.Connection) -> None:
-    async with conn.execute("SELECT version FROM schema_version WHERE id = 1") as cursor:
-        row = await cursor.fetchone()
-    version = int(row[0]) if row else 1
-
-    if version < 2:
-        async with conn.execute("PRAGMA table_info(queue_items)") as cursor:
-            cols = await cursor.fetchall()
-        col_names = {c[1] for c in cols}
-        if "paid_cost" not in col_names:
-            await conn.execute(
-                "ALTER TABLE queue_items ADD COLUMN paid_cost INTEGER NOT NULL DEFAULT 0"
-            )
-        await conn.execute("UPDATE schema_version SET version = 2 WHERE id = 1")
-
-    if version < 3:
-        async with conn.execute("PRAGMA table_info(queue_meta)") as cursor:
-            cols = await cursor.fetchall()
-        col_names = {c[1] for c in cols}
-        if "orders_enabled" not in col_names:
-            await conn.execute(
-                "ALTER TABLE queue_meta ADD COLUMN orders_enabled INTEGER NOT NULL DEFAULT 1"
-            )
-        await conn.execute("UPDATE schema_version SET version = 3 WHERE id = 1")
-
-
-async def init_schema(conn: aiosqlite.Connection) -> None:
+async def init_schema(
+    conn: aiosqlite.Connection,
+    *,
+    db_path: Optional[Path] = None,
+) -> None:
     await conn.executescript(TABLES_SQL)
     await conn.execute(
         "INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, ?)",
@@ -113,5 +101,7 @@ async def init_schema(conn: aiosqlite.Connection) -> None:
         "INSERT OR IGNORE INTO queue_meta (id, current_json, current_token, token_counter) "
         "VALUES (1, NULL, NULL, 1)"
     )
-    await _migrate_schema(conn)
+    from .migrate import run_migrations
+
+    await run_migrations(conn, db_path=db_path)
     await conn.commit()

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+from typing import Optional
 
 from bot.db import Database
 from config import Config
@@ -36,9 +38,9 @@ def _format_commands() -> str:
 
 
 class StreamBot:
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config, db_path: Optional[Path] = None) -> None:
         self.cfg = cfg
-        self.db = Database()
+        self.db = Database(db_path)
         self.princess = PrincessHandler(
             db=self.db,
             admin_user_id=cfg.gg_admin_user_id,
