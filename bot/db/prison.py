@@ -32,6 +32,25 @@ async def imprison(db: Database, user_id: str, release_time: float) -> None:
     )
 
 
+async def filter_eligible(db: Database, user_ids: list[str]) -> list[str]:
+    """Return user_ids that are not currently in prison (batch check)."""
+    if not user_ids:
+        return []
+    now = time.time()
+    placeholders = ",".join("?" * len(user_ids))
+    rows = await db.fetchall(
+        f"SELECT user_id, release_time FROM prison WHERE user_id IN ({placeholders})",
+        tuple(str(uid) for uid in user_ids),
+    )
+    in_prison = {
+        str(row["user_id"])
+        for row in rows
+        if float(row["release_time"]) > now
+    }
+    await db.execute("DELETE FROM prison WHERE release_time <= ?", (now,))
+    return [str(uid) for uid in user_ids if str(uid) not in in_prison]
+
+
 async def get_release_time(db: Database, user_id: str) -> Optional[float]:
     uid = str(user_id)
     row = await db.fetchone(

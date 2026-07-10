@@ -196,6 +196,31 @@ async def main() -> int:
             assert r.status == 200, "admin.js не отдался"
             print("[OK] HTTP admin.js")
 
+        pending_uid = "smoke-pending-user"
+        await bot.princess.points.set_balance(pending_uid, 0)
+        await bot.princess.points.add(pending_uid, 10)
+        pending_balance = await bot.princess.points.get_balance(pending_uid)
+        assert pending_balance == 10, f"ожидали pending 10, баланс={pending_balance}"
+        row = await bot.db.fetchone(
+            "SELECT balance FROM points WHERE user_id = ?",
+            (pending_uid,),
+        )
+        assert row is not None and int(row["balance"]) == 0, "pending не должен быть в БД до flush"
+        await bot.princess.points.flush()
+        row = await bot.db.fetchone(
+            "SELECT balance FROM points WHERE user_id = ?",
+            (pending_uid,),
+        )
+        assert row is not None and int(row["balance"]) == 10, "после flush баланс должен быть 10"
+        print("[OK] points pending + flush")
+        await bot.princess.points.apply_income_tick([pending_uid], 3)
+        row = await bot.db.fetchone(
+            "SELECT balance FROM points WHERE user_id = ?",
+            (pending_uid,),
+        )
+        assert row is not None and int(row["balance"]) == 13, "после income tick баланс должен быть 13"
+        print("[OK] points apply_income_tick")
+
         test_uid = f"smoke-test-{int(time.time())}"
         async with s.post(
             f"{base}/api/points",

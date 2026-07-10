@@ -10,6 +10,7 @@ from typing import Awaitable, Callable, Optional
 from bot.goodgame import ChatMessage
 
 from bot.db import Database
+from bot.db import prison as prison_db
 
 from .economy import (
     calculate_princess_amount,
@@ -93,6 +94,7 @@ class PrincessHandler:
         log.info("Princess-модуль запущен.")
 
     async def close(self) -> None:
+        await self.points.flush()
         if self._tick_task:
             self._tick_task.cancel()
             try:
@@ -185,10 +187,10 @@ class PrincessHandler:
                 await asyncio.sleep(PASSIVE_INCOME_INTERVAL_SEC)
                 if not await self._refresh_viewers():
                     continue
-                for uid in list(self._viewers.keys()):
-                    if await self.prison.is_in_prison(uid):
-                        continue
-                    await self.points.add(uid, PASSIVE_INCOME_PER_MIN)
+                eligible = await prison_db.filter_eligible(
+                    self._db, list(self._viewers.keys())
+                )
+                await self.points.apply_income_tick(eligible, PASSIVE_INCOME_PER_MIN)
         except asyncio.CancelledError:
             raise
 
@@ -363,7 +365,7 @@ class PrincessHandler:
                 return
 
             stolen = random.randint(STEAL_AMOUNT_MIN, min(STEAL_AMOUNT_MAX, max_possible))
-            await self.steal.execute_steal(uid, victim_id, stolen)
+            await self.steal.execute_steal(self.points, uid, victim_id, stolen)
 
             await self._say(msg.user_name, f"Успех! Ты украл {stolen} принцесс у {victim_name}.")
 

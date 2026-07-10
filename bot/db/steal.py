@@ -62,6 +62,24 @@ async def save_info(db: Database, user_id: str, info: dict[str, Any]) -> None:
     )
 
 
+async def record_steal_success(db: Database, thief_id: str, amount: int) -> None:
+    """Update thief steal stats after a successful steal (points handled separately)."""
+    thief = str(thief_id)
+    async with db.transaction() as conn:
+        await conn.execute(
+            "INSERT OR IGNORE INTO steal_stats "
+            "(user_id, attempts, success, stolen_total, chance, last_time, times_in_jail) "
+            "VALUES (?, 0, 0, 0, 3, 0, 0)",
+            (thief,),
+        )
+        await conn.execute(
+            "UPDATE steal_stats SET "
+            "success = success + 1, stolen_total = stolen_total + ? "
+            "WHERE user_id = ?",
+            (amount, thief),
+        )
+
+
 async def execute_steal(
     db: Database,
     thief_id: str,

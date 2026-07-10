@@ -89,6 +89,25 @@ async def set_balance(db: Database, user_id: str, amount: int) -> None:
     )
 
 
+async def apply_deltas(db: Database, deltas: dict[str, int]) -> None:
+    """Apply balance deltas for multiple users in a single transaction."""
+    if not deltas:
+        return
+    async with db.transaction() as conn:
+        for uid, delta in deltas.items():
+            if delta == 0:
+                continue
+            user_id = str(uid)
+            await conn.execute(
+                "INSERT OR IGNORE INTO points (user_id, balance) VALUES (?, 0)",
+                (user_id,),
+            )
+            await conn.execute(
+                "UPDATE points SET balance = balance + ? WHERE user_id = ?",
+                (delta, user_id),
+            )
+
+
 async def transfer_balance(
     db: Database,
     from_user_id: str,

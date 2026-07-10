@@ -18,21 +18,47 @@ class PointsStore:
     def __init__(self, db: Database) -> None:
         self._db = db
         self._known_ids: set[str] = set()
+        self._pending: dict[str, int] = {}
 
     async def load(self) -> None:
         self._known_ids = set(await users_db.list_user_ids_with_names(self._db))
 
     async def flush(self) -> None:
-        return None
+        await self.flush_pending()
+
+    def transfer(self, from_user_id: str, to_user_id: str, amount: int) -> None:
+        from_uid = str(from_user_id)
+        to_uid = str(to_user_id)
+        self._pending[from_uid] = self._pending.get(from_uid, 0) - amount
+        self._pending[to_uid] = self._pending.get(to_uid, 0) + amount
+
+    async def flush_pending(self) -> None:
+        if not self._pending:
+            return
+        deltas = dict(self._pending)
+        self._pending.clear()
+        await points_db.apply_deltas(self._db, deltas)
+
+    async def apply_income_tick(self, eligible_ids: list[str], amount: int) -> None:
+        for uid in eligible_ids:
+            user_id = str(uid)
+            self._pending[user_id] = self._pending.get(user_id, 0) + amount
+        await self.flush_pending()
 
     async def add(self, user_id: str, amount: int) -> int:
-        return await points_db.add_balance(self._db, user_id, amount)
+        uid = str(user_id)
+        self._pending[uid] = self._pending.get(uid, 0) + amount
+        return await self.get_balance(uid)
 
     async def get_balance(self, user_id: str) -> int:
-        return await points_db.get_balance(self._db, user_id)
+        uid = str(user_id)
+        db_balance = await points_db.get_balance(self._db, uid)
+        return db_balance + self._pending.get(uid, 0)
 
     async def set_balance(self, user_id: str, amount: int) -> None:
-        await points_db.set_balance(self._db, user_id, amount)
+        uid = str(user_id)
+        await points_db.set_balance(self._db, uid, amount)
+        self._pending.pop(uid, None)
 
     def mark_known(self, user_id: str) -> None:
         self._known_ids.add(str(user_id))
@@ -77,8 +103,15 @@ class StealStore:
     def mutate_info(self, user_id: str) -> "_StealMutator":
         return _StealMutator(self._db, str(user_id))
 
-    async def execute_steal(self, thief_id: str, victim_id: str, amount: int) -> None:
-        await steal_db.execute_steal(self._db, thief_id, victim_id, amount)
+    async def execute_steal(
+        self,
+        points: PointsStore,
+        thief_id: str,
+        victim_id: str,
+        amount: int,
+    ) -> None:
+        points.transfer(thief_id, victim_id, amount)
+        await steal_db.record_steal_success(self._db, thief_id, amount)
 
     async def increment_jail_count(self, user_id: str) -> None:
         await steal_db.increment_jail_count(self._db, user_id)
