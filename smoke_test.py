@@ -221,6 +221,28 @@ async def main() -> int:
         assert row is not None and int(row["balance"]) == 13, "после income tick баланс должен быть 13"
         print("[OK] points apply_income_tick")
 
+        admin_conflict_uid = "smoke-admin-pending"
+        await bot.princess.points.set_balance(admin_conflict_uid, 0)
+        await bot.princess.points.add(admin_conflict_uid, 50)
+        async with s.put(
+            f"{base}/api/points/{admin_conflict_uid}",
+            json={"balance": 1000},
+        ) as r:
+            assert r.status == 200, await r.text()
+            body = await r.json()
+            assert body["balance"] == 1000, body
+        balance = await bot.princess.points.get_balance(admin_conflict_uid)
+        assert balance == 1000, f"ожидали 1000 после admin PUT, баланс={balance}"
+        await bot.princess.points.flush()
+        row = await bot.db.fetchone(
+            "SELECT balance FROM points WHERE user_id = ?",
+            (admin_conflict_uid,),
+        )
+        assert row is not None and int(row["balance"]) == 1000, (
+            "pending не должен перезаписать правку админки после flush"
+        )
+        print("[OK] admin PUT сбрасывает pending, flush не перезаписывает")
+
         test_uid = f"smoke-test-{int(time.time())}"
         async with s.post(
             f"{base}/api/points",

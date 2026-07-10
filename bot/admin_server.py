@@ -47,6 +47,11 @@ class AdminServer:
         self._fetch_viewers = fetch_viewers
         self._points = points
 
+    def _require_points(self) -> "PointsStore":
+        if self._points is None:
+            raise RuntimeError("PointsStore not bound")
+        return self._points
+
     def register(self, app: web.Application) -> None:
         app.add_routes(
             [
@@ -131,17 +136,29 @@ class AdminServer:
         return raw.strip()
 
     async def _api_points_list(self, request: web.Request) -> web.Response:
-        items = await points_db.list_all(self._db)
+        try:
+            points = self._require_points()
+        except RuntimeError:
+            return self._error("PointsStore недоступен", status=503)
+        items = await points.list_entries()
         return self._json_response({"items": items})
 
     async def _api_points_get(self, request: web.Request) -> web.Response:
+        try:
+            points = self._require_points()
+        except RuntimeError:
+            return self._error("PointsStore недоступен", status=503)
         user_id = request.match_info["user_id"]
-        entry = await points_db.get_user_entry(self._db, user_id)
+        entry = await points.get_user_entry(user_id)
         if entry is None:
             return self._error("Пользователь не найден", status=404)
         return self._json_response(entry)
 
     async def _api_points_create(self, request: web.Request) -> web.Response:
+        try:
+            points = self._require_points()
+        except RuntimeError:
+            return self._error("PointsStore недоступен", status=503)
         data = await self._read_json(request)
         if data is None:
             return self._error("Некорректный JSON")
@@ -152,22 +169,22 @@ class AdminServer:
             return self._error("user_id обязателен")
         if balance is None:
             return self._error("balance должен быть целым числом >= 0")
-        existing = await self._db.fetchone(
-            "SELECT 1 FROM points WHERE user_id = ?",
-            (user_id,),
-        )
+        existing = await points.get_user_entry(user_id)
         if existing is not None:
             return self._error("Пользователь уже существует", status=409)
-        await points_db.set_balance(self._db, user_id, balance)
+        await points.set_balance(user_id, balance)
         if user_name:
             await users_db.touch_user_name(self._db, user_id, user_name)
-            if self._points is not None:
-                self._points.mark_known(user_id)
-        entry = await points_db.get_user_entry(self._db, user_id)
+            points.mark_known(user_id)
+        entry = await points.get_user_entry(user_id)
         assert entry is not None
         return self._json_response(entry, status=201)
 
     async def _api_points_update(self, request: web.Request) -> web.Response:
+        try:
+            points = self._require_points()
+        except RuntimeError:
+            return self._error("PointsStore недоступен", status=503)
         user_id = request.match_info["user_id"]
         data = await self._read_json(request)
         if data is None:
@@ -175,19 +192,24 @@ class AdminServer:
         balance = self._parse_balance(data.get("balance"))
         if balance is None:
             return self._error("balance должен быть целым числом >= 0")
-        existing = await self._db.fetchone(
-            "SELECT 1 FROM points WHERE user_id = ?",
-            (user_id,),
-        )
+        existing = await points.get_user_entry(user_id)
         if existing is None:
             return self._error("Пользователь не найден", status=404)
-        await points_db.set_balance(self._db, user_id, balance)
-        entry = await points_db.get_user_entry(self._db, user_id)
+        await points.set_balance(user_id, balance)
+        entry = await points.get_user_entry(user_id)
         assert entry is not None
         return self._json_response(entry)
 
     async def _api_points_delete(self, request: web.Request) -> web.Response:
+        try:
+            points = self._require_points()
+        except RuntimeError:
+            return self._error("PointsStore недоступен", status=503)
         user_id = request.match_info["user_id"]
+        existing = await points.get_user_entry(user_id)
+        if existing is None:
+            return self._error("Пользователь не найден", status=404)
+        points.clear_pending(user_id)
         deleted = await points_db.delete_user(self._db, user_id)
         if not deleted:
             return self._error("Пользователь не найден", status=404)

@@ -60,6 +60,32 @@ class PointsStore:
         await points_db.set_balance(self._db, uid, amount)
         self._pending.pop(uid, None)
 
+    def clear_pending(self, user_id: str) -> None:
+        self._pending.pop(str(user_id), None)
+
+    async def get_user_entry(self, user_id: str) -> dict[str, int | str] | None:
+        uid = str(user_id)
+        entry = await points_db.get_user_entry(self._db, uid)
+        pending = self._pending.get(uid, 0)
+        if entry is None:
+            if pending == 0:
+                return None
+            return {"user_id": uid, "user_name": "", "balance": pending}
+        entry["balance"] = int(entry["balance"]) + pending
+        return entry
+
+    async def list_entries(self) -> list[dict[str, int | str]]:
+        items = await points_db.list_all(self._db)
+        seen: set[str] = set()
+        for item in items:
+            uid = str(item["user_id"])
+            seen.add(uid)
+            item["balance"] = int(item["balance"]) + self._pending.get(uid, 0)
+        for uid, delta in self._pending.items():
+            if uid not in seen and delta != 0:
+                items.append({"user_id": uid, "user_name": "", "balance": delta})
+        return items
+
     def mark_known(self, user_id: str) -> None:
         self._known_ids.add(str(user_id))
 
