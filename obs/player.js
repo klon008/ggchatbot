@@ -11,6 +11,7 @@
  * Протокол с Python:
  *   Python -> плеер: {action:"play", videoId, token, maxDurationSec, requestedBy, title}
  *                    {action:"skip", token}
+ *                    {action:"toggle_pause", token}
  *                    {action:"queue_state", playing, queueLength, current}
  *   плеер  -> Python: {status:"ready", youtubeApi, youtubeApiState, youtubeApiError?}
  *                     {status:"api_error", code, message}
@@ -321,6 +322,9 @@
       case "skip":
         skipVideo();
         break;
+      case "toggle_pause":
+        togglePause(data);
+        break;
       case "queue_state":
         if (!data.playing) {
           hidePlayer();
@@ -375,6 +379,38 @@
   function skipVideo() {
     hidePlayer();
     send({ status: "ended", token: current.token, videoId: current.videoId, skipped: true });
+  }
+
+  function togglePause(cmd) {
+    if (!player || !playerReady) {
+      debugLog("warn", "toggle_pause: плеер не готов");
+      return;
+    }
+    if (cmd.token && current.token && cmd.token !== current.token) {
+      debugLog("warn", "toggle_pause: устаревший token " + cmd.token);
+      return;
+    }
+    var state;
+    try {
+      state = player.getPlayerState();
+    } catch (e) {
+      debugLog("error", "toggle_pause: getPlayerState — " + e.message);
+      return;
+    }
+    try {
+      if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
+        player.pauseVideo();
+        debugLog("info", "Пауза");
+      } else if (state === YT.PlayerState.PAUSED) {
+        player.playVideo();
+        debugLog("info", "Продолжение");
+      } else {
+        debugLog("warn", "toggle_pause: состояние " + stateName(state) + " — игнор");
+      }
+    } catch (e) {
+      debugLog("error", "toggle_pause: " + e.message);
+    }
+    updateDebugStatus();
   }
 
   function checkDuration(attempt) {

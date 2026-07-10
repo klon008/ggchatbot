@@ -157,5 +157,8 @@ class ObsServer:
     async def send_skip(self, token: Optional[str]) -> None:
         await self.broadcast({"action": "skip", "token": token})
 
+    async def send_toggle_pause(self, token: Optional[str]) -> None:
+        await self.broadcast({"action": "toggle_pause", "token": token})
+
     async def send_queue_state(self, snapshot: dict) -> None:
         await self.broadcast({"action": "queue_state", **snapshot})

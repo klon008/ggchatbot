@@ -136,6 +136,22 @@ async def main() -> int:
             t1 = msg["token"]
             print(f"[OK] play #1 token={t1}")
 
+            async with s.post(f"{base}/api/queue/toggle-pause") as r:
+                assert r.status == 200, await r.text()
+                body = await r.json()
+                assert body["paused"] is True, body
+            msg = await wait_action(ws, "toggle_pause")
+            assert msg.get("token") == t1, msg
+            print("[OK] POST /api/queue/toggle-pause -> paused")
+
+            async with s.post(f"{base}/api/queue/toggle-pause") as r:
+                assert r.status == 200, await r.text()
+                body = await r.json()
+                assert body["paused"] is False, body
+            msg = await wait_action(ws, "toggle_pause")
+            assert msg.get("token") == t1, msg
+            print("[OK] POST /api/queue/toggle-pause -> resumed")
+
             # Завершаем первый -> должен прийти второй.
             await ws.send_json({"status": "ended", "token": t1})
             msg = await wait_action(ws, "play")
@@ -157,6 +173,10 @@ async def main() -> int:
             msg = await wait_action(ws, "queue_state")
             assert not msg["playing"], msg
             print("[OK] очередь пуста -> queue_state")
+
+            async with s.post(f"{base}/api/queue/toggle-pause") as r:
+                assert r.status == 409, await r.text()
+            print("[OK] POST /api/queue/toggle-pause 409 when idle")
 
             # --- Возврат принцесс при ошибке плеера ----------------------
             refund_uid = "smoke-refund-user"

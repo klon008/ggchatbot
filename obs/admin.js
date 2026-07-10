@@ -6,11 +6,13 @@
   const pointsFilter = document.getElementById("pointsFilter");
   const queueBody = document.getElementById("queueBody");
   const queuePlaying = document.getElementById("queuePlaying");
+  const queueTogglePause = document.getElementById("queueTogglePause");
   const ordersStatus = document.getElementById("ordersStatus");
   const ordersToggle = document.getElementById("ordersToggle");
 
   let allPoints = [];
   let ordersEnabled = true;
+  let queuePaused = false;
 
   function setStatus(text, kind) {
     statusBar.textContent = text;
@@ -246,12 +248,24 @@
     return `<strong>${esc(who)}</strong> — ${esc(title)} <span class="mono">(${esc(track.video_id)})</span>`;
   }
 
+  function renderPauseButton(playing, paused) {
+    queuePaused = !!paused;
+    if (!playing) {
+      queueTogglePause.disabled = true;
+      queueTogglePause.textContent = "Пауза";
+      return;
+    }
+    queueTogglePause.disabled = false;
+    queueTogglePause.textContent = paused ? "Продолжить" : "Пауза";
+  }
+
   async function loadQueue() {
     setStatus("Загрузка очереди…");
     try {
       await loadOrdersState();
       const data = await api("GET", "/api/queue");
       queuePlaying.innerHTML = formatPlaying(data.playing);
+      renderPauseButton(data.playing, data.paused);
       const waiting = data.waiting || [];
       if (!waiting.length) {
         queueBody.innerHTML =
@@ -296,6 +310,17 @@
   });
 
   document.getElementById("queueRefresh").addEventListener("click", loadQueue);
+  queueTogglePause.addEventListener("click", async () => {
+    setStatus(queuePaused ? "Продолжение…" : "Пауза…");
+    try {
+      const data = await api("POST", "/api/queue/toggle-pause");
+      renderPauseButton(true, data.paused);
+      setStatus(data.paused ? "Воспроизведение на паузе" : "Воспроизведение продолжено", "ok");
+    } catch (err) {
+      setStatus(err.message, "err");
+      await loadQueue();
+    }
+  });
   document.getElementById("syncUserNames").addEventListener("click", syncUserNames);
   ordersToggle.addEventListener("click", toggleOrders);
 

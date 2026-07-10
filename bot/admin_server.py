@@ -63,6 +63,7 @@ class AdminServer:
                 web.put("/api/points/{user_id}", self._api_points_update),
                 web.delete("/api/points/{user_id}", self._api_points_delete),
                 web.get("/api/queue", self._api_queue_get),
+                web.post("/api/queue/toggle-pause", self._api_queue_toggle_pause),
                 web.delete("/api/queue/waiting/{index}", self._api_queue_delete),
                 web.get("/api/song-request", self._api_sr_get),
                 web.put("/api/song-request", self._api_sr_put),
@@ -218,7 +219,20 @@ class AdminServer:
     async def _api_queue_get(self, request: web.Request) -> web.Response:
         playing = asdict(self._queue.current) if self._queue.current else None
         waiting = self._queue.list_waiting()
-        return self._json_response({"playing": playing, "waiting": waiting})
+        return self._json_response({
+            "playing": playing,
+            "waiting": waiting,
+            "paused": self._sr.player_paused,
+        })
+
+    async def _api_queue_toggle_pause(self, request: web.Request) -> web.Response:
+        try:
+            paused = await self._sr.toggle_pause()
+        except RuntimeError as exc:
+            if str(exc) == "nothing_playing":
+                return self._error("Сейчас ничего не играет", status=409)
+            raise
+        return self._json_response({"paused": paused})
 
     async def _api_queue_delete(self, request: web.Request) -> web.Response:
         try:

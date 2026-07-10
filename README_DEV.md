@@ -358,6 +358,7 @@ aiohttp-приложение на одном порту (`OBS_WS_HOST:OBS_WS_POR
 ```json
 {"action": "play", "videoId": "...", "token": "t-1", "maxDurationSec": 300, "requestedBy": "nick", "title": ""}
 {"action": "skip", "token": "t-1"}
+{"action": "toggle_pause", "token": "t-1"}
 {"action": "queue_state", "playing": false, "queueLength": 0, "current": null}
 ```
 

@@ -58,6 +58,7 @@ class SongRequestHandler:
         self._points: Optional[PointsStore] = None
         self._youtube_api_warned = False
         self._orders_enabled = True
+        self._player_paused = False
 
     async def start(self) -> None:
         await self.queue.load()
@@ -79,6 +80,23 @@ class SongRequestHandler:
     @property
     def orders_enabled(self) -> bool:
         return self._orders_enabled
+
+    @property
+    def player_paused(self) -> bool:
+        return self._player_paused
+
+    async def toggle_pause(self) -> bool:
+        if not self.queue.is_playing:
+            raise RuntimeError("nothing_playing")
+        self._player_paused = not self._player_paused
+        if self._player_paused:
+            if self._watchdog:
+                self._watchdog.cancel()
+                self._watchdog = None
+        else:
+            self._arm_watchdog(self.queue.current_token)
+        await self.obs.send_toggle_pause(self.queue.current_token)
+        return self._player_paused
 
     async def set_orders_enabled(self, enabled: bool) -> None:
         if enabled == self._orders_enabled:
@@ -282,6 +300,7 @@ class SongRequestHandler:
 
     async def advance(self, expected_token: Optional[str], skip_reason: Optional[str] = None) -> None:
         async with self._advance_lock:
+            self._player_paused = False
             if self.queue.is_playing:
                 finished_track = self.queue.current
                 if expected_token is not None:
@@ -326,6 +345,7 @@ class SongRequestHandler:
 
     async def _clear_queue_with_refunds(self) -> int:
         async with self._advance_lock:
+            self._player_paused = False
             tracks = self.queue.all_tracks()
             if self._watchdog:
                 self._watchdog.cancel()
