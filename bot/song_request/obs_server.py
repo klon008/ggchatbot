@@ -45,6 +45,8 @@ class ObsServer:
                 web.get("/", self._handle_index),
                 web.get("/player.html", self._handle_index),
                 web.get("/player.js", self._handle_player_js),
+                web.get("/commands.html", self._handle_commands),
+                web.get("/mermaid.min.js", self._handle_mermaid_js),
                 web.get("/ws", self._handle_ws),
             ]
         )
@@ -68,6 +70,7 @@ class ObsServer:
         log.info("OBS-сервер запущен: http://%s:%d/player.html", self.host, self.port)
         if self._has_admin:
             log.info("Admin-панель: http://%s:%d/admin.html", self.host, self.port)
+        log.info("Логика команд: http://%s:%d/commands.html", self.host, self.port)
 
     async def stop(self) -> None:
         for ws in list(self._clients):
@@ -80,6 +83,12 @@ class ObsServer:
 
     async def _handle_player_js(self, request: web.Request) -> web.StreamResponse:
         return await self._serve_file("player.js", "application/javascript; charset=utf-8")
+
+    async def _handle_commands(self, request: web.Request) -> web.StreamResponse:
+        return await self._serve_file("commands.html", "text/html; charset=utf-8")
+
+    async def _handle_mermaid_js(self, request: web.Request) -> web.StreamResponse:
+        return await self._serve_file("mermaid.min.js", "application/javascript; charset=utf-8")
 
     async def _serve_file(self, name: str, content_type: str) -> web.StreamResponse:
         path = OBS_DIR / name

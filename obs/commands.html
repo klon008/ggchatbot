@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bot MSC — логика команд</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --bg: #0a1020;
+      --surface: #111a2e;
+      --surface-2: #0d1528;
+      --border: rgba(100, 150, 220, 0.18);
+      --text: #e6ecf8;
+      --muted: #8da3c7;
+      --accent: #6eb6ff;
+      --princess: #5a9fd4;
+      --music: #9b7fd4;
+      --eco: #d4b06a;
+      --ok: #4ecf8a;
+      --fail: #f07178;
+      --cond: #e8c05a;
+      --admin: #b894ff;
+      --cmd: #a8d4ff;
+      --radius: 12px;
+      --gap: 20px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    }
+
+    /* --- layout --- */
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.01em;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* --- nav --- */
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 28px;
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .toc a {
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .toc a:hover {
+      color: var(--accent);
+      border-color: rgba(110, 182, 255, 0.4);
+    }
+
+    /* --- legend --- */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      justify-content: center;
+      margin-bottom: 28px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 4px;
+      border: 2px solid;
+      flex-shrink: 0;
+    }
+
+    .dot.action { border-color: var(--princess); background: rgba(90, 159, 212, 0.2); }
+    .dot.cond   { border-color: var(--cond);    background: rgba(232, 192, 90, 0.15); }
+    .dot.ok     { border-color: var(--ok);      background: rgba(78, 207, 138, 0.15); }
+    .dot.fail   { border-color: var(--fail);    background: rgba(240, 113, 120, 0.15); }
+    .dot.admin  { border-color: var(--admin);   background: rgba(184, 148, 255, 0.15); }
+    .dot.eco    { border-color: var(--eco);     background: rgba(212, 176, 106, 0.15); }
+
+    /* --- cards --- */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: var(--gap);
+      overflow: hidden;
+    }
+
+    .card-head {
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-head .tag {
+      display: inline-block;
+      margin-bottom: 6px;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .tag.sys      { background: rgba(110, 182, 255, 0.12); color: var(--accent); }
+    .tag.princess { background: rgba(90, 159, 212, 0.15); color: var(--princess); }
+    .tag.music    { background: rgba(155, 127, 212, 0.15); color: var(--music); }
+
+    .card-head h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .card-head p {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    .card-body.flush {
+      padding: 16px 12px 12px;
+    }
+
+    /* --- mermaid --- */
+    .diagram {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .diagram pre.mermaid {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+    }
+
+    .diagram svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* --- info table --- */
+    .cmd-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .cmd-table th {
+      text-align: left;
+      padding: 10px 14px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cmd-table td {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(100, 150, 220, 0.08);
+      vertical-align: top;
+    }
+
+    .cmd-table tr:last-child td { border-bottom: none; }
+
+    .cmd-table code {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 14px;
+      color: var(--cmd);
+      font-weight: 600;
+    }
+
+    /* --- chips --- */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      padding: 6px 13px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+      color: var(--cmd);
+    }
+
+    .chip.dim {
+      border-style: dashed;
+      color: #7a9ec8;
+      opacity: 0.85;
+    }
+
+    .chip.admin {
+      border-color: rgba(184, 148, 255, 0.35);
+      color: var(--admin);
+    }
+
+    .note {
+      margin-top: 14px;
+      padding: 11px 14px;
+      border-radius: 8px;
+      border: 1px dashed rgba(78, 207, 138, 0.35);
+      background: rgba(78, 207, 138, 0.06);
+      font-size: 13px;
+      color: #8fd4a8;
+      text-align: center;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #4a6080;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="hero">
+      <h1>Bot MSC — логика команд</h1>
+      <p>Как сообщения в чате GoodGame проходят через экономику и заказ музыки</p>
+    </header>
+
+    <nav class="toc">
+      <a href="#routing">Маршрут</a>
+      <a href="#message">Сообщение</a>
+      <a href="#info">Инфо</a>
+      <a href="#daily">Дейлик</a>
+      <a href="#dice">Кубик</a>
+      <a href="#steal">Кража</a>
+      <a href="#admin">Админ</a>
+      <a href="#order">Заказ</a>
+      <a href="#sr-other">Музыка</a>
+      <a href="#economy">Связь</a>
+      <a href="#list">Список</a>
+    </nav>
+
+    <div class="legend">
+      <span><i class="dot action"></i> Действие</span>
+      <span><i class="dot cond"></i> Условие</span>
+      <span><i class="dot ok"></i> Успех</span>
+      <span><i class="dot fail"></i> Отказ</span>
+      <span><i class="dot admin"></i> Админ / мод</span>
+      <span><i class="dot eco"></i> Экономика</span>
+    </div>
+
+    <!-- Маршрутизация -->
+    <article class="card" id="routing">
+      <div class="card-head">
+        <span class="tag sys">Система</span>
+        <h2>Маршрутизация сообщений</h2>
+        <p>Куда попадает каждое сообщение из чата</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    IN["Сообщение в чате GG"] --> R{"Первая команда?"}
+    R -->|!команды| HELP["Показать список команд"]
+    R -->|иначе| P["Модуль Princess"]
+    P --> PH{"Обработал?"}
+    PH -->|да| OUT["Ответ в чат"]
+    PH -->|нет| S["Модуль Song Request"]
+    S --> SH{"Обработал?"}
+    SH -->|да| OUT
+    SH -->|нет| IGN["Игнор"]
+    class IN,P,S action
+    class R,PH,SH cond
+    class HELP,OUT ok
+    class IGN muted
+          </pre>
+        </div>
+      </div>
+    </article>
+
+    <!-- Обработка сообщения -->
+    <article class="card" id="message">
+      <div class="card-head">
+        <span class="tag sys">Система</span>
+        <h2>Обработка каждого сообщения</h2>
+        <p>Что происходит до разбора конкретной команды</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    M["Любое сообщение"] --> SAVE["Запомнить ник"]
+    SAVE --> J{"В тюрьме?"}
+    J -->|да| SR{"Команда !срок?"}
+    SR -->|да| TIME["Показать время до выхода"]
+    SR -->|нет| BLOCK["Остальные команды заблокированы"]
+    J -->|нет| PTS["+принцессы за сообщение"]
+    PTS --> C{"Начинается с ! ?"}
+    C -->|нет| PASS["Передать в Song Request"]
+    C -->|да| ROUTE["Princess / Админ / неизвестная"]
+    class M,SAVE,PASS,ROUTE action
+    class J,SR,C cond
+    class TIME ok
+    class BLOCK fail
+    class PTS eco
+          </pre>
+        </div>
+        <div class="note">Параллельно: зрители в чате (не в тюрьме) получают пассивный доход каждую минуту</div>
+      </div>
+    </article>
+
+    <!-- Информационные команды -->
+    <article class="card" id="info">
+      <div class="card-head">
+        <span class="tag princess">Princess</span>
+        <h2>Информационные команды</h2>
+        <p>Без проверок — сразу ответ</p>
+      </div>
+      <div class="card-body">
+        <table class="cmd-table">
+          <thead>
+            <tr><th>Команда</th><th>Результат</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>!баллы</code></td><td>Текущий баланс принцесс</td></tr>
+            <tr><td><code>!карман</code></td><td>Статистика краж и текущий % шанса</td></tr>
+            <tr><td><code>!срок</code></td><td>Сколько осталось сидеть в тюрьме</td></tr>
+            <tr><td><code>!нейро</code></td><td>Ссылка на генератор принцесс</td></tr>
+            <tr><td><code>!звук</code></td><td>Список звуковых команд стрима</td></tr>
+            <tr><td><code>!дисней</code></td><td>Случайная принцесса Диснея</td></tr>
+            <tr><td><code>!коллекция</code></td><td>Ссылка на коллекцию стримера</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <!-- Дейлик -->
+    <article class="card" id="daily">
+      <div class="card-head">
+        <span class="tag princess">Princess</span>
+        <h2><code style="color:var(--cmd)">!дейлик</code> — ежедневный бонус</h2>
+        <p>Раз в сутки, размер бонуса зависит от номера дня в месяце</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    START["!дейлик"] --> CHK{"Уже получал сегодня?"}
+    CHK -->|да| NO["Отказ"]
+    CHK -->|нет| YES["Начислить бонус"]
+    class START action
+    class CHK cond
+    class YES ok
+    class NO fail
+          </pre>
+        </div>
+      </div>
+    </article>
+
+    <!-- Кубик -->
+    <article class="card" id="dice">
+      <div class="card-head">
+        <span class="tag princess">Princess</span>
+        <h2><code style="color:var(--cmd)">!дайс</code> — бросок кубика</h2>
+        <p>Платный бросок d20, перезарядка 5 минут</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    START["!дайс"] --> CHK{"КД прошёл и хватает баллов?"}
+    CHK -->|нет| NO["Отказ"]
+    CHK -->|да| PAY["Списать стоимость броска"]
+    PAY --> ROLL["Бросок d20"]
+    ROLL -->|1| CF["Крит. провал −50"]
+    ROLL -->|2–19| OK["Показать результат"]
+    ROLL -->|20| CS["Крит. успех +200"]
+    class START,PAY,ROLL action
+    class CHK cond
+    class OK,CS ok
+    class NO,CF fail
+          </pre>
+        </div>
+      </div>
+    </article>
+
+    <!-- Кража -->
+    <article class="card" id="steal">
+      <div class="card-head">
+        <span class="tag princess">Princess</span>
+        <h2><code style="color:var(--cmd)">!кража</code> — кража у зрителя</h2>
+        <p>Только среда и пятница, минимум 5 зрителей в чате, КД 10 минут</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    START["!кража"] --> D1{"Среда или пятница?"}
+    D1 -->|нет| F0["Отказ"]
+    D1 -->|да| D2{"≥ 5 зрителей?"}
+    D2 -->|нет| F1["Отказ"]
+    D2 -->|да| D3{"КД 10 мин?"}
+    D3 -->|нет| F2["Отказ"]
+    D3 -->|да| ROLL["Бросок на шанс кражи"]
+    ROLL -->|провал| F3["Ничего не украл"]
+    ROLL -->|успех| VICT["Случайный зритель — жертва"]
+    VICT --> D4{"У жертвы ≥ 18к?"}
+    D4 -->|нет| F4["Отказ с шуткой"]
+    D4 -->|да| LOOT["Перевести принцессы"]
+    LOOT --> D5{"Попал в тюрьму?"}
+    D5 -->|да| JAIL["Блок на 30 минут"]
+    D5 -->|нет| WIN["Успех"]
+    class START,ROLL,VICT action
+    class D1,D2,D3,D4,D5 cond
+    class WIN ok
+    class F0,F1,F2,F3,F4,JAIL fail
+    class LOOT eco
+          </pre>
+        </div>
+      </div>
+    </article>
+
+    <!-- Админ -->
+    <article class="card" id="admin">
+      <div class="card-head">
+        <span class="tag princess">Princess</span>
+        <h2>Админ-команды</h2>
+        <p>Только для администратора канала</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    A1["!начислить ник сумма"] --> AC1{"Админ?"}
+    AC1 -->|нет| AF1["Отказ"]
+    AC1 -->|да| AN1{"Ник в чате?"}
+    AN1 -->|нет| AF2["Не найден"]
+    AN1 -->|да| AY["Начислить принцессы"]
+    class A1 action
+    class AC1,AN1 cond
+    class AY eco
+    class AF1,AF2 fail
+          </pre>
+        </div>
+        <div class="diagram" style="margin-top:12px">
+          <pre class="mermaid">
+flowchart TD
+    A2["!списать ник сумма"] --> AC2{"Админ?"}
+    AC2 -->|нет| AF3["Отказ"]
+    AC2 -->|да| AN2{"Ник в чате?"}
+    AN2 -->|нет| AF4["Не найден"]
+    AN2 -->|да| AX["Списать принцессы"]
+    class A2 action
+    class AC2,AN2 cond
+    class AX fail
+    class AF3,AF4 fail
+          </pre>
+        </div>
+      </div>
+    </article>
+
+    <!-- Заказ -->
+    <article class="card" id="order">
+      <div class="card-head">
+        <span class="tag music">Song Request</span>
+        <h2><code style="color:var(--cmd)">!заказ</code> — заказ трека</h2>
+        <p>Также: <code style="color:var(--cmd)">!зм</code> и <code style="color:var(--cmd)">!sr</code> + ссылка на YouTube</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    START["!заказ + URL"] --> E1{"Заказы включены?"}
+    E1 -->|нет| F0["Отказ"]
+    E1 -->|да| E2{"КД пользователя?"}
+    E2 -->|нет| F1["Подожди"]
+    E2 -->|да| E3{"Очередь не полна?"}
+    E3 -->|нет| F2["Очередь заполнена"]
+    E3 -->|да| E4{"Валидный YouTube?"}
+    E4 -->|нет| F3["Неверная ссылка"]
+    E4 -->|да| E5{"Хватает принцесс?"}
+    E5 -->|нет| F4["Недостаточно"]
+    E5 -->|да| PAY["Списать стоимость → очередь"]
+    PAY --> E6{"Ничего не играет?"}
+    E6 -->|да| PLAY["Сразу воспроизвести"]
+    E6 -->|нет| WAIT["Ждать в очереди"]
+    PAY -.->|ошибка плеера| REFUND["Возврат принцесс"]
+    class START action
+    class E1,E2,E3,E4,E5,E6 cond
+    class PLAY,WAIT ok
+    class F0,F1,F2,F3,F4 fail
+    class PAY eco
+    class REFUND fail
+          </pre>
+        </div>
+      </div>
+    </article>
+
+    <!-- Прочие SR -->
+    <article class="card" id="sr-other">
+      <div class="card-head">
+        <span class="tag music">Song Request</span>
+        <h2>Остальные музыкальные команды</h2>
+      </div>
+      <div class="card-body">
+        <table class="cmd-table">
+          <thead>
+            <tr><th>Команда</th><th>Кто</th><th>Результат</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>!очередь</code></td>
+              <td>Все</td>
+              <td>Сколько треков в очереди и что идёт дальше</td>
+            </tr>
+            <tr>
+              <td><code>!играет</code> / <code>!сейчас</code></td>
+              <td>Все</td>
+              <td>Кто заказал и что играет сейчас</td>
+            </tr>
+            <tr>
+              <td><code>!пропуск</code> / <code>!skip</code></td>
+              <td>Модератор</td>
+              <td>Пропустить текущий трек</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <!-- Связь модулей -->
+    <article class="card" id="economy">
+      <div class="card-head">
+        <span class="tag sys">Система</span>
+        <h2>Как связаны Princess и Song Request</h2>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart LR
+    CHAT["Чат GG"] --> EARN["Princess: заработок"]
+    EARN --> BAL["Баланс принцесс"]
+    BAL --> SPEND["Song Request: !заказ"]
+    SPEND -.->|ошибка / отмена| BAL
+    class CHAT,EARN,SPEND action
+    class BAL eco
+          </pre>
+        </div>
+        <p class="note" style="border-color:rgba(212,176,106,0.35); background:rgba(212,176,106,0.06); color:#d4c090;">
+          Сообщения, дейлик, кража, кубик и пассивный доход → тратятся на заказ музыки
+        </p>
+      </div>
+    </article>
+
+    <!-- Список команд -->
+    <article class="card" id="list">
+      <div class="card-head">
+        <span class="tag sys">Справка</span>
+        <h2>Все команды</h2>
+        <p>Публичный список показывает <code style="color:var(--cmd)">!команды</code></p>
+      </div>
+      <div class="card-body">
+        <p style="margin:0 0 10px; font-size:13px; color:var(--muted)">Публичные</p>
+        <div class="chips" style="margin-bottom:20px">
+          <span class="chip">!баллы</span>
+          <span class="chip">!дейлик</span>
+          <span class="chip">!дайс</span>
+          <span class="chip">!кража</span>
+          <span class="chip">!карман</span>
+          <span class="chip">!срок</span>
+          <span class="chip">!дисней</span>
+          <span class="chip">!нейро</span>
+          <span class="chip">!звук</span>
+          <span class="chip">!коллекция</span>
+          <span class="chip">!заказ</span>
+          <span class="chip">!очередь</span>
+          <span class="chip">!играет</span>
+        </div>
+        <p style="margin:0 0 10px; font-size:13px; color:var(--muted)">Скрытые и служебные</p>
+        <div class="chips">
+          <span class="chip dim">!зм</span>
+          <span class="chip dim">!sr</span>
+          <span class="chip dim">!сейчас</span>
+          <span class="chip dim">!пропуск</span>
+          <span class="chip admin">!начислить</span>
+          <span class="chip admin">!списать</span>
+        </div>
+      </div>
+    </article>
+
+    <p class="footer">obs/commands.html · Bot MSC</p>
+  </div>
+
+  <script src="/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: "loose",
+      theme: "base",
+      themeVariables: {
+        darkMode: true,
+        background: "transparent",
+        primaryColor: "#1a2d4a",
+        primaryTextColor: "#e6ecf8",
+        primaryBorderColor: "#5a9fd4",
+        secondaryColor: "#2a2218",
+        secondaryTextColor: "#e6ecf8",
+        secondaryBorderColor: "#d4b06a",
+        tertiaryColor: "#231a38",
+        tertiaryTextColor: "#e6ecf8",
+        tertiaryBorderColor: "#b894ff",
+        lineColor: "#5a7aaa",
+        textColor: "#e6ecf8",
+        mainBkg: "#1a2d4a",
+        nodeBorder: "#5a9fd4",
+        clusterBkg: "rgba(0,0,0,0.25)",
+        clusterBorder: "rgba(100,150,220,0.25)",
+        titleColor: "#6eb6ff",
+        edgeLabelBackground: "#111a2e",
+        fontFamily: "Segoe UI, system-ui, sans-serif",
+        fontSize: "15px",
+      },
+      flowchart: {
+        htmlLabels: true,
+        curve: "basis",
+        padding: 20,
+        nodeSpacing: 40,
+        rankSpacing: 48,
+        wrappingWidth: 240,
+        useMaxWidth: true,
+      },
+      themeCSS: `
+        g.node.action rect, g.node.action polygon { fill:#1a2d4a!important; stroke:#5a9fd4!important; stroke-width:2px; }
+        g.node.cond rect, g.node.cond polygon   { fill:#2a2410!important; stroke:#e8c05a!important; stroke-width:2px; }
+        g.node.ok rect, g.node.ok polygon       { fill:#102a1c!important; stroke:#4ecf8a!important; stroke-width:2px; }
+        g.node.fail rect, g.node.fail polygon   { fill:#2a1218!important; stroke:#f07178!important; stroke-width:2px; }
+        g.node.admin rect, g.node.admin polygon { fill:#231a38!important; stroke:#b894ff!important; stroke-width:2px; }
+        g.node.eco rect, g.node.eco polygon     { fill:#2a2218!important; stroke:#d4b06a!important; stroke-width:2px; }
+        g.node.muted rect, g.node.muted polygon { fill:#151e30!important; stroke:#4a6080!important; stroke-width:2px; }
+        .nodeLabel, .node text, text { fill:#e6ecf8!important; }
+        foreignObject, foreignObject div, foreignObject span, foreignObject p {
+          font-size:15px!important; line-height:1.4!important; color:#e6ecf8!important;
+        }
+        .edgeLabel rect { fill:#111a2e!important; }
+        .edgeLabel span, .edgeLabel p { color:#9bb0cc!important; font-size:13px!important; }
+        .flowchart-link { stroke:#5a7aaa!important; }
+        .cluster rect { fill:rgba(0,0,0,0.2)!important; stroke:rgba(100,150,220,0.2)!important; }
+        .cluster .cluster-label span { color:#8da3c7!important; font-size:13px!important; }
+      `,
+    });
+  </script>
+</body>
+</html>
