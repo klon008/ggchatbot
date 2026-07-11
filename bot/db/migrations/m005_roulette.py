@@ -12,6 +12,11 @@ _DEFAULT_COLLECT_SEC = 60
 _DEFAULT_COOLDOWN_SEC = 180
 
 
+async def _roulette_meta_columns(conn: aiosqlite.Connection) -> set[str]:
+    rows = await conn.execute_fetchall("PRAGMA table_info(roulette_meta)")
+    return {str(row[1]) for row in rows}
+
+
 async def upgrade(conn: aiosqlite.Connection) -> None:
     await conn.execute(
         """
@@ -30,6 +35,13 @@ async def upgrade(conn: aiosqlite.Connection) -> None:
         )
         """
     )
+
+    columns = await _roulette_meta_columns(conn)
+    if "bank" not in columns:
+        await conn.execute(
+            "ALTER TABLE roulette_meta ADD COLUMN bank INTEGER NOT NULL DEFAULT 0"
+        )
+
     await conn.execute(
         """
         CREATE TABLE IF NOT EXISTS roulette_bets (

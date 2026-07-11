@@ -10,6 +10,11 @@ DESCRIPTION = "Общая казна minigames_bank"
 _DEFAULT_BANK = 50_000
 
 
+async def _roulette_meta_columns(conn: aiosqlite.Connection) -> set[str]:
+    rows = await conn.execute_fetchall("PRAGMA table_info(roulette_meta)")
+    return {str(row[1]) for row in rows}
+
+
 async def upgrade(conn: aiosqlite.Connection) -> None:
     await conn.execute(
         """
@@ -20,13 +25,21 @@ async def upgrade(conn: aiosqlite.Connection) -> None:
         """
     )
 
-    row = await conn.execute_fetchall("SELECT bank FROM roulette_meta WHERE id = 1")
-    existing_bank = int(row[0][0]) if row else _DEFAULT_BANK
+    columns = await _roulette_meta_columns(conn)
+    if "bank" in columns:
+        row = await conn.execute_fetchall("SELECT bank FROM roulette_meta WHERE id = 1")
+        existing_bank = int(row[0][0]) if row else _DEFAULT_BANK
+    else:
+        row = await conn.execute_fetchall("SELECT bank FROM minigames_bank WHERE id = 1")
+        existing_bank = int(row[0][0]) if row else _DEFAULT_BANK
 
     await conn.execute(
         "INSERT OR IGNORE INTO minigames_bank (id, bank) VALUES (1, ?)",
         (existing_bank,),
     )
+
+    if "bank" not in columns:
+        return
 
     await conn.execute(
         """

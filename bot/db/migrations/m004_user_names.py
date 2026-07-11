@@ -9,6 +9,15 @@ DESCRIPTION = "Таблица user_names + backfill из queue_items"
 
 
 async def upgrade(conn: aiosqlite.Connection) -> None:
+    qi_cols = {
+        row[1]
+        for row in await conn.execute_fetchall("PRAGMA table_info(queue_items)")
+    }
+    if "requested_by_name" not in qi_cols:
+        await conn.execute(
+            "ALTER TABLE queue_items ADD COLUMN requested_by_name TEXT NOT NULL DEFAULT ''"
+        )
+
     await conn.execute(
         """
         CREATE TABLE IF NOT EXISTS user_names (
