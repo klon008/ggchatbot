@@ -34,6 +34,9 @@
 6. (Опционально) Настройка баланса под свой канал:
    - ggchatbot\bot\princess\settings.py  — принцессы, кража, дейлики, кубик
    - ggchatbot\bot\song_request\settings.py  — стоимость !sr (SR_COST)
+   - ggchatbot\bot\roulette\settings.py  — рулетка
+   - ggchatbot\bot\minigames\settings.py  — общая казна мини-игр
+   - ggchatbot\bot\races\settings.py  — забеги (!забег)
    При install.cmd эти файлы создаются из *.example.py.
    Они НЕ перезаписываются при update.cmd.
    После обновления сравните *.example.py с вашим settings.py,

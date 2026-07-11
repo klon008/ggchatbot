@@ -438,6 +438,8 @@ try {
     Ensure-SettingsFile $projectRoot "bot\princess"
     Ensure-SettingsFile $projectRoot "bot\song_request"
     Ensure-SettingsFile $projectRoot "bot\roulette"
+    Ensure-SettingsFile $projectRoot "bot\minigames"
+    Ensure-SettingsFile $projectRoot "bot\races"
     Show-FinishMessage $launcherDir $projectRoot
 }
 catch {

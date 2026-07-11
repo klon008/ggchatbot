@@ -18,7 +18,8 @@
     Лаунчеры в корне (update.cmd, start.cmd, …) правит только разработчик в репозитории.
     Стример запускает update.cmd — скрипт сам подтягивает свежие копии из installer\.
     
-    В папках bot\princess, bot\song_request, bot\roulette settings.py создаётся из settings.example.py, если его нет.
+    В папках bot\princess, bot\song_request, bot\roulette, bot\minigames, bot\races
+    settings.py создаётся из settings.example.py, если его нет.
 .PARAMETER AfterLauncherSync
     Внутренний флаг второго прохода после sync и перезапуска. Не передавать вручную.
 #>
@@ -268,8 +269,11 @@ if (-not $AfterLauncherSync) {
 Ensure-SettingsFile $projectDir "bot\princess"
 Ensure-SettingsFile $projectDir "bot\song_request"
 Ensure-SettingsFile $projectDir "bot\roulette"
+Ensure-SettingsFile $projectDir "bot\minigames"
+Ensure-SettingsFile $projectDir "bot\races"
 Write-Host ""
-Write-Host "Настройки баланса: bot\princess\settings.py, bot\song_request\settings.py, bot\roulette\settings.py" -ForegroundColor Yellow
+Write-Host "Настройки: bot\princess\settings.py, bot\song_request\settings.py, bot\roulette\settings.py," -ForegroundColor Yellow
+Write-Host "bot\minigames\settings.py, bot\races\settings.py сохраняются при обновлении." -ForegroundColor Yellow
 Write-Host "сохраняются при обновлении. Сравните с *.example.py, если в репо появились новые параметры." -ForegroundColor Yellow
 
 $venvPython = Join-Path $projectDir ".venv\Scripts\python.exe"

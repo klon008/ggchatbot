@@ -54,6 +54,8 @@ copy .env.example .env
 copy bot\princess\settings.example.py bot\princess\settings.py
 copy bot\song_request\settings.example.py bot\song_request\settings.py
 copy bot\roulette\settings.example.py bot\roulette\settings.py
+copy bot\minigames\settings.example.py bot\minigames\settings.py
+copy bot\races\settings.example.py bot\races\settings.py
 .\.venv\Scripts\python.exe main.py
 ```
 
@@ -87,6 +89,8 @@ copy bot\roulette\settings.example.py bot\roulette\settings.py
 | `bot/princess/settings.py` | `bot/princess/settings.example.py` |
 | `bot/song_request/settings.py` | `bot/song_request/settings.example.py` |
 | `bot/roulette/settings.py` | `bot/roulette/settings.example.py` |
+| `bot/minigames/settings.py` | `bot/minigames/settings.example.py` |
+| `bot/races/settings.py` | `bot/races/settings.example.py` |
 
 При первой установке (`install.cmd` или ручное копирование) создаётся `settings.py`
 из `settings.example.py`. Меняйте только свой `settings.py`.
