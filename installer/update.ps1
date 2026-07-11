@@ -90,7 +90,22 @@ function Get-FileSha256([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) {
         return $null
     }
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+
+    # .NET вместо Get-FileHash: cmdlet может быть недоступен при -NoProfile через update.cmd.
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $bytes = $sha.ComputeHash($stream)
+        }
+        finally {
+            $stream.Dispose()
+        }
+        return ([BitConverter]::ToString($bytes) -replace '-', '')
+    }
+    finally {
+        $sha.Dispose()
+    }
 }
 
 function Get-ChangedLauncherFiles {
@@ -100,7 +115,7 @@ function Get-ChangedLauncherFiles {
         [string[]]$Names
     )
 
-    $changed = New-Object System.Collections.Generic.List[string]
+    $changed = @()
     foreach ($name in $Names) {
         $src = Join-Path $InstallerDir $name
         if (-not (Test-Path -LiteralPath $src)) {
@@ -111,7 +126,7 @@ function Get-ChangedLauncherFiles {
         $srcHash = Get-FileSha256 $src
         $dstHash = Get-FileSha256 $dst
         if ($srcHash -ne $dstHash) {
-            $changed.Add($name)
+            $changed += $name
         }
     }
     return $changed
@@ -143,8 +158,8 @@ function Update-LauncherFromInstaller {
         return
     }
 
-    $changed = Get-ChangedLauncherFiles -InstallerDir $installerDir -LauncherDir $LauncherDir -Names $LauncherFileNames
-    if ($changed.Count -eq 0) {
+    $changed = @(Get-ChangedLauncherFiles -InstallerDir $installerDir -LauncherDir $LauncherDir -Names $LauncherFileNames)
+    if ($changed.Length -eq 0) {
         return
     }
 
@@ -153,7 +168,7 @@ function Update-LauncherFromInstaller {
     Write-Ok "Обновлены: $($changed -join ', ')"
 
     $needsRestart = @($changed | Where-Object { $_ -in $LauncherRestartNames })
-    if ($needsRestart.Count -gt 0) {
+    if ($needsRestart.Length -gt 0) {
         Write-Step "Перезапуск update.ps1 (обновилась логика обновления)"
         $restartScript = Join-Path $LauncherDir "update.ps1"
         & $restartScript -AfterLauncherSync
