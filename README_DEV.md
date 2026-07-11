@@ -378,6 +378,8 @@ class Track:
 | `/player.js` | `obs/player.js` |
 | `/commands.html` | `obs/commands.html` (через `DocsRoutes`) |
 | `/admin.html` | `obs/admin.html` (через `AdminRoutes`) |
+| `/roulette.html` | `obs/roulette.html` — SVG-колесо рулетки для стрима |
+| `/roulette.js` | `obs/roulette.js` |
 
 Статика берётся из `obs/` через `bot/web/static.py`. **Важно:** Browser Source в OBS должен открывать `http://127.0.0.1:PORT/player.html`, не `file://` — иначе YouTube Error 153 (referrer).
 
@@ -546,10 +548,11 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 
 ### Состояния раунда
 
-`IDLE → OPEN → SPIN → COOLDOWN → IDLE`
+`IDLE → OPEN → SPIN_WAIT → SPIN → COOLDOWN → IDLE`
 
 - **Авто-режим** (`auto_enabled`): первая ставка открывает стол, спин по таймеру сбора.
 - **Ручной режим**: открытие и спин через вкладку «Рулетка» в `admin.html`.
+- **OBS-оверлей**: `obs/roulette.html` + `roulette.js` — SVG-колесо, опрос `GET /api/roulette`; вращение в `SPIN_WAIT`, остановка на `last_result`. URL: `http://127.0.0.1:PORT/roulette.html` (Browser Source, прозрачный фон). Отладка: `?debug=1`.
 
 ### Команды
 

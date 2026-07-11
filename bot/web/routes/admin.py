@@ -82,6 +82,8 @@ class AdminRoutes:
                 web.post("/api/roulette/spin", self._api_roulette_spin),
                 web.post("/api/roulette/bank", self._api_roulette_bank),
                 web.post("/api/roulette/cancel", self._api_roulette_cancel),
+                web.get("/roulette.html", self._handle_roulette_html),
+                web.get("/roulette.js", self._handle_roulette_js),
             ]
         )
 
@@ -90,6 +92,12 @@ class AdminRoutes:
 
     async def _handle_admin_js(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("admin.js", "application/javascript; charset=utf-8")
+
+    async def _handle_roulette_html(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("roulette.html", "text/html; charset=utf-8")
+
+    async def _handle_roulette_js(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("roulette.js", "application/javascript; charset=utf-8")
 
     async def _api_points_list(self, request: web.Request) -> web.Response:
         try:

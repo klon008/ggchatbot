@@ -407,6 +407,12 @@ async def main() -> int:
             assert rdata["bank"] >= 5000
             print("[OK] GET /api/roulette")
 
+        async with s.get(f"{base}/roulette.html") as r:
+            assert r.status == 200
+            body = await r.text()
+            assert "wheelRotor" in body
+            print("[OK] GET /roulette.html")
+
         r_user = "smoke-roulette-user"
         await bot.princess.points.set_balance(r_user, 10_000)
         await bot.princess.points.flush()
