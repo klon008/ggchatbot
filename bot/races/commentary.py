@@ -96,8 +96,12 @@ class RaceCommentator:
         self._finish_order: list[int] = []
         self._finished: set[int] = set()
         self._last_flavor_tick = -COMMENTARY_FLAVOR_MIN_TICK_GAP
+        self._silence_after_winner = False
 
     def on_tick(self, tick: RaceTick) -> list[str]:
+        if self._silence_after_winner:
+            return []
+
         messages: list[str] = []
         positions = tick.positions
 
@@ -110,9 +114,10 @@ class RaceCommentator:
                 place = len(self._finish_order)
                 if place == 1:
                     name = self._name_by_horse.get(horse, "?")
-                    messages.append(
+                    self._silence_after_winner = True
+                    return [
                         f"№{horse} {name} финиширует! ({_place_label(place)})"
-                    )
+                    ]
 
         if tick.last_event:
             ev = tick.last_event

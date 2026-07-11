@@ -111,8 +111,11 @@
       var left = positionToLeft(entry.pos);
       runner.style.left = left + "px";
       runner.style.zIndex = String(10 + (entries.length - idx));
-      var stagger = ((Number(entry.horse) % 3) - 1) * 4;
-      runner.style.transform = "translateY(" + stagger + "px)";
+      var leaderPos = entries[0].pos;
+      var gap = Math.max(0, leaderPos - entry.pos);
+      var gapScale = FINISH_LINE * 0.2;
+      var yDrop = Math.min(40, (gap / gapScale) * 40);
+      runner.style.transform = "translateY(" + yDrop + "px)";
     });
   }
 

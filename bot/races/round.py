@@ -436,7 +436,12 @@ class RoundManager:
             odds_map_raw = {str(k): round(v, 2) for k, v in odds_map_raw.items()}
         odds_map = {int(k): float(v) for k, v in odds_map_raw.items()}
 
-        result = simulate.simulate_race(entries)
+        win_rates: dict[int, float] = {}
+        for entry in entries:
+            stats = await races_db.get_princess_stats(self._db, entry.princess_name)
+            win_rates[entry.horse_number] = stats.wins_count / max(1, stats.races_count)
+
+        result = simulate.simulate_race(entries, win_rates=win_rates)
         name_by_horse = {e.horse_number: e.princess_name for e in entries}
         race_commentator = commentary.RaceCommentator(name_by_horse, finish_line=FINISH_LINE)
 
