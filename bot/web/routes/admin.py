@@ -22,7 +22,7 @@ from bot.web.api import (
 from bot.web.static import serve_obs_file
 
 if TYPE_CHECKING:
-    from bot.princess.storage import PointsStore
+    from bot.economy.points import PointsStore
     from bot.song_request.handler import SongRequestHandler
     from bot.song_request.queue import QueueManager
 

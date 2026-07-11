@@ -9,8 +9,7 @@ from typing import Awaitable, Callable, Optional
 from bot.db import Database
 from bot.db import queue as queue_db
 from bot.goodgame import ChatMessage
-from bot.princess.economy import pluralize_princess
-from bot.princess.storage import PointsStore
+from bot.economy import PointsStore, pluralize_princess
 from bot.web import LocalWebServer
 from config import Config
 

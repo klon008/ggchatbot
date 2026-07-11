@@ -7,6 +7,7 @@ import random
 import time
 from typing import Awaitable, Callable, Optional
 
+from bot.economy import PointsStore, pluralize_princess
 from bot.goodgame import ChatMessage
 
 from bot.db import Database
@@ -17,7 +18,6 @@ from .economy import (
     get_daily_bonus,
     is_steal_allowed,
     now_msk,
-    pluralize_princess,
     prison_chance_for_amount,
     update_chance,
 )
@@ -42,7 +42,7 @@ from .settings import (
     STEAL_ROLL_MAX,
     VICTIM_MIN_BALANCE,
 )
-from .storage import DailyStore, DiceCooldownStore, PointsStore, StealStore
+from .storage import DailyStore, DiceCooldownStore, StealStore
 
 log = logging.getLogger("princess")
 
