@@ -9,10 +9,22 @@
   const queueTogglePause = document.getElementById("queueTogglePause");
   const ordersStatus = document.getElementById("ordersStatus");
   const ordersToggle = document.getElementById("ordersToggle");
+  const rouletteAuto = document.getElementById("rouletteAuto");
+  const rouletteCollectSec = document.getElementById("rouletteCollectSec");
+  const rouletteCooldownSec = document.getElementById("rouletteCooldownSec");
+  const rouletteStatusLine = document.getElementById("rouletteStatusLine");
+  const rouletteBank = document.getElementById("rouletteBank");
+  const rouletteBetsBody = document.getElementById("rouletteBetsBody");
+  const rouletteLastResult = document.getElementById("rouletteLastResult");
+  const rouletteOpen = document.getElementById("rouletteOpen");
+  const rouletteSpin = document.getElementById("rouletteSpin");
+  const rouletteTopUp = document.getElementById("rouletteTopUp");
+  const rouletteCancel = document.getElementById("rouletteCancel");
 
   let allPoints = [];
   let ordersEnabled = true;
   let queuePaused = false;
+  let roulettePollTimer = null;
 
   function setStatus(text, kind) {
     statusBar.textContent = text;
@@ -324,6 +336,168 @@
   document.getElementById("syncUserNames").addEventListener("click", syncUserNames);
   ordersToggle.addEventListener("click", toggleOrders);
 
+  function formatLastResult(last) {
+    if (!last) return '<span class="empty">ещё не было спинов</span>';
+    const winners = (last.winners || [])
+      .filter((w) => w.actual > 0)
+      .map((w) => `${esc(w.user_name)}: ${esc(w.actual)}`)
+      .join(", ");
+    const bankNote = last.bankrupted ? " (выплаты урезаны)" : "";
+    return `<strong>${esc(last.label)}</strong>${bankNote}${
+      winners ? `<br/>Победители: ${winners}` : "<br/>Без победителей"
+    }`;
+  }
+
+  function renderRoulette(data) {
+    const state = data.state || "IDLE";
+    const timer = data.timer_sec || 0;
+    rouletteAuto.checked = !!data.auto_enabled;
+    rouletteCollectSec.value = data.collect_sec || 60;
+    rouletteCooldownSec.value = data.cooldown_sec || 180;
+    rouletteBank.textContent = String(data.bank ?? "—");
+    rouletteStatusLine.textContent =
+      timer > 0
+        ? `Состояние: ${state}, осталось ~${timer} сек`
+        : `Состояние: ${state}`;
+
+    const manual = !data.auto_enabled;
+    const isOpen = state === "OPEN";
+    const isSpinWait = state === "SPIN_WAIT";
+    const isIdle = state === "IDLE";
+    rouletteOpen.disabled = !manual || !isIdle;
+    rouletteSpin.disabled = !isOpen && !isSpinWait;
+    rouletteCancel.disabled = !isOpen && !isSpinWait;
+
+    const bets = data.bets || [];
+    if (!bets.length) {
+      rouletteBetsBody.innerHTML =
+        '<tr><td colspan="3" class="empty">Нет ставок</td></tr>';
+    } else {
+      rouletteBetsBody.innerHTML = bets
+        .map(
+          (b) => `
+        <tr>
+          <td>${esc(b.user_name || b.user_id)}</td>
+          <td>${esc(b.label || b.bet_type)}</td>
+          <td>${esc(b.amount)}</td>
+        </tr>`
+        )
+        .join("");
+    }
+
+    rouletteLastResult.innerHTML = formatLastResult(data.last_result);
+  }
+
+  function stopRoulettePoll() {
+    if (roulettePollTimer) {
+      clearInterval(roulettePollTimer);
+      roulettePollTimer = null;
+    }
+  }
+
+  function startRoulettePollIfNeeded(data) {
+    stopRoulettePoll();
+    if (data.state === "OPEN" || data.state === "SPIN_WAIT" || data.state === "COOLDOWN") {
+      roulettePollTimer = setInterval(() => loadRoulette(true), 2500);
+    }
+  }
+
+  async function loadRoulette(silent) {
+    if (!silent) setStatus("Загрузка рулетки…");
+    try {
+      const data = await api("GET", "/api/roulette");
+      renderRoulette(data);
+      startRoulettePollIfNeeded(data);
+      if (!silent) setStatus(`Рулетка: ${data.state}`, "ok");
+    } catch (e) {
+      if (!silent) setStatus(e.message, "err");
+    }
+  }
+
+  async function saveRouletteSettings() {
+    const collect = parseInt(rouletteCollectSec.value, 10);
+    const cooldown = parseInt(rouletteCooldownSec.value, 10);
+    if (Number.isNaN(collect) || collect < 10) {
+      setStatus("collect_sec >= 10", "err");
+      return;
+    }
+    if (Number.isNaN(cooldown) || cooldown < 10) {
+      setStatus("cooldown_sec >= 10", "err");
+      return;
+    }
+    setStatus("Сохранение настроек рулетки…");
+    try {
+      const data = await api("PUT", "/api/roulette", {
+        auto_enabled: rouletteAuto.checked,
+        collect_sec: collect,
+        cooldown_sec: cooldown,
+      });
+      renderRoulette(data);
+      setStatus("Настройки рулетки сохранены", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  }
+
+  document.getElementById("rouletteSaveSettings").addEventListener("click", saveRouletteSettings);
+  document.getElementById("rouletteRefresh").addEventListener("click", () => loadRoulette(false));
+
+  rouletteOpen.addEventListener("click", async () => {
+    setStatus("Открытие стола…");
+    try {
+      const data = await api("POST", "/api/roulette/open");
+      renderRoulette(data);
+      startRoulettePollIfNeeded(data);
+      setStatus("Стол открыт", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  rouletteSpin.addEventListener("click", async () => {
+    if (!confirm("Крутить рулетку сейчас?")) return;
+    setStatus("Спин…");
+    try {
+      const data = await api("POST", "/api/roulette/spin");
+      renderRoulette(data);
+      startRoulettePollIfNeeded(data);
+      setStatus("Спин выполнен", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  rouletteTopUp.addEventListener("click", async () => {
+    const raw = prompt("Сколько баллов добавить в казну?", "5000");
+    if (raw == null) return;
+    const amount = parseInt(raw, 10);
+    if (Number.isNaN(amount) || amount <= 0) {
+      setStatus("Сумма должна быть > 0", "err");
+      return;
+    }
+    setStatus("Пополнение казны…");
+    try {
+      const data = await api("POST", "/api/roulette/bank", { amount });
+      renderRoulette(data);
+      setStatus(`Казна пополнена на ${amount}`, "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  rouletteCancel.addEventListener("click", async () => {
+    if (!confirm("Отменить раунд и вернуть ставки?")) return;
+    setStatus("Отмена раунда…");
+    try {
+      const data = await api("POST", "/api/roulette/cancel");
+      renderRoulette(data);
+      stopRoulettePoll();
+      setStatus("Раунд отменён", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -332,6 +506,8 @@
       const id = tab.dataset.tab;
       document.getElementById(`panel-${id}`).classList.add("active");
       if (id === "queue") loadQueue();
+      if (id === "roulette") loadRoulette(false);
+      else stopRoulettePoll();
     });
   });
 

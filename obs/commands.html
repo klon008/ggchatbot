@@ -285,6 +285,7 @@
       <a href="#daily">Дейлик</a>
       <a href="#dice">Кубик</a>
       <a href="#steal">Кража</a>
+      <a href="#roulette">Рулетка</a>
       <a href="#admin">Админ</a>
       <a href="#order">Заказ</a>
       <a href="#sr-other">Музыка</a>
@@ -317,12 +318,15 @@ flowchart TD
     R -->|иначе| P["Модуль Princess"]
     P --> PH{"Обработал?"}
     PH -->|да| OUT["Ответ в чат"]
-    PH -->|нет| S["Модуль Song Request"]
+    PH -->|нет| RO["Модуль Roulette"]
+    RO --> RH{"Обработал?"}
+    RH -->|да| OUT
+    RH -->|нет| S["Модуль Song Request"]
     S --> SH{"Обработал?"}
     SH -->|да| OUT
     SH -->|нет| IGN["Игнор"]
-    class IN,P,S action
-    class R,PH,SH cond
+    class IN,P,RO,S action
+    class R,PH,RH,SH cond
     class HELP,OUT ok
     class IGN muted
           </pre>
@@ -469,6 +473,47 @@ flowchart TD
     class LOOT eco
           </pre>
         </div>
+      </div>
+    </article>
+
+    <!-- Рулетка -->
+    <article class="card" id="roulette">
+      <div class="card-head">
+        <span class="tag princess">Roulette</span>
+        <h2><code style="color:var(--cmd)">!рулетка</code> — общий раунд на чат</h2>
+        <p>Одна ставка на игрока за раунд; выплаты из казны модуля</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    R0["!рулетка правила"] --> RULES["Краткая справка"]
+    R1["!рулетка сумма ..."] --> RS{"Стол открыт / cooldown / казна?"}
+    RS -->|нет| RF["Отказ"]
+    RS -->|да| RD{"Уже ставил в раунде?"}
+    RD -->|да| RF2["Отказ без списания"]
+    RD -->|нет| RB{"Хватает баллов?"}
+    RB -->|нет| RF3["Недостаточно баллов"]
+    RB -->|да| BET["Списать баллы → казна → запись ставки"]
+    BET --> OPEN{"Первый в авто-режиме?"}
+    OPEN -->|да| TMR["Открыть стол + таймер сбора"]
+    OPEN -->|нет| WAIT["Ждать спина"]
+    TMR --> SPIN["Спин 0–36"]
+    WAIT --> SPIN
+    SPIN --> WIN{"Есть победители?"}
+    WIN -->|нет| LOSE["Ставки остаются в казне"]
+    WIN -->|да| PAY["Выплата из казны"]
+    PAY --> CUT{"Хватает казны?"}
+    CUT -->|нет| PART["Пропорционально урезать"]
+    CUT -->|да| FULL["Полная выплата"]
+    class R0,R1,BET,TMR,SPIN action
+    class RS,RD,RB,OPEN,WIN,CUT cond
+    class RULES,FULL ok
+    class RF,RF2,RF3,LOSE,PART fail
+    class BET,PAY eco
+          </pre>
+        </div>
+        <div class="note">Скрытая справка: <code>!рулетка правила</code>. Админ: <code>!рулетка_банк</code>, <code>!рулетка_пополнить</code>, <code>!рулетка_сброс</code>.</div>
       </div>
     </article>
 
@@ -624,6 +669,7 @@ flowchart LR
           <span class="chip">!нейро</span>
           <span class="chip">!звук</span>
           <span class="chip">!коллекция</span>
+          <span class="chip">!рулетка</span>
           <span class="chip">!заказ</span>
           <span class="chip">!очередь</span>
           <span class="chip">!играет</span>
@@ -634,8 +680,12 @@ flowchart LR
           <span class="chip dim">!sr</span>
           <span class="chip dim">!сейчас</span>
           <span class="chip dim">!пропуск</span>
+          <span class="chip dim">!рулетка правила</span>
           <span class="chip admin">!начислить</span>
           <span class="chip admin">!списать</span>
+          <span class="chip admin">!рулетка_банк</span>
+          <span class="chip admin">!рулетка_пополнить</span>
+          <span class="chip admin">!рулетка_сброс</span>
         </div>
       </div>
     </article>

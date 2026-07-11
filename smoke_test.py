@@ -14,12 +14,16 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import aiohttp
 
 from bot import StreamBot
 from bot.commands import PUBLIC_COMMANDS
 from bot.db import users as users_db
+from bot.db import roulette as roulette_db
+from bot.goodgame import ChatMessage
+from bot.roulette import bets as roulette_bets
 from bot.song_request import Track
 from config import Config
 
@@ -77,8 +81,10 @@ def ensure_main_not_running() -> None:
 
 async def main() -> int:
     assert "!заказ" in PUBLIC_COMMANDS
+    assert "!рулетка" in PUBLIC_COMMANDS
     assert "!пропуск" not in PUBLIC_COMMANDS
     assert "!списать" not in PUBLIC_COMMANDS
+    assert "!рулетка_банк" not in PUBLIC_COMMANDS
     print("[OK] PUBLIC_COMMANDS")
     cfg = Config.load()
     cfg.gg_channel_id = ""  # не подключаемся к GG
@@ -91,6 +97,8 @@ async def main() -> int:
     await bot.db.open()
     bot.sr.bind_points(bot.princess.points)
     await bot.sr.start()
+    await bot.roulette.start()
+    bot.roulette.bind_points(bot.princess.points)
 
     async def fake_online_users() -> list[dict]:
         return [{"id": "smoke-sync-user", "name": "SyncedUser"}]
@@ -376,7 +384,117 @@ async def main() -> int:
             assert r.status == 200, await r.text()
             print("[OK] PUT /api/song-request (enable)")
 
+        # --- Roulette ---
+        nums18 = ",".join(str(i) for i in range(18))
+        parsed18 = roulette_bets.parse_bet_command(f"!рулетка 100 на {nums18}")
+        assert not isinstance(parsed18, roulette_bets.ParseError), parsed18
+        parsed19 = roulette_bets.parse_bet_command(
+            "!рулетка 100 на " + ",".join(str(i) for i in range(19))
+        )
+        assert isinstance(parsed19, roulette_bets.ParseError)
+        assert "18" in parsed19.message
+        dup_nums = roulette_bets.parse_bet_command("!рулетка 100 на 1,1")
+        assert isinstance(dup_nums, roulette_bets.ParseError)
+        parsed_short = roulette_bets.parse_bet_command("!рулетка 500 15")
+        assert not isinstance(parsed_short, roulette_bets.ParseError), parsed_short
+        assert parsed_short.bet_payload["numbers"] == [15]
+        print("[OK] roulette bet parsing")
+
+        async with s.get(f"{base}/api/roulette") as r:
+            assert r.status == 200, await r.text()
+            rdata = await r.json()
+            assert rdata["state"] == "IDLE"
+            assert rdata["bank"] >= 5000
+            print("[OK] GET /api/roulette")
+
+        r_user = "smoke-roulette-user"
+        await bot.princess.points.set_balance(r_user, 10_000)
+        await bot.princess.points.flush()
+
+        msg = ChatMessage(
+            channel_id="",
+            user_id=r_user,
+            user_name="RouletteUser",
+            user_rights=0,
+            text="!рулетка 200 красное",
+        )
+        assert await bot.roulette.handle_message(msg)
+        status = await bot.roulette.get_status()
+        assert status["state"] == "OPEN"
+        assert len(status["bets"]) == 1
+        balance_after = await bot.princess.points.get_balance(r_user)
+        assert balance_after == 9800, balance_after
+        print("[OK] roulette auto open + bet")
+
+        dup_msg = ChatMessage(
+            channel_id="",
+            user_id=r_user,
+            user_name="RouletteUser",
+            user_rights=0,
+            text="!рулетка 100 черное",
+        )
+        assert await bot.roulette.handle_message(dup_msg)
+        balance_dup = await bot.princess.points.get_balance(r_user)
+        assert balance_dup == 9800, balance_dup
+        status = await bot.roulette.get_status()
+        assert len(status["bets"]) == 1
+        print("[OK] roulette duplicate bet rejected")
+
+        with patch("bot.roulette.round.wheel.spin", return_value=1):
+            await bot.roulette.admin_spin()
+        status = await bot.roulette.get_status()
+        assert status["state"] == "COOLDOWN"
+        assert status["last_result"] is not None
+        print("[OK] roulette spin")
+
+        await roulette_db.set_bank(bot.db, 5000)
+        await roulette_db.update_meta(bot.db, state="IDLE", cooldown_until=None)
+        await bot.princess.points.set_balance("smoke-bankrupt-user", 5000)
+        await bot.princess.points.flush()
+        bmsg = ChatMessage(
+            channel_id="",
+            user_id="smoke-bankrupt-user",
+            user_name="BankruptUser",
+            user_rights=0,
+            text="!рулетка 200 на 7",
+        )
+        assert await bot.roulette.handle_message(bmsg)
+        status = await bot.roulette.get_status()
+        assert status["state"] == "OPEN", status
+        with patch("bot.roulette.round.wheel.spin", return_value=7):
+            await bot.roulette.admin_spin()
+        status = await bot.roulette.get_status()
+        assert status["bank"] == 0, status
+        assert status["last_result"]["bankrupted"] is True
+        print("[OK] roulette bank bankruptcy")
+
+        await roulette_db.set_bank(bot.db, 50_000)
+        await roulette_db.update_meta(bot.db, state="IDLE", cooldown_until=None)
+        async with s.put(
+            f"{base}/api/roulette",
+            json={"auto_enabled": False, "collect_sec": 30, "cooldown_sec": 60},
+        ) as r:
+            assert r.status == 200, await r.text()
+            body = await r.json()
+            assert body["auto_enabled"] is False
+            print("[OK] PUT /api/roulette")
+
+        async with s.post(f"{base}/api/roulette/open") as r:
+            assert r.status == 200, await r.text()
+            print("[OK] POST /api/roulette/open")
+
+        async with s.post(f"{base}/api/roulette/cancel") as r:
+            assert r.status == 200, await r.text()
+            cancel_body = await r.json()
+            assert cancel_body["state"] == "IDLE"
+            print("[OK] POST /api/roulette/cancel")
+
+        async with s.post(f"{base}/api/roulette/bank", json={"amount": 1000}) as r:
+            assert r.status == 200, await r.text()
+            print("[OK] POST /api/roulette/bank")
+
     await bot.sr.queue.clear()
+    await bot.roulette.close()
     await bot.sr.close()
     await bot.web.stop()
     from bot.db.migrate import get_schema_version

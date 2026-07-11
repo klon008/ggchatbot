@@ -437,6 +437,7 @@ try {
     Ensure-EnvFile $projectRoot
     Ensure-SettingsFile $projectRoot "bot\princess"
     Ensure-SettingsFile $projectRoot "bot\song_request"
+    Ensure-SettingsFile $projectRoot "bot\roulette"
     Show-FinishMessage $launcherDir $projectRoot
 }
 catch {

@@ -15,24 +15,26 @@
 5. [Модуль `bot/goodgame/`](#5-модуль-botgoodgame)
 6. [Модуль `bot/song_request/`](#6-модуль-botsong_request)
 7. [Модуль `bot/princess/`](#7-модуль-botprincess)
-8. [Маршрутизация сообщений чата](#8-маршрутизация-сообщений-чата)
-9. [Персистентность (`data/`)](#9-персистентность-data)
-10. [Протокол OBS WebSocket](#10-протокол-obs-websocket)
-11. [Логирование](#11-логирование)
-12. [Тестирование](#12-тестирование)
-13. [Расширение и TODO](#13-расширение-и-todo)
-14. [Типичные проблемы](#14-типичные-проблемы)
+8. [Модуль `bot/roulette/`](#8-модуль-botroulette)
+9. [Маршрутизация сообщений чата](#9-маршрутизация-сообщений-чата)
+10. [Персистентность (`data/`)](#10-персистентность-data)
+11. [Протокол OBS WebSocket](#11-протокол-obs-websocket)
+12. [Логирование](#12-логирование)
+13. [Тестирование](#13-тестирование)
+14. [Расширение и TODO](#14-расширение-и-todo)
+15. [Типичные проблемы](#15-типичные-проблемы)
 
 ---
 
 ## 1. Обзор архитектуры
 
-Проект — **один asyncio-процесс**, один WebSocket к чату GoodGame, два независимых функциональных модуля:
+Проект — **один asyncio-процесс**, один WebSocket к чату GoodGame, три игровых модуля + транспорт:
 
 | Модуль | Назначение |
 |--------|------------|
 | `song_request` | Очередь YouTube-треков, локальный HTTP/WS для OBS Browser Source |
 | `princess` | Игровая валюта «принцессы», кражи, daily, кубик и т.д. |
+| `roulette` | Мини-игра `!рулетка`: раунды, казна, ставки за баллы |
 | `goodgame` | Общий транспорт: авторизация, reconnect, приём/отправка сообщений |
 
 ```mermaid
@@ -123,13 +125,20 @@ botmsc/
 │   │   ├── queue.py             # QueueManager, Track (async SQLite)
 │   │   └── youtube.py           # validate_request, extract videoId
 │   │
-│   └── princess/                # игровая экономика
-│       ├── __init__.py
-│       ├── handler.py           # роутер + passive income
-│       ├── commands/            # реализации !баллы, !кража, !дайс и др.
-│       ├── storage.py           # StealStore, DailyStore, DiceCooldownStore
-│       ├── economy.py           # математика шансов, бонусов, MSK-время
-│       └── prison.py            # PrisonManager (SQLite)
+│   ├── princess/                # игровая экономика
+│   │   ├── __init__.py
+│   │   ├── handler.py           # роутер + passive income
+│   │   ├── commands/            # реализации !баллы, !кража, !дайс и др.
+│   │   ├── storage.py           # StealStore, DailyStore, DiceCooldownStore
+│   │   ├── economy.py           # математика шансов, бонусов, MSK-время
+│   │   └── prison.py            # PrisonManager (SQLite)
+│   │
+│   └── roulette/                # мини-игра !рулетка
+│       ├── handler.py           # команды чата + admin API surface
+│       ├── round.py             # IDLE → OPEN → SPIN → COOLDOWN
+│       ├── bets.py              # парсинг ставок
+│       ├── bank.py              # выплаты и банкротство казны
+│       └── wheel.py             # колесо 0–36
 │
 ├── scripts/
 │   └── migrate_json_to_sqlite.py  # одноразовая миграция JSON → bot.db
@@ -190,6 +199,7 @@ class StreamBot:
     db: Database
     sr: SongRequestHandler
     princess: PrincessHandler
+    roulette: RouletteHandler
     gg: GoodGameClient
 ```
 
@@ -197,12 +207,14 @@ class StreamBot:
 
 | Метод | Действие |
 |-------|----------|
-| `run()` | `db.open()` → `sr.start()` → `web.start()` → `princess.start()` → bind reply-колбэки → `gg.run()` (блокирует) |
-| `close()` | `princess.close()` → `sr.close()` → `web.stop()` → `gg.close()` → `db.close()` |
+| `run()` | `db.open()` → `sr.start()` → `web.start()` → `princess.start()` → `roulette.start()` → bind reply/points → `gg.run()` |
+| `close()` | `princess.close()` → `roulette.close()` → `sr.close()` → `web.stop()` → `gg.close()` → `db.close()` |
 
 HTTP-маршруты регистрируются в `__init__`: `PlayerRoutes` (внутри `SongRequestHandler`), `AdminRoutes`, `DocsRoutes` на общем `LocalWebServer`.
 
-Публичные поля: `bot.sr`, `bot.princess`, `bot.web`, `bot.admin`, `bot.gg`.
+Публичные поля: `bot.sr`, `bot.princess`, `bot.roulette`, `bot.web`, `bot.admin`, `bot.gg`.
+
+Роутинг чата: `princess → roulette → song_request`.
 
 #### Ответы в чат
 
@@ -526,7 +538,48 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 - `transaction()` — context manager для атомарных операций (кража, очередь).
 - `StreamBot` открывает БД в `run()`, закрывает в `close()`.
 
-## 8. Маршрутизация сообщений чата
+---
+
+## 8. Модуль `bot/roulette/`
+
+Мини-игра `!рулетка`: общий раунд на весь чат, ставки списываются с `PointsStore`, выигрыши платятся из казны `roulette_meta.bank`.
+
+### Состояния раунда
+
+`IDLE → OPEN → SPIN → COOLDOWN → IDLE`
+
+- **Авто-режим** (`auto_enabled`): первая ставка открывает стол, спин по таймеру сбора.
+- **Ручной режим**: открытие и спин через вкладку «Рулетка» в `admin.html`.
+
+### Команды
+
+| Команда | Кто | Описание |
+|---------|-----|----------|
+| `!рулетка <сумма> ...` | все | Ставка (число, цвет, чётность, малые/большие) |
+| `!рулетка правила` | все | Краткая справка |
+| `!рулетка_банк` | админ | Баланс казны |
+| `!рулетка_пополнить N` | админ | Пополнить казну |
+| `!рулетка_сброс` | админ | Сброс казны до `BANK_RESET_AMOUNT` |
+
+### Admin API
+
+| Метод | Путь |
+|-------|------|
+| GET/PUT | `/api/roulette` |
+| POST | `/api/roulette/open`, `/spin`, `/bank`, `/cancel` |
+
+### Настройки
+
+`bot/roulette/settings.py` (из `settings.example.py`): лимиты ставок, `MIN_BANK_TO_START`, таймеры сбора и cooldown.
+
+### SQLite
+
+| Таблица | Содержимое |
+|---------|------------|
+| `roulette_meta` | Казна, режим, состояние, таймеры, последний спин |
+| `roulette_bets` | Ставки текущего раунда (`UNIQUE(round_id, user_id)`) |
+
+## 9. Маршрутизация сообщений чата
 
 ```mermaid
 flowchart TD
@@ -542,14 +595,16 @@ flowchart TD
     Cmd -->|no| SRCheck[return False]
     Cmd -->|yes| PrincessCmd{princess command?}
     PrincessCmd -->|yes| HandleP[handler + return True]
-    PrincessCmd -->|no| SRCheck
+    PrincessCmd -->|no| RouletteCheck[roulette.handle_message]
+    RouletteCheck -->|roulette cmd| HandleR[roulette handler + return True]
+    RouletteCheck -->|no| SRCheck
 
     SRCheck --> SR{song_request.handle_message}
     SR -->|SR command| HandleSR[SR handler]
     SR -->|unknown !| Ignore[return False]
 ```
 
-**Приоритет:** princess всегда первый. Если princess вернул `True`, SR не вызывается.
+**Приоритет:** princess → roulette → song_request. Если модуль вернул `True`, следующие не вызываются.
 
 **Формат ответов:**
 
@@ -560,7 +615,7 @@ flowchart TD
 
 ---
 
-## 9. Персистентность (`data/`)
+## 10. Персистентность (`data/`)
 
 Подробности миграции, схема таблиц, WAL и эксплуатация — в **[README_SQL.md](README_SQL.md)**.
 
@@ -574,6 +629,7 @@ flowchart TD
 | `prison` | princess | Тюрьма |
 | `dice_cooldowns` | princess | Кулдаун кубика |
 | `queue_meta`, `queue_items` | song_request | Очередь и текущий трек |
+| `roulette_meta`, `roulette_bets` | roulette | Казна и ставки раунда |
 
 Каталог `data/` в `.gitignore`.
 
@@ -591,7 +647,7 @@ python scripts/migrate_json_to_sqlite.py
 
 ---
 
-## 10. Протокол OBS WebSocket
+## 11. Протокол OBS WebSocket
 
 Реализация плеера: `obs/player.js` (вне `bot/`, но контракт описан здесь).
 
@@ -616,7 +672,7 @@ python scripts/migrate_json_to_sqlite.py
 
 ---
 
-## 11. Логирование
+## 12. Логирование
 
 | Logger | Модуль |
 |--------|--------|
@@ -629,14 +685,14 @@ python scripts/migrate_json_to_sqlite.py
 | `admin` | AdminRoutes REST API |
 | `princess` | PrincessHandler |
 | `princess.storage` | StealStore, DailyStore, DiceCooldownStore |
-| `economy` | PointsStore |
+| `roulette` | RouletteHandler, RoundManager |
 | `bot.db` | Database, schema, SQL CRUD |
 
 `aiohttp.access` приглушён до WARNING в `main.py`.
 
 ---
 
-## 12. Тестирование
+## 13. Тестирование
 
 ### `smoke_test.py`
 
@@ -645,6 +701,7 @@ python scripts/migrate_json_to_sqlite.py
 1. Поднимает `StreamBot` с `LocalWebServer` (player + admin API).
 2. Проверяет HTTP `player.html` / `player.js`, `admin.html`.
 3. Эмулирует WS-клиент: `ready` → 2 трека → `ended` → проверка token-guard → пустая очередь.
+4. Проверяет API и логику рулетки: парсинг ставок, раунд, дубликат, банкротство казны.
 
 Запуск:
 
@@ -660,7 +717,7 @@ python scripts/migrate_json_to_sqlite.py
 
 ---
 
-## 13. Расширение и TODO
+## 14. Расширение и TODO
 
 ### Добавить SR-команду
 
@@ -690,7 +747,7 @@ python scripts/migrate_json_to_sqlite.py
 
 ---
 
-## 14. Типичные problems
+## 15. Типичные проблемы
 
 | Симптом | Причина | Решение |
 |---------|---------|---------|

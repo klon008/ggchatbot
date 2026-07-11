@@ -23,6 +23,7 @@ from bot.web.static import serve_obs_file
 
 if TYPE_CHECKING:
     from bot.economy.points import PointsStore
+    from bot.roulette.handler import RouletteHandler
     from bot.song_request.handler import SongRequestHandler
     from bot.song_request.queue import QueueManager
 
@@ -37,10 +38,12 @@ class AdminRoutes:
         db: Database,
         queue: "QueueManager",
         sr_handler: "SongRequestHandler",
+        roulette_handler: "RouletteHandler",
     ) -> None:
         self._db = db
         self._queue = queue
         self._sr = sr_handler
+        self._roulette = roulette_handler
         self._fetch_viewers: Optional[ViewersFetchFn] = None
         self._points: Optional["PointsStore"] = None
 
@@ -73,6 +76,12 @@ class AdminRoutes:
                 web.get("/api/song-request", self._api_sr_get),
                 web.put("/api/song-request", self._api_sr_put),
                 web.post("/api/user-names/sync", self._api_user_names_sync),
+                web.get("/api/roulette", self._api_roulette_get),
+                web.put("/api/roulette", self._api_roulette_put),
+                web.post("/api/roulette/open", self._api_roulette_open),
+                web.post("/api/roulette/spin", self._api_roulette_spin),
+                web.post("/api/roulette/bank", self._api_roulette_bank),
+                web.post("/api/roulette/cancel", self._api_roulette_cancel),
             ]
         )
 
@@ -218,3 +227,72 @@ class AdminRoutes:
         updated, total = await self._points.sync_online_names(users)
         log.info("Синхронизация ников из админки: %d из %d онлайн", updated, total)
         return json_response({"updated": updated, "total_online": total})
+
+    async def _api_roulette_get(self, request: web.Request) -> web.Response:
+        return json_response(await self._roulette.get_status())
+
+    async def _api_roulette_put(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        if "auto_enabled" in data:
+            if not isinstance(data["auto_enabled"], bool):
+                return error_response("auto_enabled должен быть true или false")
+            await self._roulette.set_auto_enabled(data["auto_enabled"])
+        collect_sec = data.get("collect_sec")
+        cooldown_sec = data.get("cooldown_sec")
+        if collect_sec is not None or cooldown_sec is not None:
+            status = await self._roulette.get_status()
+            new_collect = collect_sec if collect_sec is not None else status["collect_sec"]
+            new_cooldown = cooldown_sec if cooldown_sec is not None else status["cooldown_sec"]
+            if not isinstance(new_collect, int) or new_collect < 10:
+                return error_response("collect_sec должен быть целым числом >= 10")
+            if not isinstance(new_cooldown, int) or new_cooldown < 10:
+                return error_response("cooldown_sec должен быть целым числом >= 10")
+            await self._roulette.set_timers(new_collect, new_cooldown)
+        return json_response(await self._roulette.get_status())
+
+    async def _api_roulette_open(self, request: web.Request) -> web.Response:
+        try:
+            await self._roulette.admin_open()
+        except RuntimeError as exc:
+            code = str(exc)
+            messages = {
+                "auto_mode": "Доступно только при выключенной авто-рулетке",
+                "not_idle": "Стол уже открыт или идёт раунд",
+                "bank_low": "В казне недостаточно баллов для старта",
+                "cooldown": "Рулетка на перезарядке",
+            }
+            return error_response(messages.get(code, code), status=409)
+        return json_response(await self._roulette.get_status())
+
+    async def _api_roulette_spin(self, request: web.Request) -> web.Response:
+        try:
+            await self._roulette.admin_spin()
+        except RuntimeError as exc:
+            if str(exc) == "not_open":
+                return error_response("Ставки не открыты", status=409)
+            raise
+        return json_response(await self._roulette.get_status())
+
+    async def _api_roulette_bank(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        amount = data.get("amount")
+        if not isinstance(amount, int) or amount <= 0:
+            return error_response("amount должен быть целым числом > 0")
+        try:
+            await self._roulette.admin_top_up_bank(amount)
+        except ValueError:
+            return error_response("amount должен быть целым числом > 0")
+        return json_response(await self._roulette.get_status())
+
+    async def _api_roulette_cancel(self, request: web.Request) -> web.Response:
+        try:
+            await self._roulette.admin_cancel()
+        except RuntimeError as exc:
+            if str(exc) == "not_open":
+                return error_response("Нет открытого раунда для отмены", status=409)
+            raise
+        return json_response(await self._roulette.get_status())

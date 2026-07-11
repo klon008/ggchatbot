@@ -136,8 +136,9 @@ function Ensure-SettingsFile([string]$ProjectRoot, [string]$RelativeDir) {
 
 Ensure-SettingsFile $projectDir "bot\princess"
 Ensure-SettingsFile $projectDir "bot\song_request"
+Ensure-SettingsFile $projectDir "bot\roulette"
 Write-Host ""
-Write-Host "Настройки баланса: bot\princess\settings.py и bot\song_request\settings.py" -ForegroundColor Yellow
+Write-Host "Настройки баланса: bot\princess\settings.py, bot\song_request\settings.py, bot\roulette\settings.py" -ForegroundColor Yellow
 Write-Host "сохраняются при обновлении. Сравните с *.example.py, если в репо появились новые параметры." -ForegroundColor Yellow
 
 $venvPython = Join-Path $projectDir ".venv\Scripts\python.exe"

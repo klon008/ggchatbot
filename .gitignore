@@ -6,6 +6,7 @@
 
 bot/princess/settings.py
 bot/song_request/settings.py
+bot/roulette/settings.py
 
 
 

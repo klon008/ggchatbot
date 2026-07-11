@@ -14,6 +14,7 @@ from config import Config
 
 from .goodgame import GoodGameClient
 from .princess import PrincessHandler
+from .roulette import RouletteHandler
 from .song_request import SongRequestHandler
 
 log = logging.getLogger("app")
@@ -30,8 +31,12 @@ class StreamBot:
             bot_user_id=cfg.gg_user_id,
         )
         self.sr = SongRequestHandler(cfg, db=self.db, web=self.web)
+        self.roulette = RouletteHandler(
+            db=self.db,
+            admin_user_id=cfg.gg_admin_user_id,
+        )
         DocsRoutes().register(self.web.app)
-        self.admin = AdminRoutes(self.db, self.sr.queue, self.sr)
+        self.admin = AdminRoutes(self.db, self.sr.queue, self.sr, self.roulette)
         self.admin.register(self.web.app)
         self.gg = GoodGameClient(
             login=cfg.gg_login,
@@ -56,11 +61,15 @@ class StreamBot:
         self.princess.bind_reply(self._princess_reply)
         self.sr.bind_reply(self._reply)
         await self.princess.start()
+        await self.roulette.start()
+        self.roulette.bind_reply(self._reply)
+        self.roulette.bind_points(self.princess.points)
         self.sr.bind_points(self.princess.points)
         await self.gg.run()
 
     async def close(self) -> None:
         await self.princess.close()
+        await self.roulette.close()
         await self.sr.close()
         await self.web.stop()
         await self.gg.close()
@@ -72,6 +81,8 @@ class StreamBot:
             await self._reply(f"{msg.user_name}, {format_help()}")
             return
         if await self.princess.handle_message(msg):
+            return
+        if await self.roulette.handle_message(msg):
             return
         await self.sr.handle_message(msg)
 

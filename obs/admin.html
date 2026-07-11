@@ -183,6 +183,7 @@
     <div class="tabs">
       <button type="button" class="tab active" data-tab="points">Принцессы (points)</button>
       <button type="button" class="tab" data-tab="queue">Очередь</button>
+      <button type="button" class="tab" data-tab="roulette">Рулетка</button>
     </div>
 
     <section id="panel-points" class="panel active">
@@ -247,6 +248,61 @@
           <tr><td colspan="5" class="empty">Загрузка…</td></tr>
         </tbody>
       </table>
+    </section>
+
+    <section id="panel-roulette" class="panel">
+      <div class="card">
+        <h3>Настройки</h3>
+        <div class="toolbar">
+          <label>
+            <input type="checkbox" id="rouletteAuto" checked />
+            Авто-рулетка
+          </label>
+          <label>
+            Сбор (сек)
+            <input type="number" id="rouletteCollectSec" min="10" value="60" />
+          </label>
+          <label>
+            Cooldown (сек)
+            <input type="number" id="rouletteCooldownSec" min="10" value="180" />
+          </label>
+          <button type="button" id="rouletteSaveSettings" class="primary">Сохранить</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Статус</h3>
+        <p id="rouletteStatusLine">—</p>
+        <p>Банк рулетки: <strong id="rouletteBank">—</strong></p>
+        <div class="toolbar">
+          <button type="button" id="rouletteOpen" class="primary">Открыть ставки</button>
+          <button type="button" id="rouletteSpin" class="primary">Крутить</button>
+          <button type="button" id="rouletteTopUp">Пополнить банк</button>
+          <button type="button" id="rouletteCancel" class="danger">Отменить раунд</button>
+          <button type="button" id="rouletteRefresh">Обновить</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Ставки текущего раунда</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ник</th>
+              <th>тип</th>
+              <th>сумма</th>
+            </tr>
+          </thead>
+          <tbody id="rouletteBetsBody">
+            <tr><td colspan="3" class="empty">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Последний спин</h3>
+        <div id="rouletteLastResult" class="empty">—</div>
+      </div>
     </section>
   </div>
 
