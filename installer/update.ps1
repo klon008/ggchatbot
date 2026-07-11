@@ -1,16 +1,49 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Обновление ggchatbot: git pull и зависимости Python.
+    Обновление ggchatbot: git pull, sync лаунчеров, зависимости Python.
+
+.ORDER КРИТИЧЕСКИ ВАЖЕН — не менять последовательность и не вставлять шаги между этапами 1–3:
+
+    1. git pull          — сначала подтянуть код из репозитория (в т.ч. ggchatbot\installer\).
+    2. sync лаунчеров    — сравнить installer\ с корневой папкой установщика, скопировать отличия.
+    3. перезапуск себя   — только если изменились update.ps1 или update.cmd (см. -AfterLauncherSync).
+    4. pip / settings    — всё остальное только после этапов 1–3.
+
+    Почему нельзя ничего вставлять между pull и sync:
+    - sync берёт файлы из ggchatbot\installer\ ПОСЛЕ pull; иначе копируется устаревшая версия.
+    - если изменился update.ps1, текущий процесс выполняет СТАРУЮ логику; нужен один перезапуск
+      уже обновлённого скрипта из корня (флаг -AfterLauncherSync пропускает повторный sync).
+
+    Лаунчеры в корне (update.cmd, start.cmd, …) правит только разработчик в репозитории.
+    Стример запускает update.cmd — скрипт сам подтягивает свежие копии из installer\.
+
+.PARAMETER AfterLauncherSync
+    Внутренний флаг второго прохода после sync и перезапуска. Не передавать вручную.
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$AfterLauncherSync
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $RepoUrl = "https://github.com/klon008/ggchatbot.git"
 $CloneDirName = "ggchatbot"
+
+# Файлы установщика: канон в ggchatbot\installer\, копии — в корне у стримера.
+$LauncherFileNames = @(
+    "install.ps1", "install.cmd",
+    "update.ps1", "update.cmd",
+    "start.cmd",
+    "check-updates.ps1",
+    "migrate.cmd",
+    "ИНСТРУКЦИЯ.txt"
+)
+
+# Имена, при изменении которых нужен перезапуск update.ps1 (остальное — только копирование).
+$LauncherRestartNames = @("update.ps1", "update.cmd")
 
 function Write-Step([string]$Text) {
     Write-Host ""
@@ -50,6 +83,98 @@ function Resolve-ProjectDir([string]$LauncherDir) {
         return $LauncherDir
     }
     return $null
+}
+
+function Get-FileSha256([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+}
+
+function Get-ChangedLauncherFiles {
+    param(
+        [string]$InstallerDir,
+        [string]$LauncherDir,
+        [string[]]$Names
+    )
+
+    $changed = New-Object System.Collections.Generic.List[string]
+    foreach ($name in $Names) {
+        $src = Join-Path $InstallerDir $name
+        if (-not (Test-Path -LiteralPath $src)) {
+            continue
+        }
+
+        $dst = Join-Path $LauncherDir $name
+        $srcHash = Get-FileSha256 $src
+        $dstHash = Get-FileSha256 $dst
+        if ($srcHash -ne $dstHash) {
+            $changed.Add($name)
+        }
+    }
+    return $changed
+}
+
+function Sync-LauncherFiles {
+    param(
+        [string]$InstallerDir,
+        [string]$LauncherDir,
+        [string[]]$Names
+    )
+
+    foreach ($name in $Names) {
+        $src = Join-Path $InstallerDir $name
+        if (Test-Path -LiteralPath $src) {
+            Copy-Item -LiteralPath $src -Destination (Join-Path $LauncherDir $name) -Force
+        }
+    }
+}
+
+function Update-LauncherFromInstaller {
+    param(
+        [string]$ProjectDir,
+        [string]$LauncherDir
+    )
+
+    $installerDir = Join-Path $ProjectDir "installer"
+    if (-not (Test-Path -LiteralPath $installerDir)) {
+        return
+    }
+
+    $changed = Get-ChangedLauncherFiles -InstallerDir $installerDir -LauncherDir $LauncherDir -Names $LauncherFileNames
+    if ($changed.Count -eq 0) {
+        return
+    }
+
+    Write-Step "Обновление файлов установщика"
+    Sync-LauncherFiles -InstallerDir $installerDir -LauncherDir $LauncherDir -Names $LauncherFileNames
+    Write-Ok "Обновлены: $($changed -join ', ')"
+
+    $needsRestart = @($changed | Where-Object { $_ -in $LauncherRestartNames })
+    if ($needsRestart.Count -gt 0) {
+        Write-Step "Перезапуск update.ps1 (обновилась логика обновления)"
+        $restartScript = Join-Path $LauncherDir "update.ps1"
+        & $restartScript -AfterLauncherSync
+        exit $LASTEXITCODE
+    }
+}
+
+function Ensure-SettingsFile([string]$ProjectRoot, [string]$RelativeDir) {
+    $settingsPath = Join-Path $ProjectRoot (Join-Path $RelativeDir "settings.py")
+    $examplePath = Join-Path $ProjectRoot (Join-Path $RelativeDir "settings.example.py")
+
+    if (Test-Path $settingsPath) {
+        return
+    }
+
+    if (Test-Path $examplePath) {
+        Copy-Item $examplePath $settingsPath
+        Write-Warn "Создан $RelativeDir\settings.py из шаблона — проверьте баланс под свой канал"
+    }
+    else {
+        Write-Warn "$RelativeDir\settings.example.py не найден — создайте settings.py вручную"
+    }
 }
 
 $launcherDir = $PSScriptRoot
@@ -98,6 +223,7 @@ if (-not (Test-Path (Join-Path $projectDir ".git"))) {
     exit 1
 }
 
+# --- Этап 1: git pull (см. .ORDER в заголовке файла) ---
 Write-Step "git pull"
 git pull
 if ($LASTEXITCODE -ne 0) {
@@ -117,23 +243,12 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Ok "Код обновлён"
 
-function Ensure-SettingsFile([string]$ProjectRoot, [string]$RelativeDir) {
-    $settingsPath = Join-Path $ProjectRoot (Join-Path $RelativeDir "settings.py")
-    $examplePath = Join-Path $ProjectRoot (Join-Path $RelativeDir "settings.example.py")
-
-    if (Test-Path $settingsPath) {
-        return
-    }
-
-    if (Test-Path $examplePath) {
-        Copy-Item $examplePath $settingsPath
-        Write-Warn "Создан $RelativeDir\settings.py из шаблона — проверьте баланс под свой канал"
-    }
-    else {
-        Write-Warn "$RelativeDir\settings.example.py не найден — создайте settings.py вручную"
-    }
+# --- Этапы 2–3: sync лаунчеров и при необходимости перезапуск (только первый проход) ---
+if (-not $AfterLauncherSync) {
+    Update-LauncherFromInstaller -ProjectDir $projectDir -LauncherDir $launcherDir
 }
 
+# --- Этап 4: настройки, зависимости и завершение ---
 Ensure-SettingsFile $projectDir "bot\princess"
 Ensure-SettingsFile $projectDir "bot\song_request"
 Ensure-SettingsFile $projectDir "bot\roulette"
