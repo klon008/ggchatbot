@@ -16,6 +16,7 @@ from bot.minigames.settings import BANK_RESET_AMOUNT, MIN_BANK_TO_START
 from bot.princesses import princess_icon_path, princess_icon_slug
 
 from . import bets, commentary, lineup, odds, payouts, simulate
+from .bets import RACE_CMD
 from .settings import (
     RACES_COLLECT_MANUAL_SEC,
     RACES_COLLECT_SEC,
@@ -209,13 +210,13 @@ class RoundManager:
         if meta.state == STATE_COOLDOWN:
             if meta.cooldown_until and meta.cooldown_until > now:
                 mins = max(1, int((meta.cooldown_until - now + 59) // 60))
-                return f"Скачки отдыхают. Подождите {mins} мин."
+                return f"Забеги отдыхают. Подождите {mins} мин."
             await self._set_idle()
             meta = await races_db.get_meta(self._db)
 
         bank_balance = await minigames_bank.get_bank(self._db)
         if bank_balance < MIN_BANK_TO_START:
-            return f"Скачки отключены: в казне менее {MIN_BANK_TO_START} баллов."
+            return f"Забеги отключены: в казне менее {MIN_BANK_TO_START} баллов."
 
         if meta.state == STATE_OPEN:
             entries = await races_db.get_lineup(self._db, meta.round_id)
@@ -239,7 +240,7 @@ class RoundManager:
             return "Сейчас нельзя открыть новый забег."
         entries = await races_db.get_lineup(self._db, (await races_db.get_meta(self._db)).round_id)
         await self._chat(
-            f"{user_name} открыл скачки! {self._collect_sec} сек — ставки для чата. "
+            f"{user_name} открыл забег! {self._collect_sec} сек — ставки для чата. "
             f"Состав: {lineup.format_lineup_short(entries)}"
         )
         return None
@@ -256,16 +257,16 @@ class RoundManager:
         if meta.state == STATE_COOLDOWN:
             if meta.cooldown_until and meta.cooldown_until > now:
                 mins = max(1, int((meta.cooldown_until - now + 59) // 60))
-                return f"Скачки отдыхают. Подождите {mins} мин."
+                return f"Забеги отдыхают. Подождите {mins} мин."
             await self._set_idle()
             meta = await races_db.get_meta(self._db)
 
         bank_balance = await minigames_bank.get_bank(self._db)
         if bank_balance < MIN_BANK_TO_START:
-            return f"Скачки отключены: в казне менее {MIN_BANK_TO_START} баллов."
+            return f"Забеги отключены: в казне менее {MIN_BANK_TO_START} баллов."
 
         if meta.state == STATE_IDLE:
-            return "Сначала откройте забег командой !скачки (или дождитесь стримера)."
+            return f"Сначала откройте забег командой {RACE_CMD} (или дождитесь стримера)."
 
         if meta.state != STATE_OPEN:
             return "Ставки сейчас не принимаются."
@@ -279,7 +280,7 @@ class RoundManager:
             return "Вы уже сделали ставку в этом забеге. Дождитесь следующего старта."
 
         if self._points is None:
-            return "Скачки временно недоступны."
+            return "Забеги временно недоступны."
 
         balance = await self._points.get_balance(user_id)
         if balance < parsed.amount:
@@ -316,7 +317,7 @@ class RoundManager:
         await self._open_round(starter_name=None)
         entries = await races_db.get_lineup(self._db, (await races_db.get_meta(self._db)).round_id)
         await self._chat(
-            f"Скачки открыты! {self._collect_sec} сек — ставки для чата. "
+            f"Забег открыт! {self._collect_sec} сек — ставки для чата. "
             f"Состав: {lineup.format_lineup_short(entries)}"
         )
 

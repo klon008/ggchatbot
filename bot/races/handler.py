@@ -1,4 +1,4 @@
-"""Обработчик команд !скачки."""
+"""Обработчик команд !забег."""
 
 from __future__ import annotations
 
@@ -10,16 +10,18 @@ from bot.economy.points import PointsStore
 from bot.goodgame import ChatMessage
 
 from . import bets
+from .bets import (
+    RACE_ADMIN_BANK_CMD,
+    RACE_ADMIN_RESET_CMD,
+    RACE_ADMIN_TOPUP_CMD,
+    RACE_CMD,
+    RACE_RULES_CMD,
+)
 from .round import RoundManager
 
 log = logging.getLogger("races")
 
 ReplyFn = Callable[[str], Awaitable[None]]
-
-_RACES_CMD = "!скачки"
-_ADMIN_BANK_CMD = "!скачки_банк"
-_ADMIN_TOPUP_CMD = "!скачки_пополнить"
-_ADMIN_RESET_CMD = "!скачки_сброс"
 
 
 class RacesHandler:
@@ -76,25 +78,25 @@ class RacesHandler:
         text = msg.text.strip()
         lower = text.lower()
 
-        if lower == "!скачки правила":
+        if lower == RACE_RULES_CMD:
             await self._say(bets.RULES_TEXT)
             return True
 
         cmd = lower.split(maxsplit=1)[0] if lower.startswith("!") else ""
 
-        if cmd == _ADMIN_BANK_CMD:
+        if cmd == RACE_ADMIN_BANK_CMD:
             if str(msg.user_id) != self.admin_user_id:
                 return False
             bank = await self.rounds.get_bank()
             await self._say(f"Казна мини-игр: {bank} баллов.")
             return True
 
-        if cmd == _ADMIN_TOPUP_CMD:
+        if cmd == RACE_ADMIN_TOPUP_CMD:
             if str(msg.user_id) != self.admin_user_id:
                 return False
             parts = text.split(maxsplit=1)
             if len(parts) < 2 or not parts[1].strip().isdigit():
-                await self._say("Формат: !скачки_пополнить <сумма>")
+                await self._say(f"Формат: {RACE_ADMIN_TOPUP_CMD} <сумма>")
                 return True
             amount = int(parts[1].strip())
             if amount <= 0:
@@ -104,20 +106,20 @@ class RacesHandler:
             await self._say(f"Казна пополнена на {amount}. Баланс: {new_bank} баллов.")
             return True
 
-        if cmd == _ADMIN_RESET_CMD:
+        if cmd == RACE_ADMIN_RESET_CMD:
             if str(msg.user_id) != self.admin_user_id:
                 return False
             new_bank = await self.rounds.reset_bank()
             await self._say(f"Казна сброшена: {new_bank} баллов.")
             return True
 
-        if lower == "!скачки":
+        if lower == RACE_CMD:
             err = await self.rounds.open_from_chat(msg.user_name)
             if err:
                 await self._say(f"{msg.user_name}, {err}")
             return True
 
-        if not lower.startswith(_RACES_CMD):
+        if not lower.startswith(RACE_CMD):
             return False
 
         parsed = bets.parse_bet_command(text)

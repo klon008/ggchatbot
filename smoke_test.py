@@ -85,7 +85,7 @@ def ensure_main_not_running() -> None:
 async def main() -> int:
     assert "!заказ" in PUBLIC_COMMANDS
     assert "!рулетка" in PUBLIC_COMMANDS
-    assert "!скачки" in PUBLIC_COMMANDS
+    assert "!забег" in PUBLIC_COMMANDS
     assert "!пропуск" not in PUBLIC_COMMANDS
     assert "!списать" not in PUBLIC_COMMANDS
     assert "!рулетка_банк" not in PUBLIC_COMMANDS
@@ -509,9 +509,9 @@ async def main() -> int:
         from bot.db import races as races_db
         from bot.races import simulate as races_simulate
 
-        parsed_races = races_bets.parse_bet_command("!скачки 150 3")
+        parsed_races = races_bets.parse_bet_command("!забег 150 3")
         assert not isinstance(parsed_races, races_bets.ParseError), parsed_races
-        bad_horse = races_bets.parse_bet_command("!скачки 100 7")
+        bad_horse = races_bets.parse_bet_command("!забег 100 7")
         assert isinstance(bad_horse, races_bets.ParseError)
         print("[OK] races bet parsing")
 
@@ -543,7 +543,7 @@ async def main() -> int:
             user_id="smoke-races-idle-bet",
             user_name="IdleBetUser",
             user_rights=0,
-            text="!скачки 50 1",
+            text="!забег 50 1",
         )
         await bot.princess.points.set_balance("smoke-races-idle-bet", 1000)
         await bot.princess.points.flush()
@@ -556,7 +556,7 @@ async def main() -> int:
             user_id=race_user,
             user_name="RacesUser",
             user_rights=0,
-            text="!скачки",
+            text="!забег",
         )
         assert await bot.races.handle_message(open_msg)
         race_status = await bot.races.get_status()
@@ -571,7 +571,7 @@ async def main() -> int:
             user_id=race_user,
             user_name="RacesUser",
             user_rights=0,
-            text="!скачки 200 1",
+            text="!забег 200 1",
         )
         assert await bot.races.handle_message(race_msg)
         race_status = await bot.races.get_status()
@@ -586,7 +586,7 @@ async def main() -> int:
             user_id=race_user,
             user_name="RacesUser",
             user_rights=0,
-            text="!скачки 100 2",
+            text="!забег 100 2",
         )
         assert await bot.races.handle_message(dup_race_msg)
         assert await bot.princess.points.get_balance(race_user) == 9800

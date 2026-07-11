@@ -536,18 +536,18 @@ flowchart TD
     <article class="card" id="races">
       <div class="card-head">
         <span class="tag princess">Races</span>
-        <h2><code style="color:var(--cmd)">!скачки</code> — забег принцесс</h2>
-        <p>10 принцесс, динамический коэффициент; сначала <code>!скачки</code> — состав, затем ставка</p>
+        <h2><code style="color:var(--cmd)">!забег</code> — забег принцесс</h2>
+        <p>10 принцесс, динамический коэффициент; сначала <code>!забег</code> — состав, затем ставка</p>
       </div>
       <div class="card-body flush">
         <div class="diagram">
           <pre class="mermaid">
 flowchart TD
-    C0["!скачки правила"] --> CRULES["Краткая справка"]
-    COPEN["!скачки"] --> CO{"IDLE + авто?"}
+    C0["!забег правила"] --> CRULES["Краткая справка"]
+    COPEN["!забег"] --> CO{"IDLE + авто?"}
     CO -->|да| CL["Состав №1–6, таймер"]
     CO -->|нет| COF["Отказ / повтор состава"]
-    CL --> C1["!скачки сумма номер"]
+    CL --> C1["!забег сумма номер"]
     C1 --> CS{"OPEN / cooldown / казна?"}
     CS -->|нет| CF["Отказ"]
     CS -->|да| CD{"Уже ставил?"}
@@ -569,7 +569,7 @@ flowchart TD
     class CBET,CPAY eco
           </pre>
         </div>
-        <div class="note">Сначала <code>!скачки</code> — состав. Ставка: <code>!скачки &lt;сумма&gt; &lt;1–6&gt;</code>. Справка: <code>!скачки правила</code>. OBS: <code>/races.html</code> (нижняя полоска 800×140, текст в чате). Админ: <code>!скачки_банк</code>, <code>!скачки_пополнить</code>, <code>!скачки_сброс</code>.</div>
+        <div class="note">Сначала <code>!забег</code> — состав. Ставка: <code>!забег &lt;сумма&gt; &lt;1–6&gt;</code>. Справка: <code>!забег правила</code>. OBS: <code>/races.html</code> (нижняя полоска 800×140, текст в чате). Админ: <code>!забег_банк</code>, <code>!забег_пополнить</code>, <code>!забег_сброс</code>.</div>
       </div>
     </article>
 
@@ -726,7 +726,7 @@ flowchart LR
           <span class="chip">!звук</span>
           <span class="chip">!коллекция</span>
           <span class="chip">!рулетка</span>
-          <span class="chip">!скачки</span>
+          <span class="chip">!забег</span>
           <span class="chip">!заказ</span>
           <span class="chip">!очередь</span>
           <span class="chip">!играет</span>
@@ -738,15 +738,15 @@ flowchart LR
           <span class="chip dim">!сейчас</span>
           <span class="chip dim">!пропуск</span>
           <span class="chip dim">!рулетка правила</span>
-          <span class="chip dim">!скачки правила</span>
+          <span class="chip dim">!забег правила</span>
           <span class="chip admin">!начислить</span>
           <span class="chip admin">!списать</span>
           <span class="chip admin">!рулетка_банк</span>
           <span class="chip admin">!рулетка_пополнить</span>
           <span class="chip admin">!рулетка_сброс</span>
-          <span class="chip admin">!скачки_банк</span>
-          <span class="chip admin">!скачки_пополнить</span>
-          <span class="chip admin">!скачки_сброс</span>
+          <span class="chip admin">!забег_банк</span>
+          <span class="chip admin">!забег_пополнить</span>
+          <span class="chip admin">!забег_сброс</span>
         </div>
       </div>
     </article>
