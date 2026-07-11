@@ -106,31 +106,3 @@ async def apply_deltas(db: Database, deltas: dict[str, int]) -> None:
                 "UPDATE points SET balance = balance + ? WHERE user_id = ?",
                 (delta, user_id),
             )
-
-
-async def transfer_balance(
-    db: Database,
-    from_user_id: str,
-    to_user_id: str,
-    amount: int,
-) -> None:
-    """Atomically move points between users (caller must be inside transaction)."""
-    conn = db.conn
-    from_uid = str(from_user_id)
-    to_uid = str(to_user_id)
-    await conn.execute(
-        "INSERT OR IGNORE INTO points (user_id, balance) VALUES (?, 0)",
-        (from_uid,),
-    )
-    await conn.execute(
-        "INSERT OR IGNORE INTO points (user_id, balance) VALUES (?, 0)",
-        (to_uid,),
-    )
-    await conn.execute(
-        "UPDATE points SET balance = balance - ? WHERE user_id = ?",
-        (amount, from_uid),
-    )
-    await conn.execute(
-        "UPDATE points SET balance = balance + ? WHERE user_id = ?",
-        (amount, to_uid),
-    )

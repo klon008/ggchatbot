@@ -70,8 +70,8 @@ flowchart TB
 
 - Python — единственный источник правды о состоянии очереди воспроизведения (`QueueManager`).
 - Каждый трек при старте получает уникальный `token` — защита от гонок (двойной `ended`, запоздавший `skip`).
-- Princess и Song Request **не знают друг о друге**; связывает только `StreamBot`.
-- OBS-плеер (`obs/`) не входит в `bot/`, но жёстко связан с `song_request/obs_server.py`.
+- Princess и Song Request связаны через `StreamBot` и общий `bot/economy/` (`PointsStore`).
+- OBS-плеер (`obs/`) не входит в `bot/`, маршруты — в `bot/web/routes/player.py`.
 
 ---
 
@@ -85,8 +85,22 @@ botmsc/
 ├── README_DEV.md                # этот файл
 │
 ├── bot/
-│   ├── __init__.py              # экспорт StreamBot, SongRequestBot
+│   ├── __init__.py              # экспорт StreamBot
 │   ├── app.py                   # StreamBot — оркестратор
+│   ├── commands.py              # единый реестр публичных команд (!команды)
+│   │
+│   ├── web/                     # локальный HTTP-сервер
+│   │   ├── server.py            # LocalWebServer
+│   │   ├── static.py            # serve_obs_file()
+│   │   ├── api.py               # JSON-хелперы для REST
+│   │   └── routes/
+│   │       ├── player.py        # OBS player + WebSocket /ws
+│   │       ├── admin.py         # admin.html + /api/*
+│   │       └── docs.py          # commands.html
+│   │
+│   ├── economy/                 # общая валюта
+│   │   ├── points.py            # PointsStore
+│   │   └── text.py              # pluralize_princess
 │   │
 │   ├── db/                      # SQLite persistence (aiosqlite)
 │   │   ├── connection.py        # Database, WAL, transactions
@@ -104,24 +118,28 @@ botmsc/
 │   │
 │   ├── song_request/            # YouTube + OBS
 │   │   ├── __init__.py
-│   │   ├── handler.py           # SongRequestHandler — команды !sr и др.
+│   │   ├── handler.py           # chat-команды заказа музыки
+│   │   ├── playback.py          # advance, watchdog, refunds, WS status
 │   │   ├── queue.py             # QueueManager, Track (async SQLite)
-│   │   ├── obs_server.py        # ObsServer — HTTP + WebSocket
 │   │   └── youtube.py           # validate_request, extract videoId
 │   │
 │   └── princess/                # игровая экономика
 │       ├── __init__.py
-│       ├── handler.py           # PrincessHandler — команды и passive income
-│       ├── storage.py           # SQLite stores (points, steal, daily, dice)
+│       ├── handler.py           # роутер + passive income
+│       ├── commands/            # реализации !баллы, !кража, !дайс и др.
+│       ├── storage.py           # StealStore, DailyStore, DiceCooldownStore
 │       ├── economy.py           # математика шансов, бонусов, MSK-время
 │       └── prison.py            # PrisonManager (SQLite)
 │
 ├── scripts/
 │   └── migrate_json_to_sqlite.py  # одноразовая миграция JSON → bot.db
 │
-├── obs/                         # фронтенд для OBS Browser Source
+├── obs/                         # фронтенд для OBS Browser Source и docs
 │   ├── player.html
-│   └── player.js
+│   ├── player.js
+│   ├── admin.html
+│   ├── commands.html
+│   └── mermaid.min.js
 │
 └── data/                        # runtime data (.gitignore)
     ├── bot.db                   # единая SQLite БД
@@ -179,20 +197,19 @@ class StreamBot:
 
 | Метод | Действие |
 |-------|----------|
-| `run()` | `db.open()` → `sr.start()` → `princess.start()` → bind reply-колбэки → `gg.run()` (блокирует) |
-| `close()` | `princess.close()` → `sr.close()` → `gg.close()` → `db.close()` |
+| `run()` | `db.open()` → `sr.start()` → `web.start()` → `princess.start()` → bind reply-колбэки → `gg.run()` (блокирует) |
+| `close()` | `princess.close()` → `sr.close()` → `web.stop()` → `gg.close()` → `db.close()` |
+
+HTTP-маршруты регистрируются в `__init__`: `PlayerRoutes` (внутри `SongRequestHandler`), `AdminRoutes`, `DocsRoutes` на общем `LocalWebServer`.
+
+Публичные поля: `bot.sr`, `bot.princess`, `bot.web`, `bot.admin`, `bot.gg`.
 
 #### Ответы в чат
 
 - **Song Request:** `_reply(text)` → `gg.send_message(text)` как есть (формат `@nick, ...`).
 - **Princess:** `_princess_reply(user_name, text)` → `gg.send_message(f"{user_name}, {text}")`.
 
-#### Обратная совместимость
-
-Для `smoke_test.py` и старых импортов:
-
-- `SongRequestBot = StreamBot` (алиас)
-- `bot.queue`, `bot.obs`, `bot._advance`, `bot._watchdog` — проксируют в `bot.sr.*`
+Список команд для `!команды` — `bot/commands.py` (`PUBLIC_COMMANDS`, `format_help()`).
 
 ---
 
@@ -238,17 +255,20 @@ Dataclass входящего сообщения:
 
 ### 6.1. `handler.py` — `SongRequestHandler`
 
-Главный класс модуля. Владеет очередью, OBS-сервером, watchdog и обрабатывает SR-команды.
+Главный класс модуля. Владеет очередью, `PlayerRoutes`, `PlaybackController` и обрабатывает SR-команды.
 
 #### Публичный API
 
-| Метод | Описание |
+| Метод / поле | Описание |
 |-------|----------|
-| `start()` | Запуск `ObsServer` |
-| `close()` | Остановка watchdog + OBS |
+| `start()` | Загрузка очереди из SQLite |
+| `close()` | Остановка playback + закрытие WS-клиентов |
 | `bind_reply(fn)` | `fn(text: str) -> Awaitable[None]` |
-| `handle_message(msg)` | Обработка команды; `True` если команда SR, иначе `False` |
-| `advance(expected_token, skip_reason?)` | Продвижение очереди (используется также из `_on_obs_status`) |
+| `bind_points(store)` | `PointsStore` из `bot/economy/` |
+| `handle_message(msg)` | Обработка команды; `True` если команда SR |
+| `advance(expected_token, skip_reason?)` | Продвижение очереди |
+| `playback` | `PlaybackController` — watchdog, refunds, OBS status |
+| `player` | `PlayerRoutes` — HTTP/WS для OBS Browser Source |
 
 #### Команды чата
 
@@ -334,9 +354,9 @@ class Track:
 
 ---
 
-### 6.3. `obs_server.py` — `ObsServer`
+### 6.3. `web/routes/player.py` — `PlayerRoutes`
 
-aiohttp-приложение на одном порту (`OBS_WS_HOST:OBS_WS_PORT`).
+Маршруты OBS-плеера на общем порту (`OBS_WS_HOST:OBS_WS_PORT`), регистрируются через `register(app)`.
 
 #### HTTP-маршруты
 
@@ -344,14 +364,16 @@ aiohttp-приложение на одном порту (`OBS_WS_HOST:OBS_WS_POR
 |-----|------|
 | `/`, `/player.html` | `obs/player.html` |
 | `/player.js` | `obs/player.js` |
+| `/commands.html` | `obs/commands.html` (через `DocsRoutes`) |
+| `/admin.html` | `obs/admin.html` (через `AdminRoutes`) |
 
-Статика берётся из `obs/` (не из `bot/`). **Важно:** Browser Source в OBS должен открывать `http://127.0.0.1:PORT/player.html`, не `file://` — иначе YouTube Error 153 (referrer).
+Статика берётся из `obs/` через `bot/web/static.py`. **Важно:** Browser Source в OBS должен открывать `http://127.0.0.1:PORT/player.html`, не `file://` — иначе YouTube Error 153 (referrer).
 
 #### WebSocket `/ws`
 
 - Поддерживает несколько клиентов (broadcast всем).
 - Heartbeat 30 сек.
-- Входящие JSON → колбэк `on_status` (`SongRequestHandler._on_obs_status`).
+- Входящие JSON → `PlaybackController.on_obs_status()`.
 
 #### Исходящие команды (Python → плеер)
 
@@ -454,27 +476,25 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 
 ### 7.2. `storage.py`
 
-Тонкие async-обёртки над `bot/db/*`. Публичный API для handlers сохранён.
+Тонкие async-обёртки над `bot/db/*` для princess-игровых данных.
 
 | Класс | Таблицы SQLite | Описание |
 |-------|----------------|----------|
-| `PointsStore` | `points` | Балансы принцесс |
-| `StealStore` | `steal_stats` | Статистика краж; `execute_steal()` — атомарный перевод |
+| `StealStore` | `steal_stats` | Статистика краж; `execute_steal()` через pending `PointsStore` |
 | `DailyStore` | `daily_meta`, `daily_progress`, `daily_claims` | `mutate()` эмулирует dict для handler |
 | `DiceCooldownStore` | `dice_cooldowns` | Кулдаун `!дайс` |
 
-`load()` / `flush()` — no-op (совместимость lifecycle).
+Балансы — в `bot/economy/points.py` (`PointsStore`).
 
 ---
 
-### 7.3. `economy.py`
+### 7.3. `economy.py` (princess)
 
 Чистые функции игровой математики (без I/O).
 
 | Функция | Описание |
 |---------|----------|
 | `now_msk()` | Текущее время в `Europe/Moscow` (`zoneinfo`, нужен пакет `tzdata` на Windows) |
-| `pluralize_princess(n)` | Склонение: принцесса / принцессы / принцесс |
 | `update_chance(info)` | Пересчёт `%` кражи по attempts/success |
 | `calculate_princess_amount(chance)` | Сумма «попытки» для тюрьмы (не всегда реально украденная) |
 | `get_daily_bonus(day_number)` | Бонус N-го использования `!дейлик` в месяце |
@@ -586,7 +606,7 @@ python scripts/migrate_json_to_sqlite.py
 
 ### Python → плеер
 
-См. [6.3](#63-obs_serverpy--obsserver).
+См. [6.3](#63-webroutesplayerpy--playerroutes).
 
 ### Поведение idle
 
@@ -604,9 +624,12 @@ python scripts/migrate_json_to_sqlite.py
 | `goodgame` | GoodGameClient |
 | `song_request` | SongRequestHandler |
 | `song_request.queue` | QueueManager |
-| `song_request.obs` | ObsServer |
+| `song_request.obs` | PlayerRoutes (WebSocket /ws) |
+| `web` | LocalWebServer |
+| `admin` | AdminRoutes REST API |
 | `princess` | PrincessHandler |
-| `princess.storage` | PointsStore, StealStore, DailyStore |
+| `princess.storage` | StealStore, DailyStore, DiceCooldownStore |
+| `economy` | PointsStore |
 | `bot.db` | Database, schema, SQL CRUD |
 
 `aiohttp.access` приглушён до WARNING в `main.py`.
@@ -619,8 +642,8 @@ python scripts/migrate_json_to_sqlite.py
 
 Интеграционный тест **без GoodGame**:
 
-1. Поднимает только `ObsServer` через `StreamBot`.
-2. Проверяет HTTP `player.html` / `player.js`.
+1. Поднимает `StreamBot` с `LocalWebServer` (player + admin API).
+2. Проверяет HTTP `player.html` / `player.js`, `admin.html`.
 3. Эмулирует WS-клиент: `ready` → 2 трека → `ended` → проверка token-guard → пустая очередь.
 
 Запуск:
@@ -647,9 +670,9 @@ python scripts/migrate_json_to_sqlite.py
 
 ### Добавить princess-команду
 
-1. Метод `_cmd_*` в `princess/handler.py`.
-2. Запись в dict `handlers` в `handle_message()`.
-3. Exact match: ключ — `!команда` в нижнем регистре.
+1. Функция `cmd_*` в `princess/commands/*.py`.
+2. Запись в dict `handlers` в `princess/handler.py`.
+3. При необходимости — добавить алиас в `bot/commands.py` (`PUBLIC_COMMANDS`).
 
 ### YouTube Data API (заготовка)
 
@@ -686,7 +709,9 @@ python scripts/migrate_json_to_sqlite.py
 ## Быстрая шпаргалка импортов
 
 ```python
-from bot import StreamBot, SongRequestBot
+from bot import StreamBot
+from bot.commands import PUBLIC_COMMANDS, format_help
+from bot.economy import PointsStore, pluralize_princess
 from bot.goodgame import ChatMessage, GoodGameClient
 from bot.song_request import SongRequestHandler, QueueManager, Track
 from bot.princess import PrincessHandler
@@ -695,4 +720,4 @@ from config import Config
 
 ---
 
-*Документ актуален для структуры `bot/` после рефакторинга: `goodgame/`, `song_request/`, `princess/`, оркестратор `app.py`.*
+*Документ актуален для структуры `bot/` после рефакторинга: `web/`, `economy/`, `goodgame/`, `song_request/`, `princess/`, оркестратор `app.py`.*

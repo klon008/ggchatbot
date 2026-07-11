@@ -80,46 +80,6 @@ async def record_steal_success(db: Database, thief_id: str, amount: int) -> None
         )
 
 
-async def execute_steal(
-    db: Database,
-    thief_id: str,
-    victim_id: str,
-    amount: int,
-) -> None:
-    """Atomically transfer points and update thief steal stats."""
-    thief = str(thief_id)
-    victim = str(victim_id)
-    async with db.transaction() as conn:
-        await conn.execute(
-            "INSERT OR IGNORE INTO points (user_id, balance) VALUES (?, 0)",
-            (victim,),
-        )
-        await conn.execute(
-            "INSERT OR IGNORE INTO points (user_id, balance) VALUES (?, 0)",
-            (thief,),
-        )
-        await conn.execute(
-            "INSERT OR IGNORE INTO steal_stats "
-            "(user_id, attempts, success, stolen_total, chance, last_time, times_in_jail) "
-            "VALUES (?, 0, 0, 0, 3, 0, 0)",
-            (thief,),
-        )
-        await conn.execute(
-            "UPDATE points SET balance = balance - ? WHERE user_id = ?",
-            (amount, victim),
-        )
-        await conn.execute(
-            "UPDATE points SET balance = balance + ? WHERE user_id = ?",
-            (amount, thief),
-        )
-        await conn.execute(
-            "UPDATE steal_stats SET "
-            "success = success + 1, stolen_total = stolen_total + ? "
-            "WHERE user_id = ?",
-            (amount, thief),
-        )
-
-
 async def increment_jail_count(db: Database, user_id: str) -> None:
     uid = str(user_id)
     await ensure_user(db, uid)

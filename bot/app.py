@@ -5,10 +5,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from bot.commands import HELP_COMMAND, format_help
 from bot.db import Database
+from bot.web import LocalWebServer
 from bot.web.routes.admin import AdminRoutes
 from bot.web.routes.docs import DocsRoutes
-from bot.web import LocalWebServer
 from config import Config
 
 from .goodgame import GoodGameClient
@@ -16,28 +17,6 @@ from .princess import PrincessHandler
 from .song_request import SongRequestHandler
 
 log = logging.getLogger("app")
-
-HELP_COMMAND = "!команды"
-
-PUBLIC_COMMANDS = (
-    "!баллы",
-    "!дейлик",
-    "!дайс",
-    "!кража",
-    "!карман",
-    "!срок",
-    "!дисней",
-    "!нейро",
-    "!звук",
-    "!коллекция",
-    "!заказ",
-    "!очередь",
-    "!играет",
-)
-
-
-def _format_commands() -> str:
-    return "Команды: " + " ".join(PUBLIC_COMMANDS)
 
 
 class StreamBot:
@@ -52,8 +31,8 @@ class StreamBot:
         )
         self.sr = SongRequestHandler(cfg, db=self.db, web=self.web)
         DocsRoutes().register(self.web.app)
-        self._admin = AdminRoutes(self.db, self.sr.queue, self.sr)
-        self._admin.register(self.web.app)
+        self.admin = AdminRoutes(self.db, self.sr.queue, self.sr)
+        self.admin.register(self.web.app)
         self.gg = GoodGameClient(
             login=cfg.gg_login,
             password=cfg.gg_password,
@@ -69,7 +48,7 @@ class StreamBot:
         log.info("OBS-плеер: http://%s:%d/player.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Admin-панель: http://%s:%d/admin.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Логика команд: http://%s:%d/commands.html", self.cfg.obs_host, self.cfg.obs_port)
-        self._admin.bind_user_names(
+        self.admin.bind_user_names(
             self.gg.get_users_list,
             self.princess.points,
         )
@@ -87,13 +66,10 @@ class StreamBot:
         await self.gg.close()
         await self.db.close()
 
-    def bind_admin_user_names(self, fetch_viewers, points) -> None:
-        self._admin.bind_user_names(fetch_viewers, points)
-
     async def _on_chat_message(self, msg) -> None:
         cmd = msg.text.strip().split(maxsplit=1)[0].lower()
         if cmd == HELP_COMMAND:
-            await self._reply(f"{msg.user_name}, {_format_commands()}")
+            await self._reply(f"{msg.user_name}, {format_help()}")
             return
         if await self.princess.handle_message(msg):
             return
@@ -107,22 +83,3 @@ class StreamBot:
             await self.gg.send_message(text)
         except Exception:  # noqa: BLE001
             log.exception("Не удалось отправить сообщение в чат.")
-
-    # --- совместимость для smoke_test и старых импортов ----------------
-    @property
-    def queue(self):
-        return self.sr.queue
-
-    @property
-    def obs(self):
-        return self.sr.obs
-
-    async def _advance(self, expected_token, skip_reason=None):
-        await self.sr.advance(expected_token, skip_reason)
-
-    @property
-    def _watchdog(self):
-        return self.sr._watchdog
-
-
-SongRequestBot = StreamBot

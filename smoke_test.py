@@ -17,7 +17,8 @@ from pathlib import Path
 
 import aiohttp
 
-from bot.app import PUBLIC_COMMANDS, SongRequestBot
+from bot import StreamBot
+from bot.commands import PUBLIC_COMMANDS
 from bot.db import users as users_db
 from bot.song_request import Track
 from config import Config
@@ -86,7 +87,7 @@ async def main() -> int:
     for path in (tmp_db, Path(str(tmp_db) + "-wal"), Path(str(tmp_db) + "-shm")):
         if path.exists():
             path.unlink()
-    bot = SongRequestBot(cfg, db_path=tmp_db)
+    bot = StreamBot(cfg, db_path=tmp_db)
     await bot.db.open()
     bot.sr.bind_points(bot.princess.points)
     await bot.sr.start()
@@ -94,9 +95,9 @@ async def main() -> int:
     async def fake_online_users() -> list[dict]:
         return [{"id": "smoke-sync-user", "name": "SyncedUser"}]
 
-    bot.bind_admin_user_names(fake_online_users, bot.princess.points)
+    bot.admin.bind_user_names(fake_online_users, bot.princess.points)
     await bot.princess.points.load()
-    await bot.queue.clear()
+    await bot.sr.queue.clear()
     await bot.sr.set_orders_enabled(True)
     await bot.web.start()
 
@@ -128,9 +129,9 @@ async def main() -> int:
             await asyncio.sleep(0.2)
 
             # Кладём два трека; ready при пустой очереди прислал queue_state.
-            await bot.queue.add(Track(video_id="aaaaaaaaaaa", requested_by="u1", url="x"))
-            await bot.queue.add(Track(video_id="bbbbbbbbbbb", requested_by="u2", url="y"))
-            await bot._advance(expected_token=None)
+            await bot.sr.queue.add(Track(video_id="aaaaaaaaaaa", requested_by="u1", url="x"))
+            await bot.sr.queue.add(Track(video_id="bbbbbbbbbbb", requested_by="u2", url="y"))
+            await bot.sr.advance(expected_token=None)
 
             msg = await wait_action(ws, "play")
             assert msg["videoId"] == "aaaaaaaaaaa", msg
@@ -182,8 +183,8 @@ async def main() -> int:
             # --- Возврат принцесс при ошибке плеера ----------------------
             refund_uid = "smoke-refund-user"
             await bot.princess.points.set_balance(refund_uid, 0)
-            await bot.queue.clear()
-            await bot.queue.add(
+            await bot.sr.queue.clear()
+            await bot.sr.queue.add(
                 Track(
                     video_id="ddddddddddd",
                     requested_by=refund_uid,
@@ -192,7 +193,7 @@ async def main() -> int:
                     paid_cost=100,
                 )
             )
-            await bot._advance(expected_token=None)
+            await bot.sr.advance(expected_token=None)
             msg = await wait_action(ws, "play")
             refund_token = msg["token"]
             await bot.sr._on_obs_status(
@@ -320,7 +321,7 @@ async def main() -> int:
         assert synced_name == "SyncedUser", synced_name
         print("[OK] sync user_name в БД")
 
-        await bot.queue.add(Track(video_id="ccccccccccc", requested_by="u3", url="z", title="Smoke"))
+        await bot.sr.queue.add(Track(video_id="ccccccccccc", requested_by="u3", url="z", title="Smoke"))
         async with s.get(f"{base}/api/queue") as r:
             qdata = await r.json()
             assert len(qdata["waiting"]) == 1
@@ -342,8 +343,8 @@ async def main() -> int:
 
         disable_uid = "smoke-disable-user"
         await bot.princess.points.set_balance(disable_uid, 0)
-        await bot.queue.clear()
-        await bot.queue.add(
+        await bot.sr.queue.clear()
+        await bot.sr.queue.add(
             Track(
                 video_id="eeeeeeeeeee",
                 requested_by=disable_uid,
@@ -375,9 +376,7 @@ async def main() -> int:
             assert r.status == 200, await r.text()
             print("[OK] PUT /api/song-request (enable)")
 
-    if bot._watchdog:
-        bot._watchdog.cancel()
-    await bot.queue.clear()
+    await bot.sr.queue.clear()
     await bot.sr.close()
     await bot.web.stop()
     from bot.db.migrate import get_schema_version

@@ -1,5 +1,5 @@
 """GoodGame + OBS stream bot."""
 
-from .app import SongRequestBot, StreamBot
+from .app import StreamBot
 
-__all__ = ["StreamBot", "SongRequestBot"]
+__all__ = ["StreamBot"]
