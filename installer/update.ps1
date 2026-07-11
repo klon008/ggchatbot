@@ -18,7 +18,7 @@
     Лаунчеры в корне (update.cmd, start.cmd, …) правит только разработчик в репозитории.
     Стример запускает update.cmd — скрипт сам подтягивает свежие копии из installer\.
     
-    settings.py создаётся из settings.example.py, если его нет.
+    В папках bot\princess, bot\song_request, bot\roulette settings.py создаётся из settings.example.py, если его нет.
 .PARAMETER AfterLauncherSync
     Внутренний флаг второго прохода после sync и перезапуска. Не передавать вручную.
 #>
