@@ -13,6 +13,9 @@
       overflow: hidden;
       background: transparent;
     }
+    body.allow-overflow {
+      overflow: visible;
+    }
     body.debug-mode {
       background: radial-gradient(circle at center, #1a1a28 0%, #0d0d14 70%);
     }
@@ -25,31 +28,39 @@
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
-      transition: opacity 0.55s ease;
+      overflow: visible;
+      transition:
+        opacity 0.55s ease,
+        visibility 0s linear 0.55s;
     }
     #wheelWrap.is-visible {
       opacity: 1;
       visibility: visible;
+      transition:
+        opacity 0.55s ease,
+        visibility 0s linear 0s;
     }
     #wheelStage {
       position: relative;
       width: min(92vmin, 560px);
-      height: min(92vmin, 560px);
-      transform: scale(0.82);
-      transition: transform 0.6s cubic-bezier(0.34, 1.2, 0.64, 1);
+      aspect-ratio: 1 / 1;
+      overflow: visible;
+      transform: scale(0.9);
+      opacity: 0.6;
+      transition:
+        transform 0.55s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.55s ease;
     }
     #wheelWrap.is-visible #wheelStage {
       transform: scale(1);
+      opacity: 1;
     }
     #wheelSvg {
       width: 100%;
-      height: 100%;
+      height: auto;
+      aspect-ratio: 1 / 1;
       display: block;
       filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.55));
-    }
-    #wheelRotor {
-      transform-origin: 250px 250px;
-      transform-box: fill-box;
     }
     .pocket-text {
       font-family: "Segoe UI", system-ui, sans-serif;
@@ -63,12 +74,42 @@
       stroke: rgba(0, 0, 0, 0.35);
       stroke-width: 2px;
     }
+    #resultBanner {
+      position: absolute;
+      left: 50%;
+      bottom: 0%;
+      opacity: 0;
+      padding: 10px 22px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.78);
+      border: 2px solid rgba(255, 217, 102, 0.55);
+      color: #fff;
+      font: 700 clamp(18px, 3.4vw, 28px) / 1.2 "Segoe UI", system-ui, sans-serif;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+      transform: translateX(-50%) translateY(12px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      pointer-events: none;
+    }
+    #resultBanner.is-shown {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #wheelWrap,
+      #wheelStage,
+      #resultBanner {
+        transition: none;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="wheelWrap" aria-hidden="true">
     <div id="wheelStage">
-      <svg id="wheelSvg" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Колесо рулетки">
+      <svg id="wheelSvg" viewBox="0 0 500 500" preserveAspectRatio="xMidYMid meet"
+           xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Колесо рулетки">
         <defs>
           <radialGradient id="hubGrad" cx="50%" cy="45%" r="55%">
             <stop offset="0%" stop-color="#f0d78c" />
@@ -101,24 +142,7 @@
         </g>
       </svg>
 
-      <div id="resultBanner" style="
-        position: absolute;
-        left: 50%;
-        bottom: -6%;
-        transform: translateX(-50%) translateY(12px);
-        opacity: 0;
-        padding: 10px 22px;
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.78);
-        border: 2px solid rgba(255, 217, 102, 0.55);
-        color: #fff;
-        font: 700 clamp(18px, 3.4vw, 28px)/1.2 'Segoe UI', system-ui, sans-serif;
-        letter-spacing: 0.02em;
-        white-space: nowrap;
-        text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-        transition: opacity 0.35s ease, transform 0.35s ease;
-        pointer-events: none;
-      "></div>
+      <div id="resultBanner" aria-live="polite"></div>
     </div>
   </div>
 

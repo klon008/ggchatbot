@@ -4,6 +4,8 @@
  * В OBS: Browser Source, прозрачный фон, размер ~600×600.
  *
  * Режим отладки: ?debug=1 — тёмная подложка и логи.
+ * Превью колеса: ?visible=1 — колесо всегда на экране (не скрывается между раундами).
+ *   С ?debug=1 показывает пример баннера результата для проверки вёрстки.
  *
  * Логика:
  *   SPIN_WAIT  → показать колесо, быстрое вращение (пауза перед спином бота)
@@ -19,6 +21,7 @@
   var SPIN_SPEED_DEG = 11.5;
   var LAND_MS = 3600;
   var RESULT_HOLD_MS = 4500;
+  var HIDE_ANIM_MS = 620;
 
   var WHEEL_ORDER = [
     0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5,
@@ -36,6 +39,7 @@
   var R_IN = 92;
 
   var wheelWrap = document.getElementById("wheelWrap");
+  var wheelStage = document.getElementById("wheelStage");
   var wheelRotor = document.getElementById("wheelRotor");
   var pocketsEl = document.getElementById("pockets");
   var resultBanner = document.getElementById("resultBanner");
@@ -44,6 +48,7 @@
   var debugLogEl = document.getElementById("debugLog");
 
   var isDebug = false;
+  var alwaysVisible = false;
   var pollTimer = null;
 
   var prevState = "IDLE";
@@ -52,15 +57,24 @@
   var animFrame = null;
   var landTimer = null;
   var hideTimer = null;
+  var hideListener = null;
   var phase = "idle"; // idle | spinning | landing | result
 
-  function parseDebugMode() {
+  function parseQueryFlag(name) {
     try {
-      var v = (new URLSearchParams(location.search).get("debug") || "").toLowerCase();
+      var v = (new URLSearchParams(location.search).get(name) || "").toLowerCase();
       return v === "1" || v === "true" || v === "yes";
     } catch (e) {
       return false;
     }
+  }
+
+  function parseDebugMode() {
+    return parseQueryFlag("debug");
+  }
+
+  function parseVisibleMode() {
+    return parseQueryFlag("visible");
   }
 
   function pocketColor(num) {
@@ -117,7 +131,7 @@
 
   function applyRotation() {
     if (wheelRotor) {
-      wheelRotor.style.transform = "rotate(" + rotationDeg + "deg)";
+      wheelRotor.setAttribute("transform", "rotate(" + rotationDeg + " " + CX + " " + CY + ")");
     }
   }
 
@@ -176,7 +190,26 @@
       clearTimeout(hideTimer);
       hideTimer = null;
     }
+    cancelHideAnim();
     stopAnimFrame();
+  }
+
+  function cancelHideAnim() {
+    if (hideListener && wheelStage) {
+      wheelStage.removeEventListener("transitionend", hideListener);
+      hideListener = null;
+    }
+  }
+
+  function finishHideCleanup() {
+    cancelHideAnim();
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+    if (wheelWrap) {
+      wheelWrap.setAttribute("aria-hidden", "true");
+    }
   }
 
   function stopAnimFrame() {
@@ -188,12 +221,22 @@
 
   function showOverlay() {
     if (!wheelWrap) return;
+    cancelHideAnim();
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
     wheelWrap.classList.add("is-visible");
     wheelWrap.setAttribute("aria-hidden", "false");
   }
 
-  function hideOverlay() {
+  function hideOverlayCompletely() {
     if (!wheelWrap) return;
+    cancelHideAnim();
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
     wheelWrap.classList.remove("is-visible");
     wheelWrap.setAttribute("aria-hidden", "true");
     hideResultBanner();
@@ -201,17 +244,50 @@
     spinSession = null;
   }
 
+  function hideOverlayAnimated() {
+    if (!wheelWrap || !wheelWrap.classList.contains("is-visible")) {
+      finishHideCleanup();
+      phase = "idle";
+      spinSession = null;
+      return;
+    }
+    cancelHideAnim();
+    hideResultBanner();
+    wheelWrap.classList.remove("is-visible");
+    hideListener = function (e) {
+      if (!wheelStage || e.target !== wheelStage || e.propertyName !== "transform") return;
+      finishHideCleanup();
+    };
+    wheelStage.addEventListener("transitionend", hideListener);
+    hideTimer = setTimeout(function () {
+      finishHideCleanup();
+      hideTimer = null;
+    }, HIDE_ANIM_MS);
+  }
+
+  function resetAfterRound() {
+    phase = "idle";
+    spinSession = null;
+    if (!alwaysVisible) {
+      hideOverlayAnimated();
+    } else {
+      hideResultBanner();
+    }
+  }
+
+  function hideOverlay() {
+    hideOverlayCompletely();
+  }
+
   function showResultBanner(label) {
     if (!resultBanner) return;
     resultBanner.textContent = label || "";
-    resultBanner.style.opacity = "1";
-    resultBanner.style.transform = "translateX(-50%) translateY(0)";
+    resultBanner.classList.add("is-shown");
   }
 
   function hideResultBanner() {
     if (!resultBanner) return;
-    resultBanner.style.opacity = "0";
-    resultBanner.style.transform = "translateX(-50%) translateY(12px)";
+    resultBanner.classList.remove("is-shown");
     resultBanner.textContent = "";
   }
 
@@ -265,7 +341,7 @@
         showResultBanner(label || String(num));
         setDebugStatus("phase=result number=" + num);
         hideTimer = setTimeout(function () {
-          hideOverlay();
+          resetAfterRound();
           schedulePoll(POLL_IDLE_MS);
         }, RESULT_HOLD_MS);
       }
@@ -276,7 +352,7 @@
   function abortSpin() {
     debugLog("warn", "Раунд отменён или сброшен");
     clearTimers();
-    hideOverlay();
+    resetAfterRound();
     schedulePoll(POLL_IDLE_MS);
   }
 
@@ -319,7 +395,7 @@
     }
 
     if (state === "IDLE" && prevState === "COOLDOWN" && phase === "result") {
-      hideOverlay();
+      resetAfterRound();
     }
 
     prevState = state;
@@ -355,10 +431,25 @@
     debugLog("info", "debug=1, URL: " + location.href);
   }
 
+  function initVisibleMode() {
+    if (!alwaysVisible) return;
+    document.body.classList.add("allow-overflow");
+    showOverlay();
+    debugLog("info", "visible=1: колесо всегда на экране.");
+    if (isDebug) {
+      showResultBanner("16 красное");
+      debugLog("info", "Превью баннера результата (debug=1).");
+    }
+  }
+
   buildWheel();
   applyRotation();
   isDebug = parseDebugMode();
+  alwaysVisible = parseVisibleMode();
   initDebug();
-  hideOverlay();
+  initVisibleMode();
+  if (!alwaysVisible) {
+    hideOverlayCompletely();
+  }
   pollOnce();
 })();

@@ -552,7 +552,7 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 
 - **Авто-режим** (`auto_enabled`): первая ставка открывает стол, спин по таймеру сбора.
 - **Ручной режим**: открытие и спин через вкладку «Рулетка» в `admin.html`.
-- **OBS-оверлей**: `obs/roulette.html` + `roulette.js` — SVG-колесо, опрос `GET /api/roulette`; вращение в `SPIN_WAIT`, остановка на `last_result`. URL: `http://127.0.0.1:PORT/roulette.html` (Browser Source, прозрачный фон). Отладка: `?debug=1`.
+- **OBS-оверлей**: `obs/roulette.html` + `roulette.js` — SVG-колесо, опрос `GET /api/roulette`; вращение в `SPIN_WAIT`, остановка на `last_result`. URL: `http://127.0.0.1:PORT/roulette.html` (Browser Source, прозрачный фон). Отладка: `?debug=1`, превью колеса: `?visible=1` (с `?debug=1` — пример баннера результата).
 
 ### Команды
 
