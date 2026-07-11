@@ -2,22 +2,19 @@
 
 Скопируйте в settings.py и меняйте под свой канал.
 settings.py не попадает в git и сохраняется при update.cmd.
+
+Лимиты казны — в bot/minigames/settings.example.py.
 """
-
-# --- Казна ---
-
-MIN_BANK_TO_START = 5000  # Минимальный баланс казны, чтобы принимать ставки
-BANK_RESET_AMOUNT = 50000  # Баланс казны после !рулетка_сброс и начальный при установке
 
 # --- Лимиты ставок ---
 
-ROULETTE_MIN_BET = 1  # Минимальная ставка (баллы канала)
-ROULETTE_MAX_BET = 10000  # Максимальная ставка за один раунд
-ROULETTE_MAX_NUMBERS = 18  # Максимум чисел в одной ставке «на несколько чисел»
+ROULETTE_MIN_BET = 1
+ROULETTE_MAX_BET = 10000
+ROULETTE_MAX_NUMBERS = 18
 
 # --- Таймеры раунда (сек) ---
 
-ROULETTE_COLLECT_SEC = 60  # Время приёма ставок в авто-режиме
-ROULETTE_COLLECT_MANUAL_SEC = 300  # Время приёма ставок при ручном открытии стола
-ROULETTE_COOLDOWN_SEC = 180  # Пауза между раундами после спина
-ROULETTE_SPIN_DELAY_SEC = 10  # Пауза после закрытия ставок (время на анимацию колеса в OBS)
+ROULETTE_COLLECT_SEC = 60
+ROULETTE_COLLECT_MANUAL_SEC = 300
+ROULETTE_COOLDOWN_SEC = 180
+ROULETTE_SPIN_DELAY_SEC = 10

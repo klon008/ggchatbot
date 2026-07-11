@@ -7,6 +7,8 @@
 bot/princess/settings.py
 bot/song_request/settings.py
 bot/roulette/settings.py
+bot/minigames/settings.py
+bot/races/settings.py
 
 
 

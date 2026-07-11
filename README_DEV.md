@@ -34,7 +34,8 @@
 |--------|------------|
 | `song_request` | Очередь YouTube-треков, локальный HTTP/WS для OBS Browser Source |
 | `princess` | Игровая валюта «принцессы», кражи, daily, кубик и т.д. |
-| `roulette` | Мини-игра `!рулетка`: раунды, казна, ставки за баллы |
+| `roulette` | Мини-игра `!рулетка`: раунды, общая казна, ставки за баллы |
+| `races` | Мини-игра `!скачки`: забеги принцесс, динамические коэффициенты |
 | `goodgame` | Общий транспорт: авторизация, reconnect, приём/отправка сообщений |
 
 ```mermaid
@@ -200,6 +201,7 @@ class StreamBot:
     sr: SongRequestHandler
     princess: PrincessHandler
     roulette: RouletteHandler
+    races: RacesHandler
     gg: GoodGameClient
 ```
 
@@ -207,14 +209,14 @@ class StreamBot:
 
 | Метод | Действие |
 |-------|----------|
-| `run()` | `db.open()` → `sr.start()` → `web.start()` → `princess.start()` → `roulette.start()` → bind reply/points → `gg.run()` |
-| `close()` | `princess.close()` → `roulette.close()` → `sr.close()` → `web.stop()` → `gg.close()` → `db.close()` |
+| `run()` | `db.open()` → `sr.start()` → `web.start()` → `princess.start()` → `roulette.start()` → `races.start()` → bind reply/points → `gg.run()` |
+| `close()` | `princess.close()` → `roulette.close()` → `races.close()` → `sr.close()` → `web.stop()` → `gg.close()` → `db.close()` |
 
 HTTP-маршруты регистрируются в `__init__`: `PlayerRoutes` (внутри `SongRequestHandler`), `AdminRoutes`, `DocsRoutes` на общем `LocalWebServer`.
 
-Публичные поля: `bot.sr`, `bot.princess`, `bot.roulette`, `bot.web`, `bot.admin`, `bot.gg`.
+Публичные поля: `bot.sr`, `bot.princess`, `bot.roulette`, `bot.races`, `bot.web`, `bot.admin`, `bot.gg`.
 
-Роутинг чата: `princess → roulette → song_request`.
+Роутинг чата: `princess → roulette → races → song_request`.
 
 #### Ответы в чат
 
@@ -380,6 +382,9 @@ class Track:
 | `/admin.html` | `obs/admin.html` (через `AdminRoutes`) |
 | `/roulette.html` | `obs/roulette.html` — SVG-колесо рулетки для стрима |
 | `/roulette.js` | `obs/roulette.js` |
+| `/races.html` | `obs/races.html` — забег принцесс для стрима |
+| `/races.js` | `obs/races.js` |
+| `/assets/princesses/*.svg` | Иконки принцесс для OBS-оверлея скачек |
 
 Статика берётся из `obs/` через `bot/web/static.py`. **Важно:** Browser Source в OBS должен открывать `http://127.0.0.1:PORT/player.html`, не `file://` — иначе YouTube Error 153 (referrer).
 
@@ -544,7 +549,7 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 
 ## 8. Модуль `bot/roulette/`
 
-Мини-игра `!рулетка`: общий раунд на весь чат, ставки списываются с `PointsStore`, выигрыши платятся из казны `roulette_meta.bank`.
+Мини-игра `!рулетка`: общий раунд на весь чат, ставки списываются с `PointsStore`, выигрыши платятся из общей казны `minigames_bank`.
 
 ### Состояния раунда
 
@@ -560,7 +565,7 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 |---------|-----|----------|
 | `!рулетка <сумма> ...` | все | Ставка (число, цвет, чётность, малые/большие) |
 | `!рулетка правила` | все | Краткая справка |
-| `!рулетка_банк` | админ | Баланс казны |
+| `!рулетка_банк` | админ | Баланс общей казны мини-игр |
 | `!рулетка_пополнить N` | админ | Пополнить казну |
 | `!рулетка_сброс` | админ | Сброс казны до `BANK_RESET_AMOUNT` |
 
@@ -573,14 +578,57 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 
 ### Настройки
 
-`bot/roulette/settings.py` (из `settings.example.py`): лимиты ставок, `MIN_BANK_TO_START`, таймеры сбора и cooldown.
+`bot/roulette/settings.py` (из `settings.example.py`): лимиты ставок, таймеры сбора и cooldown. Лимиты казны — `bot/minigames/settings.py`.
 
 ### SQLite
 
 | Таблица | Содержимое |
 |---------|------------|
-| `roulette_meta` | Казна, режим, состояние, таймеры, последний спин |
+| `minigames_bank` | Общая казна рулетки и скачек |
+| `roulette_meta` | Режим, состояние, таймеры, последний спин |
 | `roulette_bets` | Ставки текущего раунда (`UNIQUE(round_id, user_id)`) |
+
+---
+
+## 8.1. Модуль `bot/races/`
+
+Мини-игра `!скачки`: 10 случайных принцесс из `bot/princesses.py`, динамические коэффициенты, симуляция забега, общая казна `minigames_bank`.
+
+### Состояния раунда
+
+`IDLE → OPEN → RACE_WAIT → RACE → COOLDOWN → IDLE`
+
+- **Авто-режим**: `!скачки` открывает забег и показывает состав; ставка — `!скачки <сумма> <1–6>` только когда забег `OPEN`.
+- **OBS-оверлей**: `obs/races.html` + `races.js` — компактная нижняя полоска (~800×140), одна дорожка, иконки принцесс; события и комментарии — только в чате. Browser Source: **800×140** (или 800×200), прижать к низу экрана. URL: `http://127.0.0.1:PORT/races.html`. Отладка: `?debug=1`, превью: `?visible=1`.
+
+### Команды
+
+| Команда | Кто | Описание |
+|---------|-----|----------|
+| `!скачки` | все | Открыть забег и показать состав (без списания баллов) |
+| `!скачки <сумма> <1–6>` | все | Ставка на «лошадь» в текущем составе |
+| `!скачки правила` | все | Краткая справка |
+| `!скачки_банк` | админ | Баланс общей казны |
+| `!скачки_пополнить N` | админ | Пополнить казну |
+| `!скачки_сброс` | админ | Сброс казны до `BANK_RESET_AMOUNT` |
+
+### Admin API
+
+| Метод | Путь |
+|-------|------|
+| GET/PUT | `/api/races` |
+| POST | `/api/races/open`, `/start`, `/bank`, `/cancel` |
+
+`GET /api/races` также отдаёт `princess_stats[]` — полный справочник принцесс с `races_count`, `wins_count`, `win_rate` (для read-only таблицы в админке).
+
+### SQLite
+
+| Таблица | Содержимое |
+|---------|------------|
+| `races_meta` | Режим, состояние, таймеры, прогресс забега, последний результат |
+| `races_bets` | Ставки раунда |
+| `races_lineup` | Состав (№, принцесса) |
+| `races_princess_stats` | История участий и побед для odds |
 
 ## 9. Маршрутизация сообщений чата
 
@@ -600,14 +648,16 @@ flowchart TD
     PrincessCmd -->|yes| HandleP[handler + return True]
     PrincessCmd -->|no| RouletteCheck[roulette.handle_message]
     RouletteCheck -->|roulette cmd| HandleR[roulette handler + return True]
-    RouletteCheck -->|no| SRCheck
+    RouletteCheck -->|no| RacesCheck[races.handle_message]
+    RacesCheck -->|races cmd| HandleRc[races handler + return True]
+    RacesCheck -->|no| SRCheck
 
     SRCheck --> SR{song_request.handle_message}
     SR -->|SR command| HandleSR[SR handler]
     SR -->|unknown !| Ignore[return False]
 ```
 
-**Приоритет:** princess → roulette → song_request. Если модуль вернул `True`, следующие не вызываются.
+**Приоритет:** princess → roulette → races → song_request. Если модуль вернул `True`, следующие не вызываются.
 
 **Формат ответов:**
 
@@ -632,7 +682,9 @@ flowchart TD
 | `prison` | princess | Тюрьма |
 | `dice_cooldowns` | princess | Кулдаун кубика |
 | `queue_meta`, `queue_items` | song_request | Очередь и текущий трек |
-| `roulette_meta`, `roulette_bets` | roulette | Казна и ставки раунда |
+| `minigames_bank` | roulette, races | Общая казна мини-игр |
+| `roulette_meta`, `roulette_bets` | roulette | Состояние и ставки раунда |
+| `races_meta`, `races_bets`, `races_lineup`, `races_princess_stats` | races | Забеги, состав, статистика |
 
 Каталог `data/` в `.gitignore`.
 

@@ -6,7 +6,7 @@ from typing import Protocol
 
 import aiosqlite
 
-from . import m002_paid_cost, m003_orders_enabled, m004_user_names, m005_roulette
+from . import m002_paid_cost, m003_orders_enabled, m004_user_names, m005_roulette, m006_minigames_bank, m007_races
 
 
 class Migration(Protocol):
@@ -21,4 +21,6 @@ MIGRATIONS: list[Migration] = [
     m003_orders_enabled,
     m004_user_names,
     m005_roulette,
+    m006_minigames_bank,
+    m007_races,
 ]

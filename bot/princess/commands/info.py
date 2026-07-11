@@ -5,18 +5,12 @@ from typing import TYPE_CHECKING
 
 from bot.economy import pluralize_princess
 from bot.goodgame import ChatMessage
+from bot.princesses import DISNEY_PRINCESSES
 
 from ..economy import update_chance
 
 if TYPE_CHECKING:
     from bot.princess.handler import PrincessHandler
-
-DISNEY_PRINCESSES = [
-    "Белоснежка", "Аврора", "Золушка", "Мулан", "Рапунцель",
-    "Тиана", "Покахонтас", "Ариэль", "Жасмин", "Эльза",
-    "Анна", "Моана", "Мерида", "Бэлль", "Ванилопа", "Алиса",
-    "Эсмеральда", "Кида", "Мегара", "Райя", "Джейн Портер",
-]
 
 
 async def cmd_srok(handler: "PrincessHandler", msg: ChatMessage) -> None:

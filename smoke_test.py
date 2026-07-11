@@ -21,8 +21,11 @@ import aiohttp
 from bot import StreamBot
 from bot.commands import PUBLIC_COMMANDS
 from bot.db import users as users_db
+from bot.db import minigames_bank
 from bot.db import roulette as roulette_db
 from bot.goodgame import ChatMessage
+from bot.races import bets as races_bets
+from bot.races import odds as races_odds
 from bot.roulette import bets as roulette_bets
 from bot.song_request import Track
 from config import Config
@@ -82,6 +85,7 @@ def ensure_main_not_running() -> None:
 async def main() -> int:
     assert "!заказ" in PUBLIC_COMMANDS
     assert "!рулетка" in PUBLIC_COMMANDS
+    assert "!скачки" in PUBLIC_COMMANDS
     assert "!пропуск" not in PUBLIC_COMMANDS
     assert "!списать" not in PUBLIC_COMMANDS
     assert "!рулетка_банк" not in PUBLIC_COMMANDS
@@ -98,7 +102,9 @@ async def main() -> int:
     bot.sr.bind_points(bot.princess.points)
     await bot.sr.start()
     await bot.roulette.start()
+    await bot.races.start()
     bot.roulette.bind_points(bot.princess.points)
+    bot.races.bind_points(bot.princess.points)
 
     async def fake_online_users() -> list[dict]:
         return [{"id": "smoke-sync-user", "name": "SyncedUser"}]
@@ -453,7 +459,7 @@ async def main() -> int:
         assert status["last_result"] is not None
         print("[OK] roulette spin")
 
-        await roulette_db.set_bank(bot.db, 5000)
+        await minigames_bank.set_bank(bot.db, 5000)
         await roulette_db.update_meta(bot.db, state="IDLE", cooldown_until=None)
         await bot.princess.points.set_balance("smoke-bankrupt-user", 5000)
         await bot.princess.points.flush()
@@ -474,7 +480,7 @@ async def main() -> int:
         assert status["last_result"]["bankrupted"] is True
         print("[OK] roulette bank bankruptcy")
 
-        await roulette_db.set_bank(bot.db, 50_000)
+        await minigames_bank.set_bank(bot.db, 50_000)
         await roulette_db.update_meta(bot.db, state="IDLE", cooldown_until=None)
         async with s.put(
             f"{base}/api/roulette",
@@ -499,8 +505,144 @@ async def main() -> int:
             assert r.status == 200, await r.text()
             print("[OK] POST /api/roulette/bank")
 
+        # --- Races ---
+        from bot.db import races as races_db
+        from bot.races import simulate as races_simulate
+
+        parsed_races = races_bets.parse_bet_command("!скачки 150 3")
+        assert not isinstance(parsed_races, races_bets.ParseError), parsed_races
+        bad_horse = races_bets.parse_bet_command("!скачки 100 7")
+        assert isinstance(bad_horse, races_bets.ParseError)
+        print("[OK] races bet parsing")
+
+        async with s.get(f"{base}/api/races") as r:
+            assert r.status == 200, await r.text()
+            races_data = await r.json()
+            assert races_data["state"] == "IDLE"
+            assert races_data["bank"] >= 5000
+            assert len(races_data.get("princess_stats", [])) == 21
+            assert races_data["princess_stats"][0]["princess_name"]
+            print("[OK] GET /api/races")
+
+        async with s.get(f"{base}/races.html") as r:
+            assert r.status == 200
+            body = await r.text()
+            assert "raceWrap" in body
+            print("[OK] GET /races.html")
+
+        async with s.get(f"{base}/assets/princesses/elza.svg") as r:
+            assert r.status == 200, await r.text()
+            print("[OK] GET /assets/princesses/elza.svg")
+
+        race_user = "smoke-races-user"
+        await bot.princess.points.set_balance(race_user, 10_000)
+        await bot.princess.points.flush()
+
+        idle_bet_msg = ChatMessage(
+            channel_id="",
+            user_id="smoke-races-idle-bet",
+            user_name="IdleBetUser",
+            user_rights=0,
+            text="!скачки 50 1",
+        )
+        await bot.princess.points.set_balance("smoke-races-idle-bet", 1000)
+        await bot.princess.points.flush()
+        assert await bot.races.handle_message(idle_bet_msg)
+        assert await bot.princess.points.get_balance("smoke-races-idle-bet") == 1000
+        print("[OK] races bet rejected in IDLE")
+
+        open_msg = ChatMessage(
+            channel_id="",
+            user_id=race_user,
+            user_name="RacesUser",
+            user_rights=0,
+            text="!скачки",
+        )
+        assert await bot.races.handle_message(open_msg)
+        race_status = await bot.races.get_status()
+        assert race_status["state"] == "OPEN"
+        assert len(race_status["bets"]) == 0
+        assert len(race_status["lineup"]) == 6
+        assert await bot.princess.points.get_balance(race_user) == 10_000
+        print("[OK] races open shows lineup without bet")
+
+        race_msg = ChatMessage(
+            channel_id="",
+            user_id=race_user,
+            user_name="RacesUser",
+            user_rights=0,
+            text="!скачки 200 1",
+        )
+        assert await bot.races.handle_message(race_msg)
+        race_status = await bot.races.get_status()
+        assert race_status["state"] == "OPEN"
+        assert len(race_status["bets"]) == 1
+        race_balance = await bot.princess.points.get_balance(race_user)
+        assert race_balance == 9800, race_balance
+        print("[OK] races bet after open")
+
+        dup_race_msg = ChatMessage(
+            channel_id="",
+            user_id=race_user,
+            user_name="RacesUser",
+            user_rights=0,
+            text="!скачки 100 2",
+        )
+        assert await bot.races.handle_message(dup_race_msg)
+        assert await bot.princess.points.get_balance(race_user) == 9800
+        print("[OK] races duplicate bet rejected")
+
+        entries = await races_db.get_lineup(bot.db, race_status["round_id"])
+        bet_list = await races_db.list_bets(bot.db, race_status["round_id"])
+        computed_odds = await races_odds.compute_odds(bot.db, entries, bet_list)
+        assert 1 in computed_odds and computed_odds[1] >= 1.1
+        print("[OK] races odds")
+
+        async def _noop_sleep(_sec: float) -> None:
+            return None
+
+        fake_result = races_simulate.RaceResult(
+            winner_horse=1,
+            winner_name=entries[0].princess_name,
+            finish_order=[e.horse_number for e in entries],
+            ticks=[],
+            events=[],
+        )
+        with patch("bot.races.round.simulate.simulate_race", return_value=fake_result):
+            with patch("bot.races.round.asyncio.sleep", _noop_sleep):
+                await bot.races.admin_start()
+        race_status = await bot.races.get_status()
+        assert race_status["state"] == "COOLDOWN"
+        assert race_status["last_result"] is not None
+        stats_by_name = {s["princess_name"]: s for s in race_status["princess_stats"]}
+        winner_name = entries[0].princess_name
+        assert stats_by_name[winner_name]["wins_count"] >= 1
+        print("[OK] races finish + payouts")
+
+        await minigames_bank.set_bank(bot.db, 50_000)
+        await races_db.update_meta(bot.db, state="IDLE", cooldown_until=None)
+        async with s.put(
+            f"{base}/api/races",
+            json={"auto_enabled": False, "collect_sec": 30, "cooldown_sec": 60, "race_delay_sec": 0},
+        ) as r:
+            assert r.status == 200, await r.text()
+            print("[OK] PUT /api/races")
+
+        async with s.post(f"{base}/api/races/open") as r:
+            assert r.status == 200, await r.text()
+            print("[OK] POST /api/races/open")
+
+        async with s.post(f"{base}/api/races/cancel") as r:
+            assert r.status == 200, await r.text()
+            print("[OK] POST /api/races/cancel")
+
+        async with s.post(f"{base}/api/races/bank", json={"amount": 1000}) as r:
+            assert r.status == 200, await r.text()
+            print("[OK] POST /api/races/bank")
+
     await bot.sr.queue.clear()
     await bot.roulette.close()
+    await bot.races.close()
     await bot.sr.close()
     await bot.web.stop()
     from bot.db.migrate import get_schema_version

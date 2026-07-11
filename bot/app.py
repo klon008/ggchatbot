@@ -14,6 +14,7 @@ from config import Config
 
 from .goodgame import GoodGameClient
 from .princess import PrincessHandler
+from .races import RacesHandler
 from .roulette import RouletteHandler
 from .song_request import SongRequestHandler
 
@@ -35,8 +36,12 @@ class StreamBot:
             db=self.db,
             admin_user_id=cfg.gg_admin_user_id,
         )
+        self.races = RacesHandler(
+            db=self.db,
+            admin_user_id=cfg.gg_admin_user_id,
+        )
         DocsRoutes().register(self.web.app)
-        self.admin = AdminRoutes(self.db, self.sr.queue, self.sr, self.roulette)
+        self.admin = AdminRoutes(self.db, self.sr.queue, self.sr, self.roulette, self.races)
         self.admin.register(self.web.app)
         self.gg = GoodGameClient(
             login=cfg.gg_login,
@@ -52,6 +57,7 @@ class StreamBot:
         await self.web.start()
         log.info("OBS-плеер: http://%s:%d/player.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Рулетка OBS: http://%s:%d/roulette.html", self.cfg.obs_host, self.cfg.obs_port)
+        log.info("Скачки OBS: http://%s:%d/races.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Admin-панель: http://%s:%d/admin.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Логика команд: http://%s:%d/commands.html", self.cfg.obs_host, self.cfg.obs_port)
         self.admin.bind_user_names(
@@ -63,14 +69,18 @@ class StreamBot:
         self.sr.bind_reply(self._reply)
         await self.princess.start()
         await self.roulette.start()
+        await self.races.start()
         self.roulette.bind_reply(self._reply)
+        self.races.bind_reply(self._reply)
         self.roulette.bind_points(self.princess.points)
+        self.races.bind_points(self.princess.points)
         self.sr.bind_points(self.princess.points)
         await self.gg.run()
 
     async def close(self) -> None:
         await self.princess.close()
         await self.roulette.close()
+        await self.races.close()
         await self.sr.close()
         await self.web.stop()
         await self.gg.close()
@@ -84,6 +94,8 @@ class StreamBot:
         if await self.princess.handle_message(msg):
             return
         if await self.roulette.handle_message(msg):
+            return
+        if await self.races.handle_message(msg):
             return
         await self.sr.handle_message(msg)
 

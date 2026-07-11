@@ -1,19 +1,18 @@
-"""Расчёт выплат из казны рулетки."""
+"""Выплаты по коэффициентам скачек."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from bot.db.roulette import RouletteBet
+from bot.db.races import RacesBet
 from bot.minigames import payouts as shared_payouts
-
-from . import bets
 
 
 @dataclass
 class WinnerPayout:
     user_id: str
     user_name: str
+    horse_number: int
     ideal: int
     actual: int
 
@@ -28,23 +27,26 @@ class PayoutResult:
 
 
 def calculate_payouts(
-    bet_list: list[RouletteBet],
-    result_number: int,
+    bet_list: list[RacesBet],
+    winner_horse: int,
+    odds: dict[int, float],
     bank_balance: int,
 ) -> PayoutResult:
     winners: list[WinnerPayout] = []
     ideals: list[int] = []
 
     for bet in bet_list:
-        if not bets.is_winner(bet.bet_type, bet.bet_payload, result_number):
+        if bet.horse_number != winner_horse:
             continue
-        ideal = bets.ideal_payout(bet.amount, bet.bet_type, bet.bet_payload)
+        coeff = odds.get(bet.horse_number, 1.0)
+        ideal = int(bet.amount * coeff)
         if ideal <= 0:
             continue
         winners.append(
             WinnerPayout(
                 user_id=bet.user_id,
                 user_name=bet.user_name,
+                horse_number=bet.horse_number,
                 ideal=ideal,
                 actual=ideal,
             )

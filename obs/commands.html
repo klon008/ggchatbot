@@ -481,7 +481,7 @@ flowchart TD
       <div class="card-head">
         <span class="tag princess">Roulette</span>
         <h2><code style="color:var(--cmd)">!рулетка</code> — общий раунд на чат</h2>
-        <p>Одна ставка на игрока за раунд; выплаты из казны модуля</p>
+        <p>Одна ставка на игрока за раунд; выплаты из общей казны мини-игр</p>
       </div>
       <div class="card-body flush">
         <div class="diagram">
@@ -513,7 +513,48 @@ flowchart TD
     class BET,PAY eco
           </pre>
         </div>
-        <div class="note">Скрытая справка: <code>!рулетка правила</code>. Админ: <code>!рулетка_банк</code>, <code>!рулетка_пополнить</code>, <code>!рулетка_сброс</code>.</div>
+        <div class="note">Скрытая справка: <code>!рулетка правила</code>. Админ: <code>!рулетка_банк</code> (общая казна), <code>!рулетка_пополнить</code>, <code>!рулетка_сброс</code>.</div>
+      </div>
+    </article>
+
+    <!-- Скачки -->
+    <article class="card" id="races">
+      <div class="card-head">
+        <span class="tag princess">Races</span>
+        <h2><code style="color:var(--cmd)">!скачки</code> — забег принцесс</h2>
+        <p>10 принцесс, динамический коэффициент; сначала <code>!скачки</code> — состав, затем ставка</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    C0["!скачки правила"] --> CRULES["Краткая справка"]
+    COPEN["!скачки"] --> CO{"IDLE + авто?"}
+    CO -->|да| CL["Состав №1–6, таймер"]
+    CO -->|нет| COF["Отказ / повтор состава"]
+    CL --> C1["!скачки сумма номер"]
+    C1 --> CS{"OPEN / cooldown / казна?"}
+    CS -->|нет| CF["Отказ"]
+    CS -->|да| CD{"Уже ставил?"}
+    CD -->|да| CF2["Отказ"]
+    CD -->|нет| CB{"Хватает баллов?"}
+    CB -->|нет| CF3["Недостаточно"]
+    CB -->|да| CBET["Списать → казна → ставка"]
+    CBET --> COPEN{"Первый в авто?"}
+    COPEN -->|да| CT["Открыть + состав 10 принцесс"]
+    COPEN -->|нет| CW["Ждать старта"]
+    CT --> CRACE["Симуляция забега"]
+    CW --> CRACE
+    CRACE --> CWIN["Победитель №N"]
+    CWIN --> CPAY["Выплата = ставка × коэфф."]
+    class C0,COPEN,C1,CBET,CT,CRACE action
+    class CS,CD,CB,COPEN cond
+    class CRULES ok
+    class CF,CF2,CF3 fail
+    class CBET,CPAY eco
+          </pre>
+        </div>
+        <div class="note">Сначала <code>!скачки</code> — состав. Ставка: <code>!скачки &lt;сумма&gt; &lt;1–6&gt;</code>. Справка: <code>!скачки правила</code>. OBS: <code>/races.html</code> (нижняя полоска 800×140, текст в чате). Админ: <code>!скачки_банк</code>, <code>!скачки_пополнить</code>, <code>!скачки_сброс</code>.</div>
       </div>
     </article>
 
@@ -670,6 +711,7 @@ flowchart LR
           <span class="chip">!звук</span>
           <span class="chip">!коллекция</span>
           <span class="chip">!рулетка</span>
+          <span class="chip">!скачки</span>
           <span class="chip">!заказ</span>
           <span class="chip">!очередь</span>
           <span class="chip">!играет</span>
@@ -681,11 +723,15 @@ flowchart LR
           <span class="chip dim">!сейчас</span>
           <span class="chip dim">!пропуск</span>
           <span class="chip dim">!рулетка правила</span>
+          <span class="chip dim">!скачки правила</span>
           <span class="chip admin">!начислить</span>
           <span class="chip admin">!списать</span>
           <span class="chip admin">!рулетка_банк</span>
           <span class="chip admin">!рулетка_пополнить</span>
           <span class="chip admin">!рулетка_сброс</span>
+          <span class="chip admin">!скачки_банк</span>
+          <span class="chip admin">!скачки_пополнить</span>
+          <span class="chip admin">!скачки_сброс</span>
         </div>
       </div>
     </article>

@@ -8,14 +8,14 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from bot.db import Database
+from bot.db import minigames_bank
 from bot.db import roulette as roulette_db
 from bot.db.roulette import RouletteBet
 from bot.economy.points import PointsStore
+from bot.minigames.settings import BANK_RESET_AMOUNT, MIN_BANK_TO_START
 
 from . import bank, bets, wheel
 from .settings import (
-    BANK_RESET_AMOUNT,
-    MIN_BANK_TO_START,
     ROULETTE_COLLECT_MANUAL_SEC,
     ROULETTE_COLLECT_SEC,
     ROULETTE_COOLDOWN_SEC,
@@ -115,7 +115,7 @@ class RoundManager:
         return {
             "auto_enabled": meta.auto_enabled,
             "state": meta.state,
-            "bank": meta.bank,
+            "bank": await minigames_bank.get_bank(self._db),
             "round_id": meta.round_id,
             "timer_sec": timer_sec,
             "collect_sec": meta.collect_sec,
@@ -142,16 +142,15 @@ class RoundManager:
         )
 
     async def get_bank(self) -> int:
-        meta = await roulette_db.get_meta(self._db)
-        return meta.bank
+        return await minigames_bank.get_bank(self._db)
 
     async def top_up_bank(self, amount: int) -> int:
         if amount <= 0:
             raise ValueError("amount must be positive")
-        return await roulette_db.add_bank(self._db, amount)
+        return await minigames_bank.add_bank(self._db, amount)
 
     async def reset_bank(self) -> int:
-        await roulette_db.set_bank(self._db, BANK_RESET_AMOUNT)
+        await minigames_bank.set_bank(self._db, BANK_RESET_AMOUNT)
         return BANK_RESET_AMOUNT
 
     async def place_bet(
@@ -171,7 +170,8 @@ class RoundManager:
             await self._set_idle()
             meta = await roulette_db.get_meta(self._db)
 
-        if meta.bank < MIN_BANK_TO_START:
+        bank_balance = await minigames_bank.get_bank(self._db)
+        if bank_balance < MIN_BANK_TO_START:
             return f"Рулетка отключена: в казне менее {MIN_BANK_TO_START} баллов."
 
         if meta.state == STATE_IDLE:
@@ -204,7 +204,7 @@ class RoundManager:
             )
 
         await self._points.add(user_id, -parsed.amount)
-        await roulette_db.add_bank(self._db, parsed.amount)
+        await minigames_bank.add_bank(self._db, parsed.amount)
         await roulette_db.add_bet(
             self._db,
             RouletteBet(
@@ -224,7 +224,8 @@ class RoundManager:
             raise RuntimeError("auto_mode")
         if meta.state != STATE_IDLE:
             raise RuntimeError("not_idle")
-        if meta.bank < MIN_BANK_TO_START:
+        bank_balance = await minigames_bank.get_bank(self._db)
+        if bank_balance < MIN_BANK_TO_START:
             raise RuntimeError("bank_low")
         now = time.time()
         if meta.state == STATE_COOLDOWN and meta.cooldown_until and meta.cooldown_until > now:
@@ -254,7 +255,7 @@ class RoundManager:
                 await self._points.add(bet.user_id, bet.amount)
         bank_refund = sum(b.amount for b in bet_list)
         if bank_refund:
-            await roulette_db.add_bank(self._db, -bank_refund)
+            await minigames_bank.add_bank(self._db, -bank_refund)
         await roulette_db.delete_bets(self._db, meta.round_id)
         await self._set_idle()
         await self._chat("Раунд отменён. Ставки возвращены.")
@@ -325,7 +326,8 @@ class RoundManager:
         result_number = wheel.spin()
         result_text = wheel.format_result(result_number)
         bet_list = await roulette_db.list_bets(self._db, meta.round_id)
-        payout = bank.calculate_payouts(bet_list, result_number, meta.bank)
+        bank_balance = await minigames_bank.get_bank(self._db)
+        payout = bank.calculate_payouts(bet_list, result_number, bank_balance)
 
         if self._points is not None:
             for w in payout.winners:
@@ -333,7 +335,7 @@ class RoundManager:
                     await self._points.add(w.user_id, w.actual)
             await self._points.flush()
 
-        await roulette_db.set_bank(self._db, payout.new_bank)
+        await minigames_bank.set_bank(self._db, payout.new_bank)
 
         last_result = {
             "number": result_number,

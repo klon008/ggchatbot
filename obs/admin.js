@@ -20,11 +20,26 @@
   const rouletteSpin = document.getElementById("rouletteSpin");
   const rouletteTopUp = document.getElementById("rouletteTopUp");
   const rouletteCancel = document.getElementById("rouletteCancel");
+  const racesAuto = document.getElementById("racesAuto");
+  const racesCollectSec = document.getElementById("racesCollectSec");
+  const racesRaceDelaySec = document.getElementById("racesRaceDelaySec");
+  const racesCooldownSec = document.getElementById("racesCooldownSec");
+  const racesStatusLine = document.getElementById("racesStatusLine");
+  const racesBank = document.getElementById("racesBank");
+  const racesLineupBody = document.getElementById("racesLineupBody");
+  const racesBetsBody = document.getElementById("racesBetsBody");
+  const racesLastResult = document.getElementById("racesLastResult");
+  const racesPrincessStatsBody = document.getElementById("racesPrincessStatsBody");
+  const racesOpen = document.getElementById("racesOpen");
+  const racesStart = document.getElementById("racesStart");
+  const racesTopUp = document.getElementById("racesTopUp");
+  const racesCancel = document.getElementById("racesCancel");
 
   let allPoints = [];
   let ordersEnabled = true;
   let queuePaused = false;
   let roulettePollTimer = null;
+  let racesPollTimer = null;
 
   function setStatus(text, kind) {
     statusBar.textContent = text;
@@ -498,6 +513,220 @@
     }
   });
 
+  function formatRacesLastResult(last) {
+    if (!last) return '<span class="empty">ещё не было забегов</span>';
+    const winners = (last.winners || [])
+      .filter((w) => w.actual > 0)
+      .map((w) => `${esc(w.user_name)}: ${esc(w.actual)}`)
+      .join(", ");
+    const bankNote = last.bankrupted ? " (выплаты урезаны)" : "";
+    return `<strong>№${esc(last.winner_horse)} ${esc(last.winner_name)}</strong>${bankNote}${
+      winners ? `<br/>Победители: ${winners}` : "<br/>Без победителей"
+    }`;
+  }
+
+  function renderRaces(data) {
+    const state = data.state || "IDLE";
+    const timer = data.timer_sec || 0;
+    racesAuto.checked = !!data.auto_enabled;
+    racesCollectSec.value = data.collect_sec || 60;
+    racesCooldownSec.value = data.cooldown_sec || 180;
+    racesRaceDelaySec.value = data.race_delay_sec ?? 10;
+    racesBank.textContent = String(data.bank ?? "—");
+    racesStatusLine.textContent =
+      timer > 0
+        ? `Состояние: ${state}, осталось ~${timer} сек`
+        : `Состояние: ${state}`;
+
+    const manual = !data.auto_enabled;
+    const isOpen = state === "OPEN";
+    const isRaceWait = state === "RACE_WAIT";
+    const isIdle = state === "IDLE";
+    racesOpen.disabled = !manual || !isIdle;
+    racesStart.disabled = !isOpen && !isRaceWait;
+    racesCancel.disabled = !isOpen && !isRaceWait;
+
+    const lineup = data.lineup || [];
+    if (!lineup.length) {
+      racesLineupBody.innerHTML =
+        '<tr><td colspan="4" class="empty">Нет состава</td></tr>';
+    } else {
+      racesLineupBody.innerHTML = lineup
+        .map(
+          (row) => `
+        <tr>
+          <td>${esc(row.horse_number)}</td>
+          <td>${esc(row.princess_name)}</td>
+          <td>${row.coefficient != null ? esc(row.coefficient) : "—"}</td>
+          <td>${esc(row.bet_total || 0)}</td>
+        </tr>`
+        )
+        .join("");
+    }
+
+    const bets = data.bets || [];
+    if (!bets.length) {
+      racesBetsBody.innerHTML =
+        '<tr><td colspan="3" class="empty">Нет ставок</td></tr>';
+    } else {
+      racesBetsBody.innerHTML = bets
+        .map(
+          (b) => `
+        <tr>
+          <td>${esc(b.user_name || b.user_id)}</td>
+          <td>${esc(b.horse_number)}</td>
+          <td>${esc(b.amount)}</td>
+        </tr>`
+        )
+        .join("");
+    }
+
+    racesLastResult.innerHTML = formatRacesLastResult(data.last_result);
+
+    const princessStats = data.princess_stats || [];
+    if (!princessStats.length) {
+      racesPrincessStatsBody.innerHTML =
+        '<tr><td colspan="4" class="empty">Нет данных</td></tr>';
+    } else {
+      racesPrincessStatsBody.innerHTML = princessStats
+        .map((row) => {
+          const pct =
+            row.races_count > 0
+              ? (100 * (row.win_rate != null ? row.win_rate : row.wins_count / row.races_count)).toFixed(1) + "%"
+              : "—";
+          return `
+        <tr>
+          <td>${esc(row.princess_name)}</td>
+          <td>${esc(row.races_count)}</td>
+          <td>${esc(row.wins_count)}</td>
+          <td>${esc(pct)}</td>
+        </tr>`;
+        })
+        .join("");
+    }
+  }
+
+  function stopRacesPoll() {
+    if (racesPollTimer) {
+      clearInterval(racesPollTimer);
+      racesPollTimer = null;
+    }
+  }
+
+  function startRacesPollIfNeeded(data) {
+    stopRacesPoll();
+    if (
+      data.state === "OPEN" ||
+      data.state === "RACE_WAIT" ||
+      data.state === "RACE" ||
+      data.state === "COOLDOWN"
+    ) {
+      racesPollTimer = setInterval(() => loadRaces(true), 2500);
+    }
+  }
+
+  async function loadRaces(silent) {
+    if (!silent) setStatus("Загрузка скачек…");
+    try {
+      const data = await api("GET", "/api/races");
+      renderRaces(data);
+      startRacesPollIfNeeded(data);
+      if (!silent) setStatus(`Скачки: ${data.state}`, "ok");
+    } catch (e) {
+      if (!silent) setStatus(e.message, "err");
+    }
+  }
+
+  async function saveRacesSettings() {
+    const collect = parseInt(racesCollectSec.value, 10);
+    const cooldown = parseInt(racesCooldownSec.value, 10);
+    const raceDelay = parseInt(racesRaceDelaySec.value, 10);
+    if (Number.isNaN(collect) || collect < 10) {
+      setStatus("collect_sec >= 10", "err");
+      return;
+    }
+    if (Number.isNaN(cooldown) || cooldown < 10) {
+      setStatus("cooldown_sec >= 10", "err");
+      return;
+    }
+    if (Number.isNaN(raceDelay) || raceDelay < 0) {
+      setStatus("race_delay_sec >= 0", "err");
+      return;
+    }
+    setStatus("Сохранение настроек скачек…");
+    try {
+      const data = await api("PUT", "/api/races", {
+        auto_enabled: racesAuto.checked,
+        collect_sec: collect,
+        cooldown_sec: cooldown,
+        race_delay_sec: raceDelay,
+      });
+      renderRaces(data);
+      setStatus("Настройки скачек сохранены", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  }
+
+  document.getElementById("racesSaveSettings").addEventListener("click", saveRacesSettings);
+  document.getElementById("racesRefresh").addEventListener("click", () => loadRaces(false));
+
+  racesOpen.addEventListener("click", async () => {
+    setStatus("Открытие ставок…");
+    try {
+      const data = await api("POST", "/api/races/open");
+      renderRaces(data);
+      startRacesPollIfNeeded(data);
+      setStatus("Ставки открыты", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  racesStart.addEventListener("click", async () => {
+    if (!confirm("Запустить забег сейчас?")) return;
+    setStatus("Старт забега…");
+    try {
+      const data = await api("POST", "/api/races/start");
+      renderRaces(data);
+      startRacesPollIfNeeded(data);
+      setStatus("Забег запущен", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  racesTopUp.addEventListener("click", async () => {
+    const raw = prompt("Сколько баллов добавить в казну?", "5000");
+    if (raw == null) return;
+    const amount = parseInt(raw, 10);
+    if (Number.isNaN(amount) || amount <= 0) {
+      setStatus("Сумма должна быть > 0", "err");
+      return;
+    }
+    setStatus("Пополнение казны…");
+    try {
+      const data = await api("POST", "/api/races/bank", { amount });
+      renderRaces(data);
+      setStatus(`Казна пополнена на ${amount}`, "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  racesCancel.addEventListener("click", async () => {
+    if (!confirm("Отменить забег и вернуть ставки?")) return;
+    setStatus("Отмена забега…");
+    try {
+      const data = await api("POST", "/api/races/cancel");
+      renderRaces(data);
+      stopRacesPoll();
+      setStatus("Забег отменён", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -508,6 +737,8 @@
       if (id === "queue") loadQueue();
       if (id === "roulette") loadRoulette(false);
       else stopRoulettePoll();
+      if (id === "races") loadRaces(false);
+      else stopRacesPoll();
     });
   });
 

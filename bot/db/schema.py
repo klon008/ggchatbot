@@ -84,9 +84,13 @@ CREATE TABLE IF NOT EXISTS dice_cooldowns (
     last_time REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS minigames_bank (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    bank INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS roulette_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    bank INTEGER NOT NULL DEFAULT 0,
     auto_enabled INTEGER NOT NULL DEFAULT 1,
     state TEXT NOT NULL DEFAULT 'IDLE',
     round_id INTEGER NOT NULL DEFAULT 0,
@@ -96,6 +100,46 @@ CREATE TABLE IF NOT EXISTS roulette_meta (
     collect_sec INTEGER NOT NULL DEFAULT 60,
     cooldown_sec INTEGER NOT NULL DEFAULT 180,
     last_result TEXT
+);
+
+CREATE TABLE IF NOT EXISTS races_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    auto_enabled INTEGER NOT NULL DEFAULT 1,
+    state TEXT NOT NULL DEFAULT 'IDLE',
+    round_id INTEGER NOT NULL DEFAULT 0,
+    round_opened_at REAL,
+    closes_at REAL,
+    cooldown_until REAL,
+    collect_sec INTEGER NOT NULL DEFAULT 60,
+    cooldown_sec INTEGER NOT NULL DEFAULT 180,
+    race_delay_sec INTEGER NOT NULL DEFAULT 10,
+    last_result TEXT,
+    race_progress TEXT,
+    fixed_odds TEXT
+);
+
+CREATE TABLE IF NOT EXISTS races_bets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    round_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    amount INTEGER NOT NULL,
+    horse_number INTEGER NOT NULL,
+    UNIQUE (round_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS races_lineup (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    round_id INTEGER NOT NULL,
+    horse_number INTEGER NOT NULL,
+    princess_name TEXT NOT NULL,
+    UNIQUE (round_id, horse_number)
+);
+
+CREATE TABLE IF NOT EXISTS races_princess_stats (
+    princess_name TEXT PRIMARY KEY,
+    races_count INTEGER NOT NULL DEFAULT 0,
+    wins_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS roulette_bets (
@@ -127,8 +171,15 @@ async def init_schema(
         "VALUES (1, NULL, NULL, 1)"
     )
     await conn.execute(
-        "INSERT OR IGNORE INTO roulette_meta (id, bank, auto_enabled, state, round_id, collect_sec, cooldown_sec) "
-        "VALUES (1, 50000, 1, 'IDLE', 0, 60, 180)"
+        "INSERT OR IGNORE INTO minigames_bank (id, bank) VALUES (1, 50000)"
+    )
+    await conn.execute(
+        "INSERT OR IGNORE INTO roulette_meta (id, auto_enabled, state, round_id, collect_sec, cooldown_sec) "
+        "VALUES (1, 1, 'IDLE', 0, 60, 180)"
+    )
+    await conn.execute(
+        "INSERT OR IGNORE INTO races_meta (id, auto_enabled, state, round_id, collect_sec, cooldown_sec, race_delay_sec) "
+        "VALUES (1, 1, 'IDLE', 0, 60, 180, 10)"
     )
     from .migrate import run_migrations
 

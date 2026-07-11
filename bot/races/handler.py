@@ -1,4 +1,4 @@
-"""Обработчик команд !рулетка."""
+"""Обработчик команд !скачки."""
 
 from __future__ import annotations
 
@@ -12,17 +12,17 @@ from bot.goodgame import ChatMessage
 from . import bets
 from .round import RoundManager
 
-log = logging.getLogger("roulette")
+log = logging.getLogger("races")
 
 ReplyFn = Callable[[str], Awaitable[None]]
 
-_ROULETTE_CMD = "!рулетка"
-_ADMIN_BANK_CMD = "!рулетка_банк"
-_ADMIN_TOPUP_CMD = "!рулетка_пополнить"
-_ADMIN_RESET_CMD = "!рулетка_сброс"
+_RACES_CMD = "!скачки"
+_ADMIN_BANK_CMD = "!скачки_банк"
+_ADMIN_TOPUP_CMD = "!скачки_пополнить"
+_ADMIN_RESET_CMD = "!скачки_сброс"
 
 
-class RouletteHandler:
+class RacesHandler:
     def __init__(self, db: Database, admin_user_id: str) -> None:
         self._db = db
         self.admin_user_id = str(admin_user_id)
@@ -31,7 +31,7 @@ class RouletteHandler:
 
     async def start(self) -> None:
         await self.rounds.start()
-        log.info("Roulette модуль запущен.")
+        log.info("Races модуль запущен.")
 
     async def close(self) -> None:
         await self.rounds.close()
@@ -49,14 +49,19 @@ class RouletteHandler:
     async def set_auto_enabled(self, enabled: bool) -> None:
         await self.rounds.set_auto_enabled(enabled)
 
-    async def set_timers(self, collect_sec: int, cooldown_sec: int) -> None:
-        await self.rounds.set_timers(collect_sec, cooldown_sec)
+    async def set_timers(
+        self,
+        collect_sec: int,
+        cooldown_sec: int,
+        race_delay_sec: Optional[int] = None,
+    ) -> None:
+        await self.rounds.set_timers(collect_sec, cooldown_sec, race_delay_sec)
 
     async def admin_open(self) -> None:
         await self.rounds.admin_open()
 
-    async def admin_spin(self) -> None:
-        await self.rounds.admin_spin()
+    async def admin_start(self) -> None:
+        await self.rounds.admin_start()
 
     async def admin_cancel(self) -> None:
         await self.rounds.admin_cancel()
@@ -71,7 +76,7 @@ class RouletteHandler:
         text = msg.text.strip()
         lower = text.lower()
 
-        if lower == "!рулетка правила":
+        if lower == "!скачки правила":
             await self._say(bets.RULES_TEXT)
             return True
 
@@ -89,7 +94,7 @@ class RouletteHandler:
                 return False
             parts = text.split(maxsplit=1)
             if len(parts) < 2 or not parts[1].strip().isdigit():
-                await self._say("Формат: !рулетка_пополнить <сумма>")
+                await self._say("Формат: !скачки_пополнить <сумма>")
                 return True
             amount = int(parts[1].strip())
             if amount <= 0:
@@ -106,14 +111,17 @@ class RouletteHandler:
             await self._say(f"Казна сброшена: {new_bank} баллов.")
             return True
 
-        if not lower.startswith(_ROULETTE_CMD):
+        if lower == "!скачки":
+            err = await self.rounds.open_from_chat(msg.user_name)
+            if err:
+                await self._say(f"{msg.user_name}, {err}")
+            return True
+
+        if not lower.startswith(_RACES_CMD):
             return False
 
         parsed = bets.parse_bet_command(text)
         if isinstance(parsed, bets.ParseError):
-            if parsed.message == "__rules__":
-                await self._say(bets.RULES_TEXT)
-                return True
             await self._say(f"{msg.user_name}, {parsed.message}")
             return True
 
@@ -129,4 +137,4 @@ class RouletteHandler:
         if self._reply is not None:
             await self._reply(text)
         else:
-            log.info("roulette (no reply): %s", text)
+            log.info("races (no reply): %s", text)

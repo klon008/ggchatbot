@@ -19,10 +19,11 @@ from bot.web.api import (
     parse_user_name,
     read_json,
 )
-from bot.web.static import serve_obs_file
+from bot.web.static import serve_obs_asset, serve_obs_file
 
 if TYPE_CHECKING:
     from bot.economy.points import PointsStore
+    from bot.races.handler import RacesHandler
     from bot.roulette.handler import RouletteHandler
     from bot.song_request.handler import SongRequestHandler
     from bot.song_request.queue import QueueManager
@@ -39,11 +40,13 @@ class AdminRoutes:
         queue: "QueueManager",
         sr_handler: "SongRequestHandler",
         roulette_handler: "RouletteHandler",
+        races_handler: "RacesHandler",
     ) -> None:
         self._db = db
         self._queue = queue
         self._sr = sr_handler
         self._roulette = roulette_handler
+        self._races = races_handler
         self._fetch_viewers: Optional[ViewersFetchFn] = None
         self._points: Optional["PointsStore"] = None
 
@@ -84,6 +87,15 @@ class AdminRoutes:
                 web.post("/api/roulette/cancel", self._api_roulette_cancel),
                 web.get("/roulette.html", self._handle_roulette_html),
                 web.get("/roulette.js", self._handle_roulette_js),
+                web.get("/api/races", self._api_races_get),
+                web.put("/api/races", self._api_races_put),
+                web.post("/api/races/open", self._api_races_open),
+                web.post("/api/races/start", self._api_races_start),
+                web.post("/api/races/bank", self._api_races_bank),
+                web.post("/api/races/cancel", self._api_races_cancel),
+                web.get("/races.html", self._handle_races_html),
+                web.get("/races.js", self._handle_races_js),
+                web.get("/assets/{path:.*}", self._handle_assets),
             ]
         )
 
@@ -98,6 +110,15 @@ class AdminRoutes:
 
     async def _handle_roulette_js(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("roulette.js", "application/javascript; charset=utf-8")
+
+    async def _handle_races_html(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("races.html", "text/html; charset=utf-8")
+
+    async def _handle_races_js(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("races.js", "application/javascript; charset=utf-8")
+
+    async def _handle_assets(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_asset(request.match_info["path"])
 
     async def _api_points_list(self, request: web.Request) -> web.Response:
         try:
@@ -304,3 +325,76 @@ class AdminRoutes:
                 return error_response("Нет открытого раунда для отмены", status=409)
             raise
         return json_response(await self._roulette.get_status())
+
+    async def _api_races_get(self, request: web.Request) -> web.Response:
+        return json_response(await self._races.get_status())
+
+    async def _api_races_put(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        if "auto_enabled" in data:
+            if not isinstance(data["auto_enabled"], bool):
+                return error_response("auto_enabled должен быть true или false")
+            await self._races.set_auto_enabled(data["auto_enabled"])
+        collect_sec = data.get("collect_sec")
+        cooldown_sec = data.get("cooldown_sec")
+        race_delay_sec = data.get("race_delay_sec")
+        if collect_sec is not None or cooldown_sec is not None or race_delay_sec is not None:
+            status = await self._races.get_status()
+            new_collect = collect_sec if collect_sec is not None else status["collect_sec"]
+            new_cooldown = cooldown_sec if cooldown_sec is not None else status["cooldown_sec"]
+            new_delay = race_delay_sec if race_delay_sec is not None else status["race_delay_sec"]
+            if not isinstance(new_collect, int) or new_collect < 10:
+                return error_response("collect_sec должен быть целым числом >= 10")
+            if not isinstance(new_cooldown, int) or new_cooldown < 10:
+                return error_response("cooldown_sec должен быть целым числом >= 10")
+            if not isinstance(new_delay, int) or new_delay < 0:
+                return error_response("race_delay_sec должен быть целым числом >= 0")
+            await self._races.set_timers(new_collect, new_cooldown, new_delay)
+        return json_response(await self._races.get_status())
+
+    async def _api_races_open(self, request: web.Request) -> web.Response:
+        try:
+            await self._races.admin_open()
+        except RuntimeError as exc:
+            code = str(exc)
+            messages = {
+                "auto_mode": "Доступно только при выключенных авто-скачках",
+                "not_idle": "Забег уже открыт или идёт раунд",
+                "bank_low": "В казне недостаточно баллов для старта",
+                "cooldown": "Скачки на перезарядке",
+            }
+            return error_response(messages.get(code, code), status=409)
+        return json_response(await self._races.get_status())
+
+    async def _api_races_start(self, request: web.Request) -> web.Response:
+        try:
+            await self._races.admin_start()
+        except RuntimeError as exc:
+            if str(exc) == "not_open":
+                return error_response("Ставки не открыты", status=409)
+            raise
+        return json_response(await self._races.get_status())
+
+    async def _api_races_bank(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        amount = data.get("amount")
+        if not isinstance(amount, int) or amount <= 0:
+            return error_response("amount должен быть целым числом > 0")
+        try:
+            await self._races.admin_top_up_bank(amount)
+        except ValueError:
+            return error_response("amount должен быть целым числом > 0")
+        return json_response(await self._races.get_status())
+
+    async def _api_races_cancel(self, request: web.Request) -> web.Response:
+        try:
+            await self._races.admin_cancel()
+        except RuntimeError as exc:
+            if str(exc) == "not_open":
+                return error_response("Нет открытого забега для отмены", status=409)
+            raise
+        return json_response(await self._races.get_status())

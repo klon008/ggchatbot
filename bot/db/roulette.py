@@ -11,7 +11,6 @@ from bot.db import Database
 
 @dataclass
 class RouletteMeta:
-    bank: int
     auto_enabled: bool
     state: str
     round_id: int
@@ -42,7 +41,6 @@ def _row_to_meta(row) -> RouletteMeta:
         except json.JSONDecodeError:
             last_result = None
     return RouletteMeta(
-        bank=int(row["bank"]),
         auto_enabled=bool(row["auto_enabled"]),
         state=str(row["state"]),
         round_id=int(row["round_id"]),
@@ -83,19 +81,6 @@ async def update_meta(db: Database, **fields: Any) -> None:
     cols = ", ".join(f"{k} = ?" for k in fields)
     params = tuple(fields.values())
     await db.execute(f"UPDATE roulette_meta SET {cols} WHERE id = 1", params)
-
-
-async def add_bank(db: Database, amount: int) -> int:
-    await db.execute(
-        "UPDATE roulette_meta SET bank = bank + ? WHERE id = 1",
-        (amount,),
-    )
-    meta = await get_meta(db)
-    return meta.bank
-
-
-async def set_bank(db: Database, amount: int) -> None:
-    await db.execute("UPDATE roulette_meta SET bank = ? WHERE id = 1", (amount,))
 
 
 async def has_bet(db: Database, round_id: int, user_id: str) -> bool:

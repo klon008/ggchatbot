@@ -184,6 +184,7 @@
       <button type="button" class="tab active" data-tab="points">Принцессы (points)</button>
       <button type="button" class="tab" data-tab="queue">Очередь</button>
       <button type="button" class="tab" data-tab="roulette">Рулетка</button>
+      <button type="button" class="tab" data-tab="races">Скачки</button>
     </div>
 
     <section id="panel-points" class="panel active">
@@ -273,7 +274,7 @@
       <div class="card">
         <h3>Статус</h3>
         <p id="rouletteStatusLine">—</p>
-        <p>Банк рулетки: <strong id="rouletteBank">—</strong></p>
+        <p>Казна мини-игр: <strong id="rouletteBank">—</strong></p>
         <div class="toolbar">
           <button type="button" id="rouletteOpen" class="primary">Открыть ставки</button>
           <button type="button" id="rouletteSpin" class="primary">Крутить</button>
@@ -302,6 +303,102 @@
       <div class="card">
         <h3>Последний спин</h3>
         <div id="rouletteLastResult" class="empty">—</div>
+      </div>
+    </section>
+
+    <section id="panel-races" class="panel">
+      <div class="card">
+        <h3>Настройки</h3>
+        <div class="toolbar">
+          <label>
+            <input type="checkbox" id="racesAuto" checked />
+            Авто-скачки
+          </label>
+          <label>
+            Сбор (сек)
+            <input type="number" id="racesCollectSec" min="10" value="60" />
+          </label>
+          <label>
+            Пауза перед забегом (сек)
+            <input type="number" id="racesRaceDelaySec" min="0" value="10" />
+          </label>
+          <label>
+            Cooldown (сек)
+            <input type="number" id="racesCooldownSec" min="10" value="180" />
+          </label>
+          <button type="button" id="racesSaveSettings" class="primary">Сохранить</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Статус</h3>
+        <p id="racesStatusLine">—</p>
+        <p>Казна мини-игр: <strong id="racesBank">—</strong></p>
+        <div class="toolbar">
+          <button type="button" id="racesOpen" class="primary">Открыть ставки</button>
+          <button type="button" id="racesStart" class="primary">Старт забега</button>
+          <button type="button" id="racesTopUp">Пополнить банк</button>
+          <button type="button" id="racesCancel" class="danger">Отменить раунд</button>
+          <button type="button" id="racesRefresh">Обновить</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Состав раунда</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>№</th>
+              <th>принцесса</th>
+              <th>коэфф.</th>
+              <th>ставки</th>
+            </tr>
+          </thead>
+          <tbody id="racesLineupBody">
+            <tr><td colspan="4" class="empty">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Ставки текущего раунда</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ник</th>
+              <th>№</th>
+              <th>сумма</th>
+            </tr>
+          </thead>
+          <tbody id="racesBetsBody">
+            <tr><td colspan="3" class="empty">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Последний забег</h3>
+        <div id="racesLastResult" class="empty">—</div>
+      </div>
+
+      <div class="card">
+        <h3>Статистика принцесс</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          Справочник всех участниц (не привязано к текущему забегу). Только просмотр.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>принцесса</th>
+              <th>забегов</th>
+              <th>побед</th>
+              <th>% побед</th>
+            </tr>
+          </thead>
+          <tbody id="racesPrincessStatsBody">
+            <tr><td colspan="4" class="empty">—</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
   </div>
