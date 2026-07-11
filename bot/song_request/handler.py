@@ -11,9 +11,10 @@ from bot.db import queue as queue_db
 from bot.goodgame import ChatMessage
 from bot.princess.economy import pluralize_princess
 from bot.princess.storage import PointsStore
+from bot.web import LocalWebServer
 from config import Config
 
-from .obs_server import ObsServer
+from bot.web.routes.player import PlayerRoutes
 from .queue import QueueManager, Track
 from .settings import SR_COST
 from .youtube import canonical_url, validate_request
@@ -39,18 +40,13 @@ _YT_ERROR_LABELS: dict[int | str, str] = {
 
 
 class SongRequestHandler:
-    def __init__(self, cfg: Config, db: Database) -> None:
+    def __init__(self, cfg: Config, db: Database, web: LocalWebServer) -> None:
         self.cfg = cfg
         self._db = db
         self.queue = QueueManager(db, max_size=cfg.max_queue_size)
-        self.obs = ObsServer(
-            cfg.obs_host,
-            cfg.obs_port,
-            on_status=self._on_obs_status,
-            db=db,
-            queue=self.queue,
-            sr_handler=self,
-        )
+        self.player = PlayerRoutes(on_status=self._on_obs_status)
+        self.player.register(web.app)
+        self.obs = self.player
         self._advance_lock = asyncio.Lock()
         self._cooldowns: dict[str, float] = {}
         self._watchdog: Optional[asyncio.Task] = None
@@ -63,13 +59,12 @@ class SongRequestHandler:
     async def start(self) -> None:
         await self.queue.load()
         self._orders_enabled = await queue_db.get_orders_enabled(self._db)
-        await self.obs.start()
         log.info("Song-request модуль запущен (заказы: %s).", "вкл" if self._orders_enabled else "выкл")
 
     async def close(self) -> None:
         if self._watchdog:
             self._watchdog.cancel()
-        await self.obs.stop()
+        await self.player.close()
 
     def bind_reply(self, reply: ReplyFn) -> None:
         self._reply = reply

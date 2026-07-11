@@ -94,10 +94,11 @@ async def main() -> int:
     async def fake_online_users() -> list[dict]:
         return [{"id": "smoke-sync-user", "name": "SyncedUser"}]
 
-    bot.sr.obs.bind_admin_user_names(fake_online_users, bot.princess.points)
+    bot.bind_admin_user_names(fake_online_users, bot.princess.points)
     await bot.princess.points.load()
     await bot.queue.clear()
     await bot.sr.set_orders_enabled(True)
+    await bot.web.start()
 
     base = f"http://{cfg.obs_host}:{cfg.obs_port}"
     ok = True
@@ -378,6 +379,7 @@ async def main() -> int:
         bot._watchdog.cancel()
     await bot.queue.clear()
     await bot.sr.close()
+    await bot.web.stop()
     from bot.db.migrate import get_schema_version
     from bot.db.schema import SCHEMA_VERSION
 

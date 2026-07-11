@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Optional
 
 from bot.db import Database
+from bot.web.routes.admin import AdminRoutes
+from bot.web.routes.docs import DocsRoutes
+from bot.web import LocalWebServer
 from config import Config
 
 from .goodgame import GoodGameClient
@@ -41,12 +44,16 @@ class StreamBot:
     def __init__(self, cfg: Config, db_path: Optional[Path] = None) -> None:
         self.cfg = cfg
         self.db = Database(db_path)
+        self.web = LocalWebServer(cfg.obs_host, cfg.obs_port)
         self.princess = PrincessHandler(
             db=self.db,
             admin_user_id=cfg.gg_admin_user_id,
             bot_user_id=cfg.gg_user_id,
         )
-        self.sr = SongRequestHandler(cfg, db=self.db)
+        self.sr = SongRequestHandler(cfg, db=self.db, web=self.web)
+        DocsRoutes().register(self.web.app)
+        self._admin = AdminRoutes(self.db, self.sr.queue, self.sr)
+        self._admin.register(self.web.app)
         self.gg = GoodGameClient(
             login=cfg.gg_login,
             password=cfg.gg_password,
@@ -58,7 +65,11 @@ class StreamBot:
     async def run(self) -> None:
         await self.db.open()
         await self.sr.start()
-        self.sr.obs.bind_admin_user_names(
+        await self.web.start()
+        log.info("OBS-плеер: http://%s:%d/player.html", self.cfg.obs_host, self.cfg.obs_port)
+        log.info("Admin-панель: http://%s:%d/admin.html", self.cfg.obs_host, self.cfg.obs_port)
+        log.info("Логика команд: http://%s:%d/commands.html", self.cfg.obs_host, self.cfg.obs_port)
+        self._admin.bind_user_names(
             self.gg.get_users_list,
             self.princess.points,
         )
@@ -72,8 +83,12 @@ class StreamBot:
     async def close(self) -> None:
         await self.princess.close()
         await self.sr.close()
+        await self.web.stop()
         await self.gg.close()
         await self.db.close()
+
+    def bind_admin_user_names(self, fetch_viewers, points) -> None:
+        self._admin.bind_user_names(fetch_viewers, points)
 
     async def _on_chat_message(self, msg) -> None:
         cmd = msg.text.strip().split(maxsplit=1)[0].lower()

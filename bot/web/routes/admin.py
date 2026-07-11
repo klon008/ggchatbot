@@ -1,18 +1,25 @@
-"""Маршруты админ-панели (points CRUD, queue delete) для общего OBS HTTP-сервера."""
+"""Маршруты админ-панели (points CRUD, queue delete) для локального HTTP-сервера."""
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from dataclasses import asdict
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 from aiohttp import web
 
 from bot.db import Database
 from bot.db import points as points_db
 from bot.db import users as users_db
+from bot.web.api import (
+    error_response,
+    json_response,
+    parse_balance,
+    parse_user_id,
+    parse_user_name,
+    read_json,
+)
+from bot.web.static import serve_obs_file
 
 if TYPE_CHECKING:
     from bot.princess.storage import PointsStore
@@ -21,12 +28,10 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("admin")
 
-OBS_DIR = Path(__file__).resolve().parent.parent / "obs"
-
 ViewersFetchFn = Callable[[], Awaitable[list[dict]]]
 
 
-class AdminServer:
+class AdminRoutes:
     def __init__(
         self,
         db: Database,
@@ -72,154 +77,95 @@ class AdminServer:
         )
 
     async def _handle_index(self, request: web.Request) -> web.StreamResponse:
-        return await self._serve_file("admin.html", "text/html; charset=utf-8")
+        return await serve_obs_file("admin.html", "text/html; charset=utf-8")
 
     async def _handle_admin_js(self, request: web.Request) -> web.StreamResponse:
-        return await self._serve_file("admin.js", "application/javascript; charset=utf-8")
-
-    async def _serve_file(self, name: str, content_type: str) -> web.StreamResponse:
-        path = OBS_DIR / name
-        if not path.exists():
-            return web.Response(status=404, text=f"{name} not found")
-        return web.Response(
-            body=path.read_bytes(),
-            content_type=content_type.split(";")[0],
-            charset="utf-8",
-        )
-
-    @staticmethod
-    def _json_response(data: Any, *, status: int = 200) -> web.Response:
-        return web.Response(
-            text=json.dumps(data, ensure_ascii=False),
-            content_type="application/json",
-            charset="utf-8",
-            status=status,
-        )
-
-    @staticmethod
-    def _error(message: str, *, status: int = 400) -> web.Response:
-        return AdminServer._json_response({"error": message}, status=status)
-
-    async def _read_json(self, request: web.Request) -> Optional[dict]:
-        try:
-            data = await request.json()
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(data, dict):
-            return None
-        return data
-
-    @staticmethod
-    def _parse_balance(raw: Any) -> Optional[int]:
-        try:
-            value = int(raw)
-        except (TypeError, ValueError):
-            return None
-        if value < 0:
-            return None
-        return value
-
-    @staticmethod
-    def _parse_user_id(raw: Any) -> Optional[str]:
-        if not isinstance(raw, str):
-            return None
-        uid = raw.strip()
-        if not uid:
-            return None
-        return uid
-
-    @staticmethod
-    def _parse_user_name(raw: Any) -> Optional[str]:
-        if raw is None:
-            return None
-        if not isinstance(raw, str):
-            return None
-        return raw.strip()
+        return await serve_obs_file("admin.js", "application/javascript; charset=utf-8")
 
     async def _api_points_list(self, request: web.Request) -> web.Response:
         try:
             points = self._require_points()
         except RuntimeError:
-            return self._error("PointsStore недоступен", status=503)
+            return error_response("PointsStore недоступен", status=503)
         items = await points.list_entries()
-        return self._json_response({"items": items})
+        return json_response({"items": items})
 
     async def _api_points_get(self, request: web.Request) -> web.Response:
         try:
             points = self._require_points()
         except RuntimeError:
-            return self._error("PointsStore недоступен", status=503)
+            return error_response("PointsStore недоступен", status=503)
         user_id = request.match_info["user_id"]
         entry = await points.get_user_entry(user_id)
         if entry is None:
-            return self._error("Пользователь не найден", status=404)
-        return self._json_response(entry)
+            return error_response("Пользователь не найден", status=404)
+        return json_response(entry)
 
     async def _api_points_create(self, request: web.Request) -> web.Response:
         try:
             points = self._require_points()
         except RuntimeError:
-            return self._error("PointsStore недоступен", status=503)
-        data = await self._read_json(request)
+            return error_response("PointsStore недоступен", status=503)
+        data = await read_json(request)
         if data is None:
-            return self._error("Некорректный JSON")
-        user_id = self._parse_user_id(data.get("user_id"))
-        balance = self._parse_balance(data.get("balance", 0))
-        user_name = self._parse_user_name(data.get("user_name"))
+            return error_response("Некорректный JSON")
+        user_id = parse_user_id(data.get("user_id"))
+        balance = parse_balance(data.get("balance", 0))
+        user_name = parse_user_name(data.get("user_name"))
         if user_id is None:
-            return self._error("user_id обязателен")
+            return error_response("user_id обязателен")
         if balance is None:
-            return self._error("balance должен быть целым числом >= 0")
+            return error_response("balance должен быть целым числом >= 0")
         existing = await points.get_user_entry(user_id)
         if existing is not None:
-            return self._error("Пользователь уже существует", status=409)
+            return error_response("Пользователь уже существует", status=409)
         await points.set_balance(user_id, balance)
         if user_name:
             await users_db.touch_user_name(self._db, user_id, user_name)
             points.mark_known(user_id)
         entry = await points.get_user_entry(user_id)
         assert entry is not None
-        return self._json_response(entry, status=201)
+        return json_response(entry, status=201)
 
     async def _api_points_update(self, request: web.Request) -> web.Response:
         try:
             points = self._require_points()
         except RuntimeError:
-            return self._error("PointsStore недоступен", status=503)
+            return error_response("PointsStore недоступен", status=503)
         user_id = request.match_info["user_id"]
-        data = await self._read_json(request)
+        data = await read_json(request)
         if data is None:
-            return self._error("Некорректный JSON")
-        balance = self._parse_balance(data.get("balance"))
+            return error_response("Некорректный JSON")
+        balance = parse_balance(data.get("balance"))
         if balance is None:
-            return self._error("balance должен быть целым числом >= 0")
+            return error_response("balance должен быть целым числом >= 0")
         existing = await points.get_user_entry(user_id)
         if existing is None:
-            return self._error("Пользователь не найден", status=404)
+            return error_response("Пользователь не найден", status=404)
         await points.set_balance(user_id, balance)
         entry = await points.get_user_entry(user_id)
         assert entry is not None
-        return self._json_response(entry)
+        return json_response(entry)
 
     async def _api_points_delete(self, request: web.Request) -> web.Response:
         try:
             points = self._require_points()
         except RuntimeError:
-            return self._error("PointsStore недоступен", status=503)
+            return error_response("PointsStore недоступен", status=503)
         user_id = request.match_info["user_id"]
         existing = await points.get_user_entry(user_id)
         if existing is None:
-            return self._error("Пользователь не найден", status=404)
+            return error_response("Пользователь не найден", status=404)
         points.clear_pending(user_id)
         deleted = await points_db.delete_user(self._db, user_id)
         if not deleted:
-            return self._error("Пользователь не найден", status=404)
-        return self._json_response({"deleted": True, "user_id": user_id})
+            return error_response("Пользователь не найден", status=404)
+        return json_response({"deleted": True, "user_id": user_id})
 
     async def _api_queue_get(self, request: web.Request) -> web.Response:
         playing = asdict(self._queue.current) if self._queue.current else None
         waiting = self._queue.list_waiting()
-        return self._json_response({
+        return json_response({
             "playing": playing,
             "waiting": waiting,
             "paused": self._sr.player_paused,
@@ -230,45 +176,45 @@ class AdminServer:
             paused = await self._sr.toggle_pause()
         except RuntimeError as exc:
             if str(exc) == "nothing_playing":
-                return self._error("Сейчас ничего не играет", status=409)
+                return error_response("Сейчас ничего не играет", status=409)
             raise
-        return self._json_response({"paused": paused})
+        return json_response({"paused": paused})
 
     async def _api_queue_delete(self, request: web.Request) -> web.Response:
         try:
             index = int(request.match_info["index"])
         except ValueError:
-            return self._error("index должен быть целым числом")
+            return error_response("index должен быть целым числом")
         removed = await self._queue.remove_waiting(index)
         if not removed:
-            return self._error("Трек не найден", status=404)
-        return self._json_response({"deleted": True, "index": index})
+            return error_response("Трек не найден", status=404)
+        return json_response({"deleted": True, "index": index})
 
     async def _api_sr_get(self, request: web.Request) -> web.Response:
-        return self._json_response({"orders_enabled": self._sr.orders_enabled})
+        return json_response({"orders_enabled": self._sr.orders_enabled})
 
     async def _api_sr_put(self, request: web.Request) -> web.Response:
-        data = await self._read_json(request)
+        data = await read_json(request)
         if data is None:
-            return self._error("Некорректный JSON")
+            return error_response("Некорректный JSON")
         raw = data.get("orders_enabled")
         if not isinstance(raw, bool):
-            return self._error("orders_enabled должен быть true или false")
+            return error_response("orders_enabled должен быть true или false")
         await self._sr.set_orders_enabled(raw)
-        return self._json_response({"orders_enabled": self._sr.orders_enabled})
+        return json_response({"orders_enabled": self._sr.orders_enabled})
 
     async def _api_user_names_sync(self, request: web.Request) -> web.Response:
         if self._fetch_viewers is None or self._points is None:
-            return self._error("Синхронизация ников недоступна", status=503)
+            return error_response("Синхронизация ников недоступна", status=503)
         try:
             users = await self._fetch_viewers()
         except ConnectionError:
-            return self._error("Бот не подключён к чату GoodGame", status=503)
+            return error_response("Бот не подключён к чату GoodGame", status=503)
         except RuntimeError as exc:
-            return self._error(str(exc), status=409)
+            return error_response(str(exc), status=409)
         except asyncio.TimeoutError:
-            return self._error("Таймаут запроса списка зрителей", status=504)
+            return error_response("Таймаут запроса списка зрителей", status=504)
 
         updated, total = await self._points.sync_online_names(users)
         log.info("Синхронизация ников из админки: %d из %d онлайн", updated, total)
-        return self._json_response({"updated": updated, "total_online": total})
+        return json_response({"updated": updated, "total_online": total})
