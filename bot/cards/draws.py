@@ -175,20 +175,11 @@ async def open_booster(
 
 
 def format_open_chat(result: OpenResult) -> str:
-    lines = [
-        f"Тираж «{result.draw_name}» · Бустер «{result.booster_name}»",
-    ]
+    """Короткий однострочный отчёт для чата GoodGame."""
+    bits: list[str] = []
     for roll in result.rolls:
         label = RARITY_LABELS.get(roll.rarity, roll.rarity)
-        if roll.is_duplicate:
-            lines.append(
-                f"  ✦ {roll.card_name} ({label}) — дубль, возврат {roll.refund} балла"
-            )
-        else:
-            lines.append(f"  ✦ {roll.card_name} ({label}) — новая!")
-    lines.append(f"Итого: {result.new_count} новых. Альбом: {result.album_count} карт.")
-    if result.series_progress:
-        s = result.series_progress[0]
-        lines.append(f"Серия «{s['name']}»: {s['owned']} из {s['total']}.")
-    lines.append("!альбом — ссылка на альбом.")
-    return "\n".join(lines)
+        tag = "дубль" if roll.is_duplicate else "новая"
+        bits.append(f"{roll.card_name} ({label}) {tag}")
+    cards = " · ".join(bits)
+    return f"{result.draw_name}: {cards} · !альбом"

@@ -73,20 +73,20 @@ class CardsHandler:
             user_name=msg.user_name,
         )
         if err:
-            await self._say(f"@{msg.user_name}, {err}")
+            await self._say(f"{msg.user_name}, {err}")
             return
         assert result is not None
-        await self._say(f"@{msg.user_name} · {format_open_chat(result)}")
+        await self._say(f"{msg.user_name}, {format_open_chat(result)}")
 
     async def _cmd_booster_info(self, msg: ChatMessage) -> None:
         draw = await cards_db.get_active_draw(db=self._db)
         if draw is None:
-            await self._say(f"@{msg.user_name}, активного тиража нет.")
+            await self._say(f"{msg.user_name}, активного тиража нет.")
             return
         promo = await cards_db.get_booster_promo_url(self._db, draw.booster_id)
         text = (
-            f"@{msg.user_name} · {draw.name} · Бустер «{draw.booster_name}» · "
-            f"{draw.cost_points} баллов · {draw.cards_per_open} карт за открытие."
+            f"{msg.user_name}, {draw.name} · «{draw.booster_name}» · "
+            f"{draw.cost_points} баллов · {draw.cards_per_open} карт."
         )
         if promo:
             text += f" Promo (OBS): {promo}"
@@ -94,13 +94,13 @@ class CardsHandler:
 
     async def _cmd_album(self, msg: ChatMessage) -> None:
         if not self._link_secret:
-            await self._say(f"@{msg.user_name}, альбом пока не настроен (нет ALBUM_LINK_SECRET).")
+            await self._say(f"{msg.user_name}, альбом пока не настроен (нет ALBUM_LINK_SECRET).")
             return
 
         api_url = self._clo.public_url
         if not api_url:
             await self._say(
-                f"@{msg.user_name}, альбом доступен на стриме (туннель не поднят)."
+                f"{msg.user_name}, альбом доступен на стриме (туннель не поднят)."
             )
             return
 
@@ -110,9 +110,9 @@ class CardsHandler:
         progress_parts = []
         if series:
             s = series[0]
-            progress_parts.append(f"серия «{s['name']}»: {s['owned']} из {s['total']}")
+            progress_parts.append(f"{s['owned']}/{s['total']}")
         progress_parts.append(
-            f"Коллекция: {collection['owned']} из {collection['total']}"
+            f"коллекция {collection['owned']}/{collection['total']}"
         )
         progress = " · ".join(progress_parts)
 
@@ -122,9 +122,7 @@ class CardsHandler:
             nick=msg.user_name,
             api_base_url=api_url,
         )
-        await self._say(
-            f"@{msg.user_name} · Альбом · {progress}\n{url}"
-        )
+        await self._say(f"{msg.user_name}, альбом · {progress}\n{url}")
 
     async def _say(self, text: str) -> None:
         if self._reply is None:
