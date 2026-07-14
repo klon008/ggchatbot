@@ -308,18 +308,26 @@ else {
     Write-Warn ".venv не найден - запустите install.cmd для полной установки."
 }
 
-# Синхронизация артов и описаний карт с GitHub (SITE_BASE_URL → …/src/imports + cardDetails.json)
+# Синхронизация артов и описаний карт (CARD_ASSETS_REPO_URL / SITE_BASE_URL)
 $syncCards = Join-Path $projectDir "scripts\sync-card-assets.ps1"
+$cardCacheDir = Join-Path $projectDir "data\card-assets-repo"
 if (Test-Path -LiteralPath $syncCards) {
     Write-Step "Синхронизация карт (арты + описания)"
     try {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $syncCards -ProjectDir $projectDir
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "Синхронизация карт завершилась с ошибкой (код $LASTEXITCODE) — админка может без превью/лора."
+            Write-Warn "Если в логе repository not found / git fetch не удался — возможно устаревший кэш репозитория."
+            Write-Warn "Попробуйте удалить папку:"
+            Write-Warn "  $cardCacheDir"
+            Write-Warn "и снова запустить update.cmd (кэш создастся заново; баллы и БД бота не затронуты)."
         }
     }
     catch {
         Write-Warn "Синхронизация карт не удалась: $($_.Exception.Message)"
+        Write-Warn "Если ошибка про git / repository not found — удалите кэш и повторите update:"
+        Write-Warn "  $cardCacheDir"
+        Write-Warn "затем снова update.cmd."
     }
 }
 else {

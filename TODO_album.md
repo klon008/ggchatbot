@@ -106,7 +106,7 @@ CORS + rate limit (60 req/min по IP).
 
 ```
 ALBUM_LINK_SECRET=
-SITE_BASE_URL=https://dartvalkkiprincess.github.io/princtascdwk
+SITE_BASE_URL=https://klon008.github.io/princtascdwk
 CLO_TOKEN=               # обязателен для автозапуска clo
 # CLO_EXE_PATH=          # опц.; default tools/clo/clo.exe
 CLO_PUBLIC_URL=          # опц., только тесты без clo

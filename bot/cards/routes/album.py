@@ -151,4 +151,4 @@ def parse_cors_origins(site_base_url: str) -> tuple[str, ...]:
     parsed = urlparse(site_base_url)
     if parsed.scheme and parsed.netloc:
         return (f"{parsed.scheme}://{parsed.netloc}",)
-    return ("https://dartvalkkiprincess.github.io",)
+    return ("https://klon008.github.io",)

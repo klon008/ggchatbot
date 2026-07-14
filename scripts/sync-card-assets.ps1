@@ -4,9 +4,13 @@
     Синхронизация артов карт и лора (cardDetails.json) с репозитория сайта.
 
 .DESCRIPTION
-    Источник по умолчанию выводится из SITE_BASE_URL в .env:
+    Источник по умолчанию:
 
-      https://USER.github.io/REPO/  →  https://github.com/USER/REPO
+      CARD_ASSETS_REPO_URL в .env  →  https://github.com/OWNER/REPO.git
+      (если пусто — вывод из SITE_BASE_URL:
+       https://USER.github.io/REPO/  →  https://github.com/USER/REPO.git)
+
+      Канон проекта: SITE_BASE_URL=https://klon008.github.io/princtascdwk/
       арты:   src/imports/*.webp (+ card-back*.svg)
       лор:    src/app/cardDetails.json
 
@@ -77,6 +81,15 @@ function Read-DotEnvValue {
     return ""
 }
 
+function Normalize-GitHubRepoUrl {
+    param([Parameter(Mandatory = $true)][string]$Raw)
+    $u = $Raw.Trim().TrimEnd("/")
+    if ($u -match '^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$') {
+        return "https://github.com/$($Matches[1])/$($Matches[2]).git"
+    }
+    return $null
+}
+
 function Convert-SiteBaseToGitHubRepo {
     param([Parameter(Mandatory = $true)][string]$SiteBaseUrl)
 
@@ -86,10 +99,31 @@ function Convert-SiteBaseToGitHubRepo {
         $repo = $Matches[2]
         return "https://github.com/$user/$repo.git"
     }
-    if ($u -match '^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$') {
-        return "https://github.com/$($Matches[1])/$($Matches[2]).git"
+    return (Normalize-GitHubRepoUrl -Raw $u)
+}
+
+function Resolve-CardAssetsRepoUrl {
+    param(
+        [Parameter(Mandatory = $true)][string]$EnvFile
+    )
+    # Явный URL репо (опционально; иначе вывод из SITE_BASE_URL).
+    $explicit = Read-DotEnvValue -Path $EnvFile -Key "CARD_ASSETS_REPO_URL"
+    if ($explicit) {
+        $norm = Normalize-GitHubRepoUrl -Raw $explicit
+        if (-not $norm) {
+            throw "CARD_ASSETS_REPO_URL='$explicit' — ожидается https://github.com/OWNER/REPO.git"
+        }
+        return @{ Url = $norm; Source = "CARD_ASSETS_REPO_URL"; SiteBase = "" }
     }
-    return $null
+    $siteBase = Read-DotEnvValue -Path $EnvFile -Key "SITE_BASE_URL"
+    if (-not $siteBase) {
+        throw "Задайте CARD_ASSETS_REPO_URL или SITE_BASE_URL в $EnvFile"
+    }
+    $derived = Convert-SiteBaseToGitHubRepo -SiteBaseUrl $siteBase
+    if (-not $derived) {
+        throw "Не удалось вывести GitHub-репо из SITE_BASE_URL='$siteBase'. Задайте CARD_ASSETS_REPO_URL=https://github.com/OWNER/REPO.git"
+    }
+    return @{ Url = $derived; Source = "SITE_BASE_URL→derived"; SiteBase = $siteBase }
 }
 
 function Ensure-Git {
@@ -285,6 +319,14 @@ function Sync-FromGitHub {
     }
     else {
         [void](Ensure-SparseCheckoutFiles -CacheDir $CacheDir)
+        # если раньше вывели репо из SITE_BASE_URL неверно — чиним remote
+        Push-Location $CacheDir
+        try {
+            [void](Invoke-Git -GitArgs @("remote", "set-url", "origin", $RepoUrl) -Quiet)
+        }
+        finally {
+            Pop-Location
+        }
         Write-Step "git pull кэша карт"
         Pull-CardCache -CacheDir $CacheDir
     }
@@ -329,14 +371,8 @@ if ($SrcImports) {
     [void](Copy-CardDetailsIntoCache -SourceFile $detailsSrc -CacheDetailsPath $cacheDetails)
 }
 else {
-    $siteBase = Read-DotEnvValue -Path $EnvFile -Key "SITE_BASE_URL"
-    if (-not $siteBase) {
-        throw "SITE_BASE_URL не задан в $EnvFile (нужен для URL репозитория карт)"
-    }
-    $repoUrl = Convert-SiteBaseToGitHubRepo -SiteBaseUrl $siteBase
-    if (-not $repoUrl) {
-        throw "Не удалось вывести GitHub-репо из SITE_BASE_URL='$siteBase'. Ожидается https://USER.github.io/REPO/"
-    }
+    $resolved = Resolve-CardAssetsRepoUrl -EnvFile $EnvFile
+    $repoUrl = $resolved.Url
     if ($repoUrl -match 'github\.com/([^/]+)/([^/.]+)') {
         $treeHint = "https://github.com/$($Matches[1])/$($Matches[2])/tree/main/src/imports"
         $jsonHint = "https://github.com/$($Matches[1])/$($Matches[2])/blob/main/src/app/cardDetails.json"
@@ -345,11 +381,14 @@ else {
         $treeHint = ""
         $jsonHint = ""
     }
-    Write-Host "SITE_BASE_URL: $siteBase"
-    Write-Host "GitHub:        $repoUrl"
+    if ($resolved.SiteBase) {
+        Write-Host "SITE_BASE_URL: $($resolved.SiteBase)"
+    }
+    Write-Host "Repo source:  $($resolved.Source)"
+    Write-Host "GitHub:       $repoUrl"
     if ($treeHint) {
-        Write-Host "Imports:       $treeHint"
-        Write-Host "Stories:       $jsonHint"
+        Write-Host "Imports:      $treeHint"
+        Write-Host "Stories:      $jsonHint"
     }
     $count = Sync-FromGitHub -RepoUrl $repoUrl -CacheDir $cache -DestDir $dest
 }

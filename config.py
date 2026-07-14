@@ -66,7 +66,7 @@ class Config:
             album_link_secret=os.getenv("ALBUM_LINK_SECRET", "").strip(),
             site_base_url=os.getenv(
                 "SITE_BASE_URL",
-                "https://dartvalkkiprincess.github.io/princtascdwk",
+                "https://klon008.github.io/princtascdwk",
             ).strip(),
             clo_exe_path=os.getenv("CLO_EXE_PATH", default_clo).strip() or default_clo,
             clo_token=os.getenv("CLO_TOKEN", "").strip(),

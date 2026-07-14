@@ -63,7 +63,8 @@ powershell -File scripts\sync-card-assets.ps1 -SrcImports "E:\Work\dartvalkkipri
 
 Скрипт вызывается и из `installer\update.ps1`. Кэш GitHub: `data/card-assets-repo` (в `.gitignore`).
 
-`SITE_BASE_URL` в `.env` (`https://USER.github.io/REPO/`) → репозиторий `https://github.com/USER/REPO` → `src/imports` + `src/app/cardDetails.json`.
+`SITE_BASE_URL` — URL GitHub Pages для ссылок `!альбом`: `https://klon008.github.io/princtascdwk/`.  
+`CARD_ASSETS_REPO_URL` — явный git-репо артов/лора (опционально; если пусто — вывод из `SITE_BASE_URL` → `https://github.com/klon008/princtascdwk.git`).
 
 ### 3.1a Описания (лор)
 
@@ -206,7 +207,8 @@ Promo: `POST /api/cards/boosters/{id}/promo` → `obs/assets/boosters/`.
 |-----|-----|------------|
 | `ALBUM_LINK_SECRET` | `.env` бота | HMAC `k` + AES `api` |
 | `VITE_ALBUM_LINK_SECRET` | GitHub Actions secret сайта (как `ALBUM_LINK_SECRET`) | расшифровка `api` на клиенте |
-| `SITE_BASE_URL` | `.env` бота | URL GitHub Pages + вывод репо артов |
+| `SITE_BASE_URL` | `.env` бота | URL GitHub Pages для `!альбом` (`https://klon008.github.io/princtascdwk/`) |
+| `CARD_ASSETS_REPO_URL` | `.env` бота | опц. git-репо для sync; иначе вывод из `SITE_BASE_URL` |
 | `CLO_TOKEN` | `.env` бота | `clo set token` перед publish |
 | `CLO_PUBLIC_URL` | опц. | тесты без clo |
 

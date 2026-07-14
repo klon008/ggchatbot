@@ -187,7 +187,7 @@ Dataclass `Config` читает переменные из `.env` (через `py
 | `USER_COOLDOWN_SEC` | `user_cooldown_sec` | Кулдаун между `!sr` от одного user (0 = выкл.) |
 | `YOUTUBE_API_KEY` | `youtube_api_key` | Заготовка под Data API (пока не используется) |
 | `ALBUM_LINK_SECRET` | `album_link_secret` | Секрет подписи `k` и шифрования `api` в ссылке `!альбом` |
-| `SITE_BASE_URL` | `site_base_url` | Базовый URL GitHub Pages (default `https://dartvalkkiprincess.github.io/princtascdwk`) |
+| `SITE_BASE_URL` | `site_base_url` | Базовый URL GitHub Pages (default `https://klon008.github.io/princtascdwk`) |
 | `CLO_EXE_PATH` | `clo_exe_path` | Путь к `clo.exe` (default `tools/clo/clo.exe`) |
 | `CLO_TOKEN` | `clo_token` | Токен CloudPub; перед publish бот делает `clo set token` |
 | `CLO_PUBLIC_URL` | `clo_public_url` | Fallback URL туннеля (тесты без clo); иначе парсится из stdout clo |
