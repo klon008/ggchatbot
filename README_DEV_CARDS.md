@@ -18,7 +18,7 @@
 | OBS Admin | `http://127.0.0.1:8765/admin.html` → вкладка **Карты** (не в туннеле) |
 | Album API | `http://127.0.0.1:18770` — только `GET` альбома/health (в CLO) |
 | Арты для админки | `obs/assets/cards/{slug}.webp`, рубашки `{back-id}.svg` |
-| Описания (лор) | Зеркало `data/cards/cardDetails.json` ← сайт `src/app/cardDetails.json` (только чтение в Admin) |
+| Описания (лор) | `data/card-assets-repo/src/app/cardDetails.json` ← сайт (только чтение в Admin) |
 
 Фронт рисует портреты из **своего** бандла (`src/imports`). Бот в API отдаёт `id` + метаданные; путь `image_url` нужен админке OBS.
 
@@ -71,7 +71,8 @@ powershell -File scripts\sync-card-assets.ps1 -SrcImports "E:\Work\dartvalkkipri
 
 - В БД **не** храним.
 - В админке **не** редактируем (колонка «описание» — read-only).
-- `update.cmd` / `sync-card-assets.ps1` копирует файл в `data/cards/cardDetails.json`.
+- `update.cmd` / `sync-card-assets.ps1` обновляет кэш `data/card-assets-repo` (там же json).
+- Бот/админка читают **прямо** `data/card-assets-repo/src/app/cardDetails.json` (без копии в `data/cards/`).
 - Workflow: правки у разработчика в git сайта → push → у стримера `update.cmd`. Без `save_cards.cmd`.
 
 См. также `TODO.md` (раздел про лор).
@@ -217,14 +218,14 @@ Promo: `POST /api/cards/boosters/{id}/promo` → `obs/assets/boosters/`.
 
 ```
 bot/cards/                 # команды, draws, CLO, album server
-bot/cards/card_stories.py  # чтение data/cards/cardDetails.json
+bot/cards/card_stories.py  # чтение data/card-assets-repo/src/app/cardDetails.json
 bot/db/cards.py            # SQL-слой
 bot/db/migrations/m008…    # таблицы
 bot/db/migrations/m009…    # каталог 28 карт + image_url
 bot/db/migrations/m010…    # image_url → /assets/cards/
 bot/db/migrations/m011…    # card_back_id, имя бустера
 obs/assets/cards/          # webp + svg рубашек для Admin
-data/cards/cardDetails.json # зеркало лора (после update; в .gitignore)
+data/card-assets-repo/     # sparse-кэш сайта (imports + cardDetails.json)
 obs/admin.html / admin.js  # вкладка «Карты»
 scripts/sync-card-assets.ps1
 scripts/migrate_db.py

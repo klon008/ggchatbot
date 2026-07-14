@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from aiohttp import web
 
-from bot.cards.card_stories import load_card_stories
+from bot.cards.card_stories import STORIES_SOURCE_REL, load_card_stories
 from bot.db import cards as cards_db
 from bot.web.api import error_response, json_response, read_json
 from bot.web.static import OBS_ASSETS_DIR
@@ -85,7 +85,7 @@ class CardsAdminRoutes:
         return json_response(
             {
                 "items": items,
-                "stories_source": "data/cards/cardDetails.json",
+                "stories_source": STORIES_SOURCE_REL,
                 "stories_loaded": bool(stories),
                 "stories_count": len(stories),
             }

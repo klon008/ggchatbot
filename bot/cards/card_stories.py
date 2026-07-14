@@ -1,4 +1,4 @@
-"""Чтение лора карт из data/cards/cardDetails.json (зеркало с сайта)."""
+"""Чтение лора карт из кэша сайта (card-assets-repo)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,17 @@ log = logging.getLogger(__name__)
 
 # bot/cards/card_stories.py → parents[2] = корень проекта
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_CARD_DETAILS_PATH = _PROJECT_ROOT / "data" / "cards" / "cardDetails.json"
+# После sync-card-assets.ps1 / update.cmd: sparse git pull сюда
+_CARD_DETAILS_PATH = (
+    _PROJECT_ROOT
+    / "data"
+    / "card-assets-repo"
+    / "src"
+    / "app"
+    / "cardDetails.json"
+)
+
+STORIES_SOURCE_REL = "data/card-assets-repo/src/app/cardDetails.json"
 
 
 def card_details_path() -> Path:

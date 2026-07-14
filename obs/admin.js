@@ -737,7 +737,7 @@
   });
 
   let cardsCatalog = [];
-  let cardsStoriesMeta = { loaded: false, count: 0, source: "data/cards/cardDetails.json" };
+  let cardsStoriesMeta = { loaded: false, count: 0, source: "data/card-assets-repo/src/app/cardDetails.json" };
   let cardsBoosters = [];
   let cardsDraws = [];
   let selectedPoolIds = new Set();
@@ -873,7 +873,7 @@
       cardsStoriesMeta = {
         loaded: Boolean(catalog.stories_loaded),
         count: catalog.stories_count || 0,
-        source: catalog.stories_source || "data/cards/cardDetails.json",
+        source: catalog.stories_source || "data/card-assets-repo/src/app/cardDetails.json",
       };
       cardsBoosters = boosters.items || [];
       cardsDraws = draws.items || [];

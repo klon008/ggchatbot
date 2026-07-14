@@ -27,8 +27,8 @@ princtascdwk/src/app/cardDetails.json   ← источник правды (кл�
         │  update.cmd → scripts/sync-card-assets.ps1
         │  (sparse git: src/imports + src/app/cardDetails.json)
         ▼
-bot/data/cards/cardDetails.json         ← зеркало (data/ в .gitignore)
-        │
+bot/data/card-assets-repo/src/app/cardDetails.json
+        │  (бот читает прямо из кэша, без второй копии)
         ▼
 Admin GET /api/cards/catalog            ← поле story, только чтение
 Site CardModal                          ← тот же json бандлится Vite

@@ -11,9 +11,9 @@
       лор:    src/app/cardDetails.json
 
     Кэш репозитория: data/card-assets-repo (sparse checkout).
-    Копии:
-      obs/assets/cards/          — webp + svg рубашек
-      data/cards/cardDetails.json — описания (только чтение в админке)
+    Копии артов: obs/assets/cards/
+    Лор бот читает прямо из кэша:
+      data/card-assets-repo/src/app/cardDetails.json
 
 .PARAMETER ProjectDir
     Корень бота (где main.py и .env). По умолчанию — родитель scripts\.
@@ -21,7 +21,8 @@
 .PARAMETER SrcImports
     Локальный путь к папке imports (минуя GitHub). Пример:
     E:\Work\dartvalkkiprincess\princtascdwk\src\imports
-    Рядом ожидается ..\app\cardDetails.json (или задайте -SrcCardDetails).
+    Рядом ожидается ..\app\cardDetails.json (или задайте -SrcCardDetails);
+    json копируется в data/card-assets-repo/src/app/ (тот же путь, что после git pull).
 
 .PARAMETER SrcCardDetails
     Локальный путь к cardDetails.json (опционально вместе с -SrcImports).
@@ -97,19 +98,19 @@ function Ensure-Git {
     }
 }
 
-function Copy-CardDetailsJson {
+function Copy-CardDetailsIntoCache {
     param(
         [Parameter(Mandatory = $true)][string]$SourceFile,
-        [Parameter(Mandatory = $true)][string]$DestFile
+        [Parameter(Mandatory = $true)][string]$CacheDetailsPath
     )
     if (-not (Test-Path -LiteralPath $SourceFile)) {
         Write-Warn "cardDetails.json не найден: $SourceFile"
         return $false
     }
-    $destDir = Split-Path -Parent $DestFile
+    $destDir = Split-Path -Parent $CacheDetailsPath
     New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-    Copy-Item -LiteralPath $SourceFile -Destination $DestFile -Force
-    Write-Ok "Описания: $DestFile"
+    Copy-Item -LiteralPath $SourceFile -Destination $CacheDetailsPath -Force
+    Write-Ok "Описания в кэше: $CacheDetailsPath"
     return $true
 }
 
@@ -169,12 +170,95 @@ function Ensure-SparseCheckoutFiles {
     return $false
 }
 
+function Invoke-Git {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$GitArgs,
+        [switch]$Quiet
+    )
+    # git часто пишет в stderr даже при успехе; при $ErrorActionPreference=Stop
+    # PowerShell превращает это в исключение — глушим NativeCommandError.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        if ($Quiet) {
+            & git @GitArgs 1>$null 2>$null
+        }
+        else {
+            & git @GitArgs 2>&1 | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                    Write-Host $_.Exception.Message
+                }
+                else {
+                    Write-Host $_
+                }
+            }
+        }
+        return $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+function Resolve-OriginBranch {
+    <#
+    .SYNOPSIS
+        Какая ветка на origin: main или master (без зависимости от upstream local).
+    #>
+    $code = Invoke-Git -GitArgs @("rev-parse", "--verify", "--quiet", "refs/remotes/origin/main") -Quiet
+    if ($code -eq 0) { return "main" }
+    $code = Invoke-Git -GitArgs @("rev-parse", "--verify", "--quiet", "refs/remotes/origin/master") -Quiet
+    if ($code -eq 0) { return "master" }
+    return $null
+}
+
+function Pull-CardCache {
+    param(
+        [Parameter(Mandatory = $true)][string]$CacheDir
+    )
+    # Всегда: fetch + sync на origin/<branch>. Не полагаемся на upstream
+    # (shallow sparse clone после git init часто без tracking → "no tracking information").
+    Push-Location $CacheDir
+    try {
+        $code = Invoke-Git -GitArgs @("fetch", "--depth", "1", "origin")
+        if ($code -ne 0) {
+            throw "git fetch origin в $CacheDir не удался"
+        }
+        $branch = Resolve-OriginBranch
+        if (-not $branch) {
+            $code = Invoke-Git -GitArgs @("fetch", "--depth", "1", "origin", "main")
+            if ($code -eq 0) {
+                $branch = "main"
+            }
+            else {
+                $code = Invoke-Git -GitArgs @("fetch", "--depth", "1", "origin", "master")
+                if ($code -ne 0) {
+                    throw "Не найдены ветки origin/main и origin/master в $CacheDir"
+                }
+                $branch = "master"
+            }
+        }
+        $code = Invoke-Git -GitArgs @("checkout", "-B", $branch, "origin/$branch") -Quiet
+        if ($code -ne 0) {
+            $code = Invoke-Git -GitArgs @("pull", "--ff-only", "origin", $branch)
+            if ($code -ne 0) {
+                throw "git pull origin $branch в $CacheDir не удался"
+            }
+        }
+        else {
+            [void](Invoke-Git -GitArgs @("branch", "--set-upstream-to=origin/$branch", $branch) -Quiet)
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 function Sync-FromGitHub {
     param(
         [Parameter(Mandatory = $true)][string]$RepoUrl,
         [Parameter(Mandatory = $true)][string]$CacheDir,
-        [Parameter(Mandatory = $true)][string]$DestDir,
-        [Parameter(Mandatory = $true)][string]$DetailsDest
+        [Parameter(Mandatory = $true)][string]$DestDir
     )
 
     Ensure-Git
@@ -188,45 +272,32 @@ function Sync-FromGitHub {
         New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
         Push-Location $CacheDir
         try {
-            git init | Out-Null
-            git remote add origin $RepoUrl
-            git config core.sparseCheckout true
+            [void](Invoke-Git -GitArgs @("init") -Quiet)
+            [void](Invoke-Git -GitArgs @("remote", "add", "origin", $RepoUrl) -Quiet)
+            [void](Invoke-Git -GitArgs @("config", "core.sparseCheckout", "true") -Quiet)
             [void](Ensure-SparseCheckoutFiles -CacheDir $CacheDir)
-            git pull --depth 1 origin main
-            if ($LASTEXITCODE -ne 0) {
-                git pull --depth 1 origin master
-            }
-            if ($LASTEXITCODE -ne 0) {
-                throw "git pull $RepoUrl не удался"
-            }
         }
         finally {
             Pop-Location
         }
+        Write-Step "git pull кэша карт (первый раз)"
+        Pull-CardCache -CacheDir $CacheDir
     }
     else {
-        $sparseChanged = Ensure-SparseCheckoutFiles -CacheDir $CacheDir
+        [void](Ensure-SparseCheckoutFiles -CacheDir $CacheDir)
         Write-Step "git pull кэша карт"
-        Push-Location $CacheDir
-        try {
-            if ($sparseChanged) {
-                git read-tree -mu HEAD 2>$null
-                git checkout HEAD -- . 2>$null
-            }
-            git pull --ff-only
-            if ($LASTEXITCODE -ne 0) {
-                throw "git pull в $CacheDir не удался"
-            }
-        }
-        finally {
-            Pop-Location
-        }
+        Pull-CardCache -CacheDir $CacheDir
     }
 
     $imports = Join-Path $CacheDir "src\imports"
     $count = Sync-FromLocalImports -ImportsDir $imports -DestDir $DestDir
-    $detailsSrc = Join-Path $CacheDir "src\app\cardDetails.json"
-    [void](Copy-CardDetailsJson -SourceFile $detailsSrc -DestFile $DetailsDest)
+    $detailsInCache = Join-Path $CacheDir "src\app\cardDetails.json"
+    if (Test-Path -LiteralPath $detailsInCache) {
+        Write-Ok "Описания в кэше: $detailsInCache"
+    }
+    else {
+        Write-Warn "cardDetails.json нет в кэше после pull: $detailsInCache"
+    }
     return $count
 }
 
@@ -241,8 +312,8 @@ if (-not $EnvFile) {
 }
 
 $dest = Join-Path $ProjectDir "obs\assets\cards"
-$detailsDest = Join-Path $ProjectDir "data\cards\cardDetails.json"
 $cache = Join-Path $ProjectDir "data\card-assets-repo"
+$cacheDetails = Join-Path $cache "src\app\cardDetails.json"
 
 Write-Step "Синхронизация артов и описаний карт"
 
@@ -254,7 +325,8 @@ if ($SrcImports) {
     if (-not $detailsSrc) {
         $detailsSrc = Resolve-CardDetailsBesideImports -ImportsDir $SrcImports
     }
-    [void](Copy-CardDetailsJson -SourceFile $detailsSrc -DestFile $detailsDest)
+    # Тот же путь, что после git pull — бот читает только его
+    [void](Copy-CardDetailsIntoCache -SourceFile $detailsSrc -CacheDetailsPath $cacheDetails)
 }
 else {
     $siteBase = Read-DotEnvValue -Path $EnvFile -Key "SITE_BASE_URL"
@@ -279,7 +351,7 @@ else {
         Write-Host "Imports:       $treeHint"
         Write-Host "Stories:       $jsonHint"
     }
-    $count = Sync-FromGitHub -RepoUrl $repoUrl -CacheDir $cache -DestDir $dest -DetailsDest $detailsDest
+    $count = Sync-FromGitHub -RepoUrl $repoUrl -CacheDir $cache -DestDir $dest
 }
 
 Write-Ok "Скопировано $count файл(ов) артов → $dest"
