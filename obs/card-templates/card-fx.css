@@ -1,0 +1,106 @@
+@keyframes holo-shift {
+  0%, 100% { opacity: 0.5; filter: hue-rotate(0deg) saturate(1.5); }
+  50%       { opacity: 0.85; filter: hue-rotate(180deg) saturate(2.2); }
+}
+.holo-layer { animation: holo-shift 3s ease-in-out infinite; }
+
+@keyframes mythic-seal-cw  { to { transform: rotate(360deg); } }
+@keyframes mythic-seal-ccw { to { transform: rotate(-360deg); } }
+.mythic-seal-cw  { animation: mythic-seal-cw  32s linear infinite; }
+.mythic-seal-ccw { animation: mythic-seal-ccw 22s linear infinite; }
+
+@keyframes mythic-sweep { to { transform: rotate(360deg); } }
+.mythic-sweep { animation: mythic-sweep 5s linear infinite; }
+
+@keyframes mythic-frame-pulse {
+  0%, 100% { opacity: 0.08; }
+  50%       { opacity: 0.28; }
+}
+.mythic-frame-pulse { animation: mythic-frame-pulse 2.4s ease-in-out infinite; }
+
+@keyframes mythic-pool {
+  0%, 100% { opacity: 0.22; }
+  50%       { opacity: 0.45; }
+}
+.mythic-pool { animation: mythic-pool 2.1s ease-in-out infinite; }
+
+@keyframes mythic-ember {
+  0%   { opacity: 0;   transform: translate(0, 0) scale(0.6); }
+  12%  { opacity: 0.45; }
+  82%  { opacity: 0.35; }
+  100% { opacity: 0;   transform: translate(var(--drift, 0), -80px) scale(1.1); }
+}
+.mythic-ember {
+  animation: mythic-ember var(--dur, 3s) linear var(--delay, 0s) infinite;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: var(--op); }
+  50%       { opacity: calc(var(--op) * 0.15); }
+}
+@keyframes card-rise {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.card-tilt-scene {
+  perspective: 900px;
+  perspective-origin: center center;
+}
+.card-tilt-target {
+  will-change: transform;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+}
+.card-art,
+.card-svg {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+}
+.card-svg {
+  display: block;
+  shape-rendering: geometricPrecision;
+}
+.card-modal-tilt-scene {
+  overflow: visible;
+  padding: 1.25rem 0.75rem;
+  margin: -1.25rem -0.75rem;
+  box-sizing: content-box;
+}
+@media (min-width: 640px) {
+  .card-modal-tilt-scene {
+    padding: 2rem 1.5rem;
+    margin: -2rem -1.5rem;
+  }
+}
+.modal-card-column {
+  width: 100%;
+  max-width: min(260px, 72vw);
+  margin: 0 auto;
+}
+@media (min-width: 1024px) {
+  .modal-card-column {
+    max-width: 260px;
+    margin: 0;
+  }
+}
+.modal-scroll {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.modal-close-btn {
+  position: fixed;
+  top: max(1rem, env(safe-area-inset-top, 0px));
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  z-index: 60;
+}
+@media (min-width: 1024px) {
+  .modal-close-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 20;
+  }
+}

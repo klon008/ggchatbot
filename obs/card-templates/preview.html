@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Card templates — rarity frames</title>
+  <link rel="stylesheet" href="./card-fx.css"/>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; padding: 2rem;
+      font-family: Georgia, "Times New Roman", serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #1a2238, #08080e 60%);
+      color: #e8e0d0;
+    }
+    h1 { font-weight: 400; letter-spacing: 0.04em; margin: 0 0 0.35rem; }
+    p { opacity: 0.7; margin: 0 0 1.75rem; max-width: 42rem; line-height: 1.45; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1.75rem;
+    }
+    .tile { margin: 0; }
+    figcaption { margin-bottom: 0.6rem; font-size: 0.95rem; opacity: 0.85; }
+    .frame {
+      aspect-ratio: 350 / 490;
+      filter: drop-shadow(0 12px 28px rgba(0,0,0,0.55));
+    }
+    .frame svg { width: 100%; height: auto; display: block; }
+  </style>
+</head>
+<body>
+  <h1>Card rarity templates</h1>
+  <p>
+    Пустые рамки без арта. Подставь имя и картинку через
+    <code>fillCardTemplate</code> из <code>fill-card.js</code>
+    (слоты <code>data-slot="name"</code> / <code>data-slot="portrait"</code>).
+    Пересобрать: <code>node scripts/export-card-templates.mjs</code>
+  </p>
+  <div class="grid">
+    <figure class="tile">
+      <figcaption>Common <code>common</code></figcaption>
+      <div class="frame" data-load="common"></div>
+    </figure>
+
+    <figure class="tile">
+      <figcaption>Uncommon <code>uncommon</code></figcaption>
+      <div class="frame" data-load="uncommon"></div>
+    </figure>
+
+    <figure class="tile">
+      <figcaption>Rare <code>rare</code></figcaption>
+      <div class="frame" data-load="rare"></div>
+    </figure>
+
+    <figure class="tile">
+      <figcaption>Epic <code>epic</code></figcaption>
+      <div class="frame" data-load="epic"></div>
+    </figure>
+
+    <figure class="tile">
+      <figcaption>Legendary <code>legendary</code></figcaption>
+      <div class="frame" data-load="legendary"></div>
+    </figure>
+
+    <figure class="tile">
+      <figcaption>Mythic <code>mythic</code></figcaption>
+      <div class="frame" data-load="mythic"></div>
+    </figure>
+
+    <figure class="tile">
+      <figcaption>Secret Rare <code>secretRare</code></figcaption>
+      <div class="frame" data-load="secretRare"></div>
+    </figure></div>
+  <script type="module">
+    for (const el of document.querySelectorAll("[data-load]")) {
+      const r = el.getAttribute("data-load");
+      const res = await fetch("./" + r + ".svg");
+      el.innerHTML = await res.text();
+    }
+  </script>
+</body>
+</html>

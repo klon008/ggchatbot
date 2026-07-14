@@ -182,81 +182,9 @@
     }
     .orders-status.on { color: #8fd48f; }
     .orders-status.off { color: #ffb0b0; }
-    .chip-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      max-height: 200px;
-      overflow-y: auto;
-      padding: 8px;
-      background: #14141f;
-      border-radius: 6px;
-      border: 1px solid #2a2a40;
-    }
-    .chip {
-      padding: 4px 8px;
-      border-radius: 4px;
-      background: #2a2a40;
-      font-size: 12px;
-      cursor: pointer;
-      border: 1px solid transparent;
-      user-select: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .chip img.thumb {
-      width: 28px;
-      height: 40px;
-      object-fit: cover;
-      border-radius: 3px;
-      background: #0d0d14;
-      flex-shrink: 0;
-    }
-    .chip.selected {
-      border-color: #5a7ab0;
-      background: #2a3a5c;
-    }
-    .catalog-thumb {
-      width: 36px;
-      height: 52px;
-      object-fit: cover;
-      border-radius: 4px;
-      background: #0d0d14;
-      vertical-align: middle;
-    }
-    .catalog-story {
-      max-width: 320px;
-      font-size: 12px;
-      line-height: 1.35;
-      color: #b8c0d0;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      cursor: help;
-    }
-    .catalog-story.empty-story {
-      color: #6a7388;
-      font-style: italic;
-    }
-    .status-pill {
+    .tab-link {
       display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 11px;
-      text-transform: uppercase;
-    }
-    .status-pill.active { background: #1a3a2a; color: #8fd48f; }
-    .status-pill.paused { background: #3a3a1a; color: #f0d060; }
-    .status-pill.inactive { background: #2a2a40; color: #8888a0; }
-    select {
-      padding: 7px 10px;
-      border: 1px solid #3d3d5c;
-      border-radius: 6px;
-      background: #14141f;
-      color: #e8e8f0;
-      font: inherit;
+      text-decoration: none;
     }
   </style>
 </head>
@@ -273,7 +201,7 @@
       <button type="button" class="tab" data-tab="queue">Очередь</button>
       <button type="button" class="tab" data-tab="roulette">Рулетка</button>
       <button type="button" class="tab" data-tab="races">Скачки</button>
-      <button type="button" class="tab" data-tab="cards">Карты</button>
+      <a href="cards-admin.html" class="tab tab-link">Карты</a>
     </div>
 
     <section id="panel-points" class="panel active">
@@ -491,105 +419,6 @@
       </div>
     </section>
 
-    <section id="panel-cards" class="panel">
-      <div class="card">
-        <h3>Глобальные настройки</h3>
-        <div class="toolbar">
-          <label>
-            Лимит открытий в день (0 = без лимита)
-            <input type="number" id="cardsDailyLimit" min="0" value="0" />
-          </label>
-          <button type="button" id="cardsSaveMeta" class="primary">Сохранить</button>
-        </div>
-        <p class="empty" style="margin: 8px 0 0; font-size: 12px">
-          Если у тиража свой лимит &gt; 0, он перекрывает глобальный.
-        </p>
-      </div>
-
-      <div class="card">
-        <h3>Каталог карт</h3>
-        <p class="empty" style="margin: 0 0 8px; font-size: 12px">
-          Арты: <span class="mono">obs/assets/cards/{slug}.webp</span>.
-          Описания (только чтение) из
-          <span class="mono">data/card-assets-repo/src/app/cardDetails.json</span>
-          — подтягиваются при <span class="mono">update.cmd</span> с сайта
-          (<span class="mono">src/app/cardDetails.json</span>). Правки лора —
-          в репо фронта / через разработчика, не из админки.
-        </p>
-        <p id="catalogStoriesMeta" class="empty" style="margin: 0 0 8px; font-size: 12px"></p>
-        <table>
-          <thead>
-            <tr>
-              <th></th>
-              <th>id</th>
-              <th>имя</th>
-              <th>редкость</th>
-              <th>описание</th>
-            </tr>
-          </thead>
-          <tbody id="catalogBody">
-            <tr><td colspan="5" class="empty">Загрузка…</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="card">
-        <h3>Бустеры</h3>
-        <form class="add-form" id="boosterForm">
-          <label>id <input type="text" id="boosterId" placeholder="start2" required /></label>
-          <label>название <input type="text" id="boosterName" required /></label>
-          <button type="submit" class="primary">Создать бустер</button>
-        </form>
-        <p class="empty" style="margin: 0 0 8px; font-size: 12px">Пул карт (клик — вкл/выкл):</p>
-        <div id="boosterPoolChips" class="chip-grid"></div>
-        <table style="margin-top: 14px">
-          <thead>
-            <tr>
-              <th>id</th>
-              <th>название</th>
-              <th>карт в пуле</th>
-              <th>promo</th>
-              <th>действия</th>
-            </tr>
-          </thead>
-          <tbody id="boostersBody">
-            <tr><td colspan="5" class="empty">Загрузка…</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="card">
-        <h3>Тиражи</h3>
-        <form class="add-form" id="drawForm">
-          <label>id <input type="text" id="drawId" placeholder="draw002" required /></label>
-          <label>название <input type="text" id="drawName" required /></label>
-          <label>бустер
-            <select id="drawBooster" required></select>
-          </label>
-          <label>цена <input type="number" id="drawCost" min="1" value="1000" required /></label>
-          <label>карт <input type="number" id="drawCards" min="1" value="6" required /></label>
-          <label>лимит/день <input type="number" id="drawDailyLimit" min="0" value="0" /></label>
-          <label><input type="checkbox" id="drawActivate" /> сразу активировать</label>
-          <button type="submit" class="primary">Создать тираж</button>
-        </form>
-        <table style="margin-top: 14px">
-          <thead>
-            <tr>
-              <th>id</th>
-              <th>название</th>
-              <th>бустер</th>
-              <th>цена</th>
-              <th>карт</th>
-              <th>статус</th>
-              <th>действия</th>
-            </tr>
-          </thead>
-          <tbody id="drawsBody">
-            <tr><td colspan="7" class="empty">Загрузка…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
   </div>
 
   <script src="admin.js"></script>

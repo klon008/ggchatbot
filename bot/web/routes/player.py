@@ -1,4 +1,4 @@
-"""OBS Browser Source: player.html/js и WebSocket /ws."""
+"""OBS Browser Source: player.html/js, booster.html/js и WebSocket /ws."""
 from __future__ import annotations
 
 import json
@@ -17,7 +17,12 @@ StatusHandler = Callable[[dict], Awaitable[None]]
 class PlayerRoutes:
     def __init__(self, on_status: StatusHandler) -> None:
         self._on_status = on_status
+        self._extra_handlers: list[StatusHandler] = []
         self._clients: set[web.WebSocketResponse] = set()
+        self._booster_clients: set[web.WebSocketResponse] = set()
+
+    def add_status_handler(self, handler: StatusHandler) -> None:
+        self._extra_handlers.append(handler)
 
     def register(self, app: web.Application) -> None:
         app.add_routes(
@@ -25,6 +30,8 @@ class PlayerRoutes:
                 web.get("/", self._handle_index),
                 web.get("/player.html", self._handle_index),
                 web.get("/player.js", self._handle_player_js),
+                web.get("/booster.html", self._handle_booster_html),
+                web.get("/booster.js", self._handle_booster_js),
                 web.get("/ws", self._handle_ws),
             ]
         )
@@ -39,9 +46,19 @@ class PlayerRoutes:
     async def _handle_player_js(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("player.js", "application/javascript; charset=utf-8")
 
+    async def _handle_booster_html(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("booster.html", "text/html; charset=utf-8")
+
+    async def _handle_booster_js(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("booster.js", "application/javascript; charset=utf-8")
+
     @property
     def has_clients(self) -> bool:
         return len(self._clients) > 0
+
+    @property
+    def has_booster_clients(self) -> bool:
+        return len(self._booster_clients) > 0
 
     async def _handle_ws(self, request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse(heartbeat=30)
@@ -51,15 +68,16 @@ class PlayerRoutes:
         try:
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
-                    await self._dispatch(msg.data)
+                    await self._dispatch(ws, msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     log.warning("WS ошибка: %s", ws.exception())
         finally:
             self._clients.discard(ws)
+            self._booster_clients.discard(ws)
             log.info("Плеер отключился (клиентов: %d)", len(self._clients))
         return ws
 
-    async def _dispatch(self, raw: str) -> None:
+    async def _dispatch(self, ws: web.WebSocketResponse, raw: str) -> None:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
@@ -67,7 +85,11 @@ class PlayerRoutes:
             return
         if not isinstance(data, dict):
             return
+        if data.get("status") == "ready" and data.get("overlay") == "booster":
+            self._booster_clients.add(ws)
         await self._on_status(data)
+        for handler in self._extra_handlers:
+            await handler(data)
 
     async def broadcast(self, payload: dict) -> None:
         if not self._clients:

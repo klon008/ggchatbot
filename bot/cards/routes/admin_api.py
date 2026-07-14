@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 from aiohttp import web
@@ -12,13 +11,12 @@ from aiohttp import web
 from bot.cards.card_stories import STORIES_SOURCE_REL, load_card_stories
 from bot.db import cards as cards_db
 from bot.web.api import error_response, json_response, read_json
-from bot.web.static import OBS_ASSETS_DIR
 
 if TYPE_CHECKING:
     from bot.db import Database
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
-_BOOSTERS_DIR = OBS_ASSETS_DIR / "boosters"
+_PROMO_URL_RE = re.compile(r"^(https?://|/assets/).+", re.IGNORECASE)
 _DEFAULT_WEIGHTS = {
     "common": 48.0,
     "uncommon": 24.0,
@@ -65,14 +63,17 @@ class CardsAdminRoutes:
                 web.get("/api/cards/catalog", self._catalog),
                 web.get("/api/cards/meta", self._meta_get),
                 web.put("/api/cards/meta", self._meta_put),
+                web.get("/api/cards/series", self._series_list),
+                web.put("/api/cards/series/{series_id}", self._series_update),
                 web.get("/api/cards/boosters", self._boosters_list),
                 web.post("/api/cards/boosters", self._boosters_create),
                 web.put("/api/cards/boosters/{booster_id}", self._boosters_update),
-                web.post("/api/cards/boosters/{booster_id}/promo", self._boosters_promo),
+                web.put("/api/cards/boosters/{booster_id}/promo", self._boosters_promo),
                 web.get("/api/cards/draws", self._draws_list),
                 web.post("/api/cards/draws", self._draws_create),
                 web.post("/api/cards/draws/{draw_id}/activate", self._draws_activate),
                 web.post("/api/cards/draws/{draw_id}/pause", self._draws_pause),
+                web.post("/api/cards/draws/{draw_id}/close", self._draws_close),
                 web.post("/api/cards/draws/{draw_id}/copy", self._draws_copy),
             ]
         )
@@ -92,21 +93,67 @@ class CardsAdminRoutes:
         )
 
     async def _meta_get(self, request: web.Request) -> web.Response:
-        limit = await cards_db.get_global_daily_limit(self._db)
-        return json_response({"daily_open_limit": limit})
+        return json_response(await cards_db.get_cards_meta(self._db))
 
     async def _meta_put(self, request: web.Request) -> web.Response:
         data = await read_json(request)
         if data is None:
             return error_response("Некорректный JSON")
+        kwargs: dict[str, Any] = {}
+        if "daily_open_limit" in data:
+            try:
+                limit = int(data["daily_open_limit"])
+            except (TypeError, ValueError):
+                return error_response("daily_open_limit должен быть целым >= 0")
+            if limit < 0:
+                return error_response("daily_open_limit должен быть >= 0")
+            kwargs["daily_open_limit"] = limit
+        if "enabled" in data:
+            raw = data["enabled"]
+            if not isinstance(raw, bool):
+                return error_response("enabled должен быть true или false")
+            kwargs["enabled"] = raw
+        if "anim_speed" in data:
+            try:
+                speed = float(data["anim_speed"])
+            except (TypeError, ValueError):
+                return error_response("anim_speed должен быть числом 0.5–3.0")
+            if speed < cards_db.ANIM_SPEED_MIN or speed > cards_db.ANIM_SPEED_MAX:
+                return error_response("anim_speed должен быть в диапазоне 0.5–3.0")
+            kwargs["anim_speed"] = speed
+        if not kwargs:
+            return error_response("Нужен daily_open_limit, enabled и/или anim_speed")
+        return json_response(await cards_db.set_cards_meta(self._db, **kwargs))
+
+    async def _series_list(self, request: web.Request) -> web.Response:
+        items = await cards_db.list_series(self._db)
+        return json_response({"items": items})
+
+    async def _series_update(self, request: web.Request) -> web.Response:
+        series_id = request.match_info["series_id"]
+        if not await cards_db.series_exists(self._db, series_id):
+            return error_response("Серия не найдена", status=404)
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        name = str(data.get("name", "")).strip()
+        if not name:
+            return error_response("name обязателен")
         try:
-            limit = int(data.get("daily_open_limit", 0))
+            sort_order = int(data.get("sort_order", 0))
         except (TypeError, ValueError):
-            return error_response("daily_open_limit должен быть целым >= 0")
-        if limit < 0:
-            return error_response("daily_open_limit должен быть >= 0")
-        await cards_db.set_global_daily_limit(self._db, limit)
-        return json_response({"daily_open_limit": limit})
+            return error_response("sort_order должен быть целым")
+        card_back_id = str(data.get("card_back_id", "card-back")).strip()
+        if not card_back_id or not _SLUG_RE.match(card_back_id):
+            return error_response("card_back_id: латиница, цифры, -, _ (до 32 символов)")
+        updated = await cards_db.update_series(
+            self._db,
+            series_id=series_id,
+            name=name,
+            sort_order=sort_order,
+            card_back_id=card_back_id,
+        )
+        return json_response(updated or {"id": series_id})
 
     async def _boosters_list(self, request: web.Request) -> web.Response:
         items = await cards_db.list_boosters(self._db)
@@ -160,33 +207,26 @@ class CardsAdminRoutes:
         booster_id = request.match_info["booster_id"]
         if not await cards_db.booster_exists(self._db, booster_id):
             return error_response("Бустер не найден", status=404)
-
-        reader = await request.multipart()
-        field = await reader.next()
-        if field is None or field.name != "file":
-            return error_response("Ожидается multipart field 'file'")
-
-        filename = (field.filename or "").lower()
-        if not filename.endswith((".jpg", ".jpeg", ".webp", ".png")):
-            return error_response("Допустимы jpg, png, webp")
-
-        data = await field.read()
-        if len(data) > 8 * 1024 * 1024:
-            return error_response("Файл слишком большой (макс. 8 МБ)")
-
-        ext = ".jpg"
-        if filename.endswith(".png"):
-            ext = ".png"
-        elif filename.endswith(".webp"):
-            ext = ".webp"
-
-        _BOOSTERS_DIR.mkdir(parents=True, exist_ok=True)
-        dest = _BOOSTERS_DIR / f"{booster_id}{ext}"
-        dest.write_bytes(data)
-
-        promo_url = f"/assets/boosters/{booster_id}{ext}"
-        await cards_db.set_booster_promo_url(self._db, booster_id, promo_url)
-        return json_response({"promo_image_url": promo_url})
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        raw = data.get("promo_image_url", "")
+        if raw is None:
+            raw = ""
+        if not isinstance(raw, str):
+            return error_response("promo_image_url должен быть строкой")
+        url = raw.strip()
+        if not url:
+            await cards_db.set_booster_promo_url(self._db, booster_id, None)
+            return json_response({"promo_image_url": None})
+        if len(url) > 2048:
+            return error_response("promo_image_url слишком длинный")
+        if not _PROMO_URL_RE.match(url):
+            return error_response(
+                "promo_image_url: нужна http(s)://… или путь /assets/…"
+            )
+        await cards_db.set_booster_promo_url(self._db, booster_id, url)
+        return json_response({"promo_image_url": url})
 
     async def _draws_list(self, request: web.Request) -> web.Response:
         items = await cards_db.list_draws(self._db)
@@ -235,18 +275,53 @@ class CardsAdminRoutes:
 
     async def _draws_activate(self, request: web.Request) -> web.Response:
         draw_id = request.match_info["draw_id"]
-        if not await cards_db.draw_exists(self._db, draw_id):
-            return error_response("Тираж не найден", status=404)
-        await cards_db.set_draw_status(self._db, draw_id, cards_db.DRAW_ACTIVE)
-        item = await cards_db.get_draw(self._db, draw_id)
+        try:
+            item = await cards_db.activate_draw(self._db, draw_id)
+        except ValueError as exc:
+            code = str(exc)
+            messages = {
+                "not_found": ("Тираж не найден", 404),
+                "closed": ("Завершённый тираж нельзя активировать", 409),
+                "already_active": ("Тираж уже активен", 409),
+                "not_queued": ("Активировать можно только очередь или паузу", 409),
+                "not_next": (
+                    "FIFO: активировать можно только следующий тираж в очереди "
+                    "(и только если нет активного/на паузе)",
+                    409,
+                ),
+                "busy": ("Сейчас уже есть активный или приостановленный тираж", 409),
+            }
+            msg, status = messages.get(code, (code, 409))
+            return error_response(msg, status=status)
         return json_response(item)
 
     async def _draws_pause(self, request: web.Request) -> web.Response:
         draw_id = request.match_info["draw_id"]
-        if not await cards_db.draw_exists(self._db, draw_id):
-            return error_response("Тираж не найден", status=404)
-        await cards_db.set_draw_status(self._db, draw_id, cards_db.DRAW_PAUSED)
-        item = await cards_db.get_draw(self._db, draw_id)
+        try:
+            item = await cards_db.pause_draw(self._db, draw_id)
+        except ValueError as exc:
+            code = str(exc)
+            if code == "not_found":
+                return error_response("Тираж не найден", status=404)
+            if code == "not_active":
+                return error_response("На паузу можно поставить только активный тираж", status=409)
+            return error_response(code, status=409)
+        return json_response(item)
+
+    async def _draws_close(self, request: web.Request) -> web.Response:
+        draw_id = request.match_info["draw_id"]
+        try:
+            item = await cards_db.close_draw(self._db, draw_id, promote=True)
+        except ValueError as exc:
+            code = str(exc)
+            if code == "not_found":
+                return error_response("Тираж не найден", status=404)
+            if code == "not_live":
+                return error_response(
+                    "Завершить можно только активный или приостановленный тираж",
+                    status=409,
+                )
+            return error_response(code, status=409)
         return json_response(item)
 
     async def _draws_copy(self, request: web.Request) -> web.Response:

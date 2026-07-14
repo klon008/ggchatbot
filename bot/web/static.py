@@ -16,6 +16,10 @@ _CONTENT_TYPES = {
     ".webp": "image/webp",
     ".css": "text/css",
     ".js": "application/javascript",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".md": "text/markdown",
+    ".txt": "text/plain",
 }
 
 
@@ -32,10 +36,25 @@ async def serve_obs_file(name: str, content_type: str) -> web.StreamResponse:
 
 async def serve_obs_asset(relative_path: str) -> web.StreamResponse:
     """Раздача файла из obs/assets/ по относительному пути (без ..)."""
-    base = OBS_ASSETS_DIR.resolve()
-    path = (OBS_ASSETS_DIR / relative_path).resolve()
+    return await _serve_under(OBS_ASSETS_DIR, relative_path)
+
+
+async def serve_obs_card_template(relative_path: str) -> web.StreamResponse:
+    """Раздача файлов из obs/card-templates/ (рамки карт для OBS)."""
+    return await _serve_under(OBS_DIR / "card-templates", relative_path)
+
+
+async def _serve_under(base_dir: Path, relative_path: str) -> web.StreamResponse:
+    base = base_dir.resolve()
+    path = (base_dir / relative_path).resolve()
     if not str(path).startswith(str(base)) or not path.is_file():
         return web.Response(status=404, text="asset not found")
     suffix = path.suffix.lower()
     content_type = _CONTENT_TYPES.get(suffix, "application/octet-stream")
-    return web.Response(body=path.read_bytes(), content_type=content_type)
+    kwargs: dict = {"body": path.read_bytes(), "content_type": content_type}
+    if content_type.startswith("text/") or content_type in (
+        "application/javascript",
+        "image/svg+xml",
+    ):
+        kwargs["charset"] = "utf-8"
+    return web.Response(**kwargs)

@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Карты - Bot Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: #0d0d14;
+      color: #e8e8f0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 22px;
+      font-weight: 600;
+      color: #9ecbff;
+    }
+    .subtitle {
+      margin: 0 0 20px;
+      color: #8888a0;
+      font-size: 13px;
+    }
+    .page-nav {
+      margin: -12px 0 20px;
+      font-size: 13px;
+    }
+    .page-nav a {
+      color: #9ecbff;
+      text-decoration: none;
+    }
+    .page-nav a:hover { text-decoration: underline; }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      padding: 8px 16px;
+      border: 1px solid #3d3d5c;
+      border-radius: 6px;
+      background: #1c1c2e;
+      color: #b8b8d0;
+      cursor: pointer;
+      font: inherit;
+    }
+    .tab.active {
+      background: #2a3a5c;
+      border-color: #5a7ab0;
+      color: #fff;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    input[type="text"],
+    input[type="number"] {
+      padding: 7px 10px;
+      border: 1px solid #3d3d5c;
+      border-radius: 6px;
+      background: #14141f;
+      color: #e8e8f0;
+      font: inherit;
+    }
+    input[type="text"] { min-width: 160px; }
+    input[type="number"] { width: 100px; }
+    button, .btn-like {
+      padding: 7px 14px;
+      border: 1px solid #3d3d5c;
+      border-radius: 6px;
+      background: #2a2a40;
+      color: #e8e8f0;
+      cursor: pointer;
+      font: inherit;
+    }
+    button:hover, .btn-like:hover { background: #353550; }
+    button.primary {
+      background: #2a4a7a;
+      border-color: #4a7ab0;
+    }
+    button.danger {
+      background: #4a2020;
+      border-color: #804040;
+      color: #ffb0b0;
+    }
+    button.small {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #14141f;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #1c1c2e;
+      color: #9ecbff;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    tr { border-bottom: 1px solid #222233; }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #1a1a28; }
+    .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    #statusBar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      margin-bottom: 14px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: #1c1c2e;
+      color: #b8b8d0;
+      font-size: 13px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+    }
+    #statusBar.ok { color: #8fd48f; }
+    #statusBar.err { color: #ff7b7b; }
+    .card {
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      background: #14141f;
+      border: 1px solid #2a2a40;
+      border-radius: 8px;
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #9ecbff;
+    }
+    .empty { color: #666680; font-style: italic; }
+    .hint { color: #8888a0; font-size: 12px; margin: 6px 0 0; }
+    .add-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 12px;
+      background: #1c1c2e;
+      border-radius: 8px;
+      margin-bottom: 14px;
+    }
+    .add-form label,
+    .field-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #b8b8d0;
+    }
+    .chip-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 280px;
+      overflow-y: auto;
+      padding: 8px;
+      background: #14141f;
+      border-radius: 6px;
+      border: 1px solid #2a2a40;
+    }
+    .chip {
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #2a2a40;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chip img.thumb {
+      width: 28px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 3px;
+      background: #0d0d14;
+      flex-shrink: 0;
+    }
+    .chip.selected {
+      border-color: #5a7ab0;
+      background: #2a3a5c;
+    }
+    .catalog-thumb {
+      width: 36px;
+      height: 52px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #0d0d14;
+      vertical-align: middle;
+    }
+    .catalog-story {
+      max-width: 360px;
+      max-height: 90px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.35;
+      color: #b8c0d0;
+      white-space: pre-wrap;
+    }
+    .catalog-story.empty-story {
+      color: #6a7388;
+      font-style: italic;
+      max-height: none;
+      overflow: visible;
+    }
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .status-pill.active { background: #1a3a2a; color: #8fd48f; }
+    .status-pill.paused { background: #3a3a1a; color: #f0d060; }
+    .status-pill.queued { background: #1a2a3a; color: #9ecbff; }
+    .status-pill.closed,
+    .status-pill.inactive { background: #2a2a40; color: #8888a0; }
+    .queue-pos {
+      display: inline-block;
+      margin-left: 6px;
+      font-size: 11px;
+      color: #8888a0;
+    }
+    select {
+      padding: 7px 10px;
+      border: 1px solid #3d3d5c;
+      border-radius: 6px;
+      background: #14141f;
+      color: #e8e8f0;
+      font: inherit;
+    }
+    .cmd-table td:first-child { white-space: nowrap; }
+    .series-layout {
+      display: grid;
+      grid-template-columns: minmax(240px, 320px) 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 860px) {
+      .series-layout { grid-template-columns: 1fr; }
+    }
+    .series-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .series-item {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid #2a2a40;
+      border-radius: 8px;
+      background: #14141f;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      color: inherit;
+      font: inherit;
+    }
+    .series-item:hover { background: #1a1a28; }
+    .series-item.active {
+      border-color: #5a7ab0;
+      background: #2a3a5c;
+    }
+    .series-item img.back {
+      width: 40px;
+      height: 56px;
+      object-fit: contain;
+      background: #0d0d14;
+      border-radius: 4px;
+      flex-shrink: 0;
+      cursor: zoom-in;
+      border: 1px solid transparent;
+    }
+    .series-item img.back:hover {
+      border-color: #5a7ab0;
+    }
+    .series-back-preview-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .series-back-preview {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 6px;
+      margin: 0;
+      border: 1px solid #3d3d5c;
+      border-radius: 6px;
+      background: #14141f;
+      color: #b8b8d0;
+      cursor: zoom-in;
+      font: inherit;
+      font-size: 11px;
+    }
+    .series-back-preview:hover {
+      border-color: #5a7ab0;
+      background: #1a1a28;
+    }
+    .series-back-preview img {
+      width: 56px;
+      height: 80px;
+      object-fit: contain;
+      background: #0d0d14;
+      border-radius: 3px;
+      pointer-events: none;
+    }
+    .series-item .meta { flex: 1; min-width: 0; }
+    .series-item .meta strong { display: block; }
+    .series-item .meta span { color: #8888a0; font-size: 12px; }
+    .card-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+    }
+    .gallery-card {
+      display: block;
+      width: 100%;
+      background: #14141f;
+      border: 1px solid #2a2a40;
+      border-radius: 8px;
+      padding: 8px;
+      text-align: center;
+      cursor: zoom-in;
+      color: inherit;
+      font: inherit;
+    }
+    .gallery-card:hover {
+      border-color: #5a7ab0;
+      background: #1a1a28;
+    }
+    .gallery-card img {
+      width: 72px;
+      height: 104px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #0d0d14;
+      pointer-events: none;
+    }
+    .gallery-card .name {
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+    .gallery-card .rarity {
+      color: #8888a0;
+      font-size: 11px;
+    }
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.85);
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .lightbox.open {
+      display: flex;
+    }
+    .lightbox-inner {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: min(92vw, 920px);
+      height: min(92vh, 920px);
+      overflow: hidden;
+      border-radius: 8px;
+      background: #0d0d14;
+      border: 1px solid #3d3d5c;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+    }
+    .lightbox-stage {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 16px 12px;
+    }
+    .lightbox-stage img {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+    }
+    .lightbox-caption {
+      flex-shrink: 0;
+      padding: 10px 14px;
+      background: #14141f;
+      color: #b8b8d0;
+      font-size: 13px;
+      border-top: 1px solid #2a2a40;
+      text-align: center;
+    }
+    .lightbox-close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 2;
+      box-sizing: border-box;
+      width: 36px;
+      height: 36px;
+      margin: 0;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      border: 1px solid #3d3d5c;
+      background: #2a2a40;
+      color: #e8e8f0;
+      cursor: pointer;
+      font: inherit;
+    }
+    .lightbox-close:hover { background: #353550; }
+    .lightbox-close svg {
+      display: block;
+      width: 16px;
+      height: 16px;
+      pointer-events: none;
+    }
+    .booster-row.selected { background: #1e2a40; }
+    .promo-cell {
+      min-width: 220px;
+      max-width: 320px;
+    }
+    .promo-cell .promo-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .promo-cell input.promo-url {
+      flex: 1;
+      min-width: 140px;
+      width: 100%;
+      padding: 5px 8px;
+      font-size: 12px;
+    }
+    .promo-cell .promo-link {
+      font-size: 12px;
+      color: #9ecbff;
+      text-decoration: none;
+    }
+    .promo-cell .promo-link:hover { text-decoration: underline; }
+    .weights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .weights-grid label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: #b8b8d0;
+    }
+    .weights-grid .pct {
+      color: #8888a0;
+      font-size: 11px;
+    }
+    .weights-readonly {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    .weights-readonly table { max-width: 420px; }
+    .tab-help {
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      background: #1c1c2e;
+      border: 1px solid #2a2a40;
+      border-radius: 8px;
+      color: #8888a0;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .tab-help strong { color: #b8b8d0; font-weight: 600; }
+    .tab-help ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
+    }
+    </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Карты</h1>
+    <p class="subtitle">Каталог, серии, бустеры и тиражи</p>
+    <p class="page-nav"><a href="admin.html">← Админ-панель</a></p>
+
+    <div id="statusBar">Готово</div>
+
+    <div class="tabs">
+      <button type="button" class="tab active" data-tab="settings">Основные</button>
+      <button type="button" class="tab" data-tab="catalog">Коллекции</button>
+      <button type="button" class="tab" data-tab="series">Серии</button>
+      <button type="button" class="tab" data-tab="boosters">Бустеры</button>
+      <button type="button" class="tab" data-tab="draws">Тиражи</button>
+    </div>
+
+    <section id="panel-settings" class="panel active">
+      <p class="tab-help">
+        <strong>Основные</strong> - глобальные переключатели модуля карт и справочник чат-команд.
+        Здесь включают/выключают ответы на <span class="mono">!бустер</span> / <span class="mono">!альбом</span>
+        и задают дневной лимит открытий (если у тиража свой лимит &gt; 0 - он важнее).
+        OBS-анимация открытия: Browser Source <span class="mono">/booster.html</span> (~384×560, прозрачный фон).
+      </p>
+
+      <div class="card">
+        <h3>Глобальные настройки</h3>
+        <div class="toolbar">
+          <label class="field-label">
+            <input type="checkbox" id="cardsEnabled" checked />
+            Модуль карт включён
+          </label>
+          <label class="field-label">
+            Лимит открытий в день (0 = без лимита)
+            <input type="number" id="cardsDailyLimit" min="0" value="0" />
+          </label>
+          <label class="field-label">
+            Скорость анимации OBS
+            <input type="number" id="cardsAnimSpeed" min="0.5" max="3" step="0.1" value="1" />
+          </label>
+          <button type="button" id="cardsSaveMeta" class="primary">Сохранить</button>
+          <button type="button" id="cardsRefresh">Обновить всё</button>
+        </div>
+        <p class="hint">
+          При выключенном модуле команды ниже отвечают отказом.
+          Скорость анимации: 1.0 = норма, 2.0 = в 2 раза быстрее, 0.5 = в 2 раза медленнее.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>Команды чата</h3>
+        <table class="cmd-table">
+          <thead>
+            <tr>
+              <th>команда</th>
+              <th>описание</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono">!бустер</td>
+              <td>Открыть тираж: анонс в чат + анимация OBS (<span class="mono">/booster.html</span>) + итог</td>
+            </tr>
+            <tr>
+              <td class="mono">!бустер инфо</td>
+              <td>Активный тираж: карты, пул, цена и promo-ссылка</td>
+            </tr>
+            <tr>
+              <td class="mono">!альбом</td>
+              <td>Прогресс коллекции и ссылка на альбом на сайте</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-catalog" class="panel">
+      <p class="tab-help">
+        <strong>Коллекции</strong> - полный каталог карт из БД: превью, редкость, серия, лор.
+        Только просмотр. Арты лежат в <span class="mono">obs/assets/cards/{slug}.webp</span>;
+        описания читаются из <span class="mono">cardDetails.json</span> (сайт / update.cmd), из админки не правятся.
+      </p>
+
+      <div class="card">
+        <h3>Каталог карт</h3>
+        <p id="catalogStoriesMeta" class="hint"></p>
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>id</th>
+              <th>имя</th>
+              <th>редкость</th>
+              <th>серия</th>
+              <th>описание</th>
+            </tr>
+          </thead>
+          <tbody id="catalogBody">
+            <tr><td colspan="6" class="empty">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-series" class="panel">
+      <p class="tab-help">
+        <strong>Серии</strong> - группы карт (каждая карта принадлежит одной серии).
+        Слева список серий, справа галерея карт и правка названия, порядка и id рубашки
+        <span class="mono">card_back_id</span> (файл: <span class="mono">obs/assets/cards/{id}.svg</span>).
+        Создавать карты здесь нельзя. Клик по карте или рубашке - просмотр в лайтбоксе.
+      </p>
+
+      <div class="series-layout">
+        <div class="card" style="margin-bottom: 0;">
+          <h3>Серии</h3>
+          <div id="seriesList" class="series-list">
+            <span class="empty">Загрузка…</span>
+          </div>
+        </div>
+        <div>
+          <div class="card" id="seriesEditCard">
+            <h3>Редактирование серии</h3>
+            <p id="seriesEditEmpty" class="empty">Выберите серию слева</p>
+            <form id="seriesForm" class="add-form" style="display: none; margin-bottom: 0;">
+              <label>id <input type="text" id="seriesId" class="mono" readonly /></label>
+              <label>название <input type="text" id="seriesName" required /></label>
+              <label>порядок <input type="number" id="seriesSort" value="0" /></label>
+              <label>рубашка <input type="text" id="seriesCardBack" class="mono" placeholder="card-back" required /></label>
+              <div class="series-back-preview-wrap">
+                <button type="button" class="series-back-preview" id="seriesBackPreview" title="Открыть рубашку в полном размере">
+                  <img id="seriesBackPreviewImg" alt="" />
+                  <span>Предпросмотр</span>
+                </button>
+              </div>
+              <button type="submit" class="primary">Сохранить</button>
+            </form>
+            <p class="hint">Файл рубашки: <span class="mono">obs/assets/cards/{card_back_id}.svg</span></p>
+          </div>
+          <div class="card">
+            <h3 id="seriesGalleryTitle">Карты серии</h3>
+            <div id="seriesGallery" class="card-gallery">
+              <span class="empty">Выберите серию</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-boosters" class="panel">
+      <p class="tab-help">
+        <strong>Бустеры</strong> - набор (пул) карт, из которого тираж выдаёт дроп.
+        Создайте бустер, отметьте карты чипами; «Показать состав» - галерея,
+        «Переименовать» сохраняет имя. Promo - ссылка на картинку для стрима
+        (<span class="mono">https://…</span> или <span class="mono">/assets/…</span>).
+        Бустер ≠ серия: в одном пуле могут быть карты из разных серий.
+      </p>
+
+      <div class="card">
+        <h3>Создать бустер</h3>
+        <form class="add-form" id="boosterForm">
+          <label>id <input type="text" id="boosterId" placeholder="start2" required /></label>
+          <label>название <input type="text" id="boosterName" required /></label>
+          <button type="submit" class="primary">Создать бустер</button>
+        </form>
+        <p class="hint">
+          Состав для создания / правки (клик - вкл/выкл). «Показать состав» подгружает карты бустера в чипы; «Переименовать» сохраняет имя и текущие чипы.
+        </p>
+        <div id="boosterPoolChips" class="chip-grid"></div>
+      </div>
+
+      <div class="card">
+        <h3>Список бустеров</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>название</th>
+              <th>карт</th>
+              <th>promo</th>
+              <th>действия</th>
+            </tr>
+          </thead>
+          <tbody id="boostersBody">
+            <tr><td colspan="5" class="empty">Загрузка…</td></tr>
+          </tbody>
+        </table>
+        <div id="boosterGalleryWrap" style="margin-top: 14px; display: none;">
+          <h3 id="boosterGalleryTitle" style="margin: 0 0 8px; font-size: 14px; color: #9ecbff;">Состав</h3>
+          <div id="boosterGallery" class="card-gallery"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-draws" class="panel">
+      <p class="tab-help">
+        <strong>Тиражи</strong> - конкретный запуск бустера для зрителей: цена, число карт, шансы редкости.
+        Очередь <strong>FIFO</strong> (первый созданный - первый на выход), одновременно один live.
+      </p>
+      <div class="tab-help" style="margin-top: -6px;">
+        <ul>
+          <li><span class="mono">queued</span> - в очереди; «Активировать» только у <em>первого</em>, если нет live</li>
+          <li><span class="mono">active</span> - текущий: «Пауза» или «Завершить»</li>
+          <li><span class="mono">paused</span> - пауза: «Возобновить» или «Завершить»</li>
+          <li><span class="mono">closed</span> - завершён навсегда, активировать нельзя (нужна «Копия» в конец очереди)</li>
+        </ul>
+        «Завершить» поднимает следующий из очереди. «Сразу активировать» при создании закрывает текущий live.
+        Шансы задаются только при создании; у существующих - кнопка «Шансы» (просмотр).
+      </div>
+
+      <div class="card">
+        <h3>Создать тираж</h3>
+        <form class="add-form" id="drawForm">
+          <label>id <input type="text" id="drawId" placeholder="draw002" required /></label>
+          <label>название <input type="text" id="drawName" required /></label>
+          <label>бустер
+            <select id="drawBooster" required></select>
+          </label>
+          <label>цена <input type="number" id="drawCost" min="1" value="1000" required /></label>
+          <label>карт <input type="number" id="drawCards" min="1" value="6" required /></label>
+          <label>лимит/день <input type="number" id="drawDailyLimit" min="0" value="0" /></label>
+          <label><input type="checkbox" id="drawActivate" /> сразу активировать (закроет текущий live)</label>
+          <button type="submit" class="primary">Создать тираж</button>
+        </form>
+        <p class="hint">
+          Шансы редкости: относительные веса (сумма не обязана быть 100). Проценты - для наглядности.
+        </p>
+        <div id="drawWeightsEditor" class="weights-grid"></div>
+      </div>
+
+      <div class="card">
+        <h3>Тиражи</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>название</th>
+              <th>бустер</th>
+              <th>цена</th>
+              <th>карт</th>
+              <th>статус</th>
+              <th>действия</th>
+            </tr>
+          </thead>
+          <tbody id="drawsBody">
+            <tr><td colspan="7" class="empty">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" hidden>
+    <div class="lightbox-inner">
+      <button type="button" class="lightbox-close" id="lightboxClose" aria-label="Закрыть">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 4l8 8M12 4L4 12"/>
+        </svg>
+      </button>
+      <div class="lightbox-stage">
+        <img id="lightboxImg" alt="" />
+      </div>
+      <div class="lightbox-caption" id="lightboxCaption"></div>
+    </div>
+  </div>
+
+  <script src="cards-admin.js"></script>
+</body>
+</html>

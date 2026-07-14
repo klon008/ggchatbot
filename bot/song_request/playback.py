@@ -65,6 +65,8 @@ class PlaybackController:
     async def on_obs_status(self, data: dict) -> None:
         status = data.get("status")
         if status == "ready":
+            if data.get("overlay") == "booster":
+                return
             log.info(
                 "Плеер готов (youtubeApi=%s, state=%s).",
                 data.get("youtubeApi"),

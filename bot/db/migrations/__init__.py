@@ -17,6 +17,9 @@ from . import (
     m009_elsa_mythic,
     m010_card_asset_urls,
     m011_series_card_back,
+    m012_cards_enabled,
+    m013_draws_fifo,
+    m014_anim_speed,
 )
 
 
@@ -38,4 +41,7 @@ MIGRATIONS: list[Migration] = [
     m009_elsa_mythic,
     m010_card_asset_urls,
     m011_series_card_back,
+    m012_cards_enabled,
+    m013_draws_fifo,
+    m014_anim_speed,
 ]

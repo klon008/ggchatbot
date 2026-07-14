@@ -15,7 +15,8 @@
 |-----|-----|
 | SQLite (`data/bot.db`) | Источник правды: серии, карты, бустеры, тиражи, альбомы |
 | Команды чата | `!бустер`, `!бустер инфо`, `!альбом` → модуль `bot/cards/` |
-| OBS Admin | `http://127.0.0.1:8765/admin.html` → вкладка **Карты** (не в туннеле) |
+| OBS бустер | `http://127.0.0.1:8765/booster.html` (Browser Source ~384×560, `/ws`) |
+| OBS Admin | `http://127.0.0.1:8765/cards-admin.html` (из `admin.html` → **Карты**; не в туннеле) |
 | Album API | `http://127.0.0.1:18770` — только `GET` альбома/health (в CLO) |
 | Арты для админки | `obs/assets/cards/{slug}.webp`, рубашки `{back-id}.svg` |
 | Описания (лор) | `data/card-assets-repo/src/app/cardDetails.json` ← сайт (только чтение в Admin) |
@@ -153,16 +154,25 @@ UPDATE card_series SET card_back_id = 'my-back' WHERE id = 'fantast';
 
 | Команда / UI | Назначение |
 |--------------|------------|
-| `!бустер` | Открыть **активный** тираж |
-| `!бустер инфо` | Цена, N карт, promo |
-| Admin → Карты | CRUD бустеров, пул, тиражи, promo JPG, лимит/день |
+| `!бустер` | Открыть **активный** тираж: чат (анонс → итог) + OBS-анимация |
+| `!бустер инфо` | Активный тираж: карты за открытие, размер пула, цена, promo |
+| Admin → Карты | `cards-admin.html`: настройки (+выкл. команд), серии, бустеры, тиражи/шансы, promo |
+| OBS → Бустер | `booster.html` (~384×560): 3D-флип; скорость из `anim_speed` в meta / payload |
 
-Правила тиража: **не редактируется** после создания — копия → новый id → активировать.  
+После `!бустер`:
+
+1. Чат: `{ник}, открывает {бустер} ({тираж}): N карт, стоимость - X принцесс.`
+2. WS `booster_open` → overlay крутит карты; ack `booster_done`.
+3. Чат: итог с группировкой дублей + `!альбом`.
+
+Если Browser Source бустера не подключён - оба сообщения в чат без ожидания анимации.
+
+Правила тиража: очередь **FIFO** (`queued` → `active`/`paused` → `closed`). Завершённый (`closed`) нельзя активировать снова — только копия в конец очереди. Веса редкостей задаются при создании.  
 Дубль: карта не добавляется, возврат `floor((cost/N)*0.25)` баллов.
 
 Стартовый бустер: id `start`, имя **«Стартовый набор»**.
 
-Promo: `POST /api/cards/boosters/{id}/promo` → `obs/assets/boosters/`.
+Promo: `PUT /api/cards/boosters/{id}/promo` с `{ "promo_image_url": "https://…" }` (или `""` чтобы очистить).
 
 ---
 
@@ -192,8 +202,10 @@ Promo: `POST /api/cards/boosters/{id}/promo` → `obs/assets/boosters/`.
 
 ### Admin (порт **8765**, localhost)
 
-- `GET /api/cards/catalog` · `boosters` · `draws` · `meta`
-- `POST/PUT` бустеры, активация/пауза/копия тиража
+- `GET /api/cards/catalog` · `boosters` · `draws` · `meta` · `series`
+- `PUT /api/cards/meta` — `daily_open_limit`, `enabled` (выключатель команд `!бустер` / `!альбом`), `anim_speed` (0.5–3.0, больше = быстрее OBS-анимация)
+- `PUT /api/cards/series/{id}` — имя, порядок, `card_back_id`
+- `POST/PUT` бустеры, активация/пауза/копия тиража; веса редкостей — при создании тиража
 
 ---
 
@@ -228,7 +240,8 @@ bot/db/migrations/m010…    # image_url → /assets/cards/
 bot/db/migrations/m011…    # card_back_id, имя бустера
 obs/assets/cards/          # webp + svg рубашек для Admin
 data/card-assets-repo/     # sparse-кэш сайта (imports + cardDetails.json)
-obs/admin.html / admin.js  # вкладка «Карты»
+obs/cards-admin.html / cards-admin.js
+obs/admin.html          # ссылка «Карты» → cards-admin
 scripts/sync-card-assets.ps1
 scripts/migrate_db.py
 ```

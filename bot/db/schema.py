@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS draws (
     cost_points INTEGER NOT NULL,
     cards_per_open INTEGER NOT NULL,
     rarity_weights TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'inactive',
+    status TEXT NOT NULL DEFAULT 'queued',
     daily_limit INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     FOREIGN KEY (booster_id) REFERENCES boosters(id)
@@ -230,7 +230,9 @@ CREATE TABLE IF NOT EXISTS user_daily_opens (
 
 CREATE TABLE IF NOT EXISTS cards_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    daily_open_limit INTEGER NOT NULL DEFAULT 0
+    daily_open_limit INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    anim_speed REAL NOT NULL DEFAULT 1.0
 );
 """
 

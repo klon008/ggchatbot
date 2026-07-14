@@ -121,6 +121,7 @@ async def main() -> int:
     await bot.album_web.start()
     await bot.clo.start()
     bot.cards.bind_points(bot.princess.points)
+    bot.cards.bind_obs(bot.sr.player)
 
     album_base = "http://127.0.0.1:18770"
     ok = True
@@ -133,6 +134,13 @@ async def main() -> int:
         async with s.get(f"{base}/player.js") as r:
             assert r.status == 200, "player.js не отдался"
             print("[OK] HTTP player.js")
+        async with s.get(f"{base}/booster.html") as r:
+            html = await r.text()
+            assert r.status == 200 and "booster.js" in html, "booster.html не отдался"
+            print("[OK] HTTP booster.html")
+        async with s.get(f"{base}/booster.js") as r:
+            assert r.status == 200, "booster.js не отдался"
+            print("[OK] HTTP booster.js")
 
         async with s.get(f"{album_base}/api/v1/health") as r:
             assert r.status == 200, await r.text()
@@ -185,9 +193,29 @@ async def main() -> int:
             assert any(d["status"] == "active" for d in draws["items"])
             print("[OK] GET /api/cards/draws")
 
-        async with s.put(f"{base}/api/cards/meta", json={"daily_open_limit": 5}) as r:
+        async with s.put(
+            f"{base}/api/cards/meta",
+            json={"daily_open_limit": 5, "enabled": True, "anim_speed": 1.5},
+        ) as r:
             assert r.status == 200
+            meta = await r.json()
+            assert meta.get("daily_open_limit") == 5
+            assert meta.get("enabled") is True
+            assert abs(float(meta.get("anim_speed", 0)) - 1.5) < 1e-6
             print("[OK] PUT /api/cards/meta")
+
+        async with s.get(f"{base}/api/cards/meta") as r:
+            assert r.status == 200
+            meta = await r.json()
+            assert "enabled" in meta and "daily_open_limit" in meta
+            assert "anim_speed" in meta
+            print("[OK] GET /api/cards/meta")
+
+        async with s.get(f"{base}/api/cards/series") as r:
+            assert r.status == 200
+            series = await r.json()
+            assert any(s["id"] == "fantast" for s in series["items"])
+            print("[OK] GET /api/cards/series")
 
         async def wait_action(ws, action, timeout=3):
             """Дождаться сообщения с нужным action (пропуская прочие)."""
@@ -290,10 +318,18 @@ async def main() -> int:
         async with s.get(f"{base}/admin.html") as r:
             html = await r.text()
             assert r.status == 200 and "admin.js" in html, "admin.html не отдался"
+            assert "cards-admin.html" in html, "admin.html должна ссылаться на cards-admin"
             print("[OK] HTTP admin.html")
         async with s.get(f"{base}/admin.js") as r:
             assert r.status == 200, "admin.js не отдался"
             print("[OK] HTTP admin.js")
+        async with s.get(f"{base}/cards-admin.html") as r:
+            html = await r.text()
+            assert r.status == 200 and "cards-admin.js" in html, "cards-admin.html не отдался"
+            print("[OK] HTTP cards-admin.html")
+        async with s.get(f"{base}/cards-admin.js") as r:
+            assert r.status == 200, "cards-admin.js не отдался"
+            print("[OK] HTTP cards-admin.js")
 
         pending_uid = "smoke-pending-user"
         await bot.princess.points.set_balance(pending_uid, 0)

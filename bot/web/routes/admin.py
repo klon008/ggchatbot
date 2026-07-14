@@ -19,7 +19,7 @@ from bot.web.api import (
     parse_user_name,
     read_json,
 )
-from bot.web.static import serve_obs_asset, serve_obs_file
+from bot.web.static import serve_obs_asset, serve_obs_card_template, serve_obs_file
 
 if TYPE_CHECKING:
     from bot.economy.points import PointsStore
@@ -68,6 +68,8 @@ class AdminRoutes:
             [
                 web.get("/admin.html", self._handle_index),
                 web.get("/admin.js", self._handle_admin_js),
+                web.get("/cards-admin.html", self._handle_cards_admin_html),
+                web.get("/cards-admin.js", self._handle_cards_admin_js),
                 web.get("/api/points", self._api_points_list),
                 web.get("/api/points/{user_id}", self._api_points_get),
                 web.post("/api/points", self._api_points_create),
@@ -95,6 +97,7 @@ class AdminRoutes:
                 web.post("/api/races/cancel", self._api_races_cancel),
                 web.get("/races.html", self._handle_races_html),
                 web.get("/races.js", self._handle_races_js),
+                web.get("/card-templates/{path:.*}", self._handle_card_templates),
                 web.get("/assets/{path:.*}", self._handle_assets),
             ]
         )
@@ -104,6 +107,12 @@ class AdminRoutes:
 
     async def _handle_admin_js(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("admin.js", "application/javascript; charset=utf-8")
+
+    async def _handle_cards_admin_html(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("cards-admin.html", "text/html; charset=utf-8")
+
+    async def _handle_cards_admin_js(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("cards-admin.js", "application/javascript; charset=utf-8")
 
     async def _handle_roulette_html(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("roulette.html", "text/html; charset=utf-8")
@@ -119,6 +128,9 @@ class AdminRoutes:
 
     async def _handle_assets(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_asset(request.match_info["path"])
+
+    async def _handle_card_templates(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_card_template(request.match_info["path"])
 
     async def _api_points_list(self, request: web.Request) -> web.Response:
         try:

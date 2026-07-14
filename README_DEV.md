@@ -196,7 +196,7 @@ Dataclass `Config` читает переменные из `.env` (через `py
 
 Подробнее: [TODO_album.md](./TODO_album.md).
 
-**Админка карт:** вкладка «Карты» в `admin.html` — бустеры, тиражи, promo JPG, глобальный лимит открытий/день.
+**Админка карт:** `cards-admin.html` (кнопка «Карты» в `admin.html`) — настройки/`enabled`, серии, бустеры, тиражи и шансы, promo JPG, лимит открытий/день.
 
 ## 4. Оркестратор: `bot/app.py`
 
@@ -387,8 +387,11 @@ class Track:
 |-----|------|
 | `/`, `/player.html` | `obs/player.html` |
 | `/player.js` | `obs/player.js` |
+| `/booster.html` | `obs/booster.html` — анимация открытия бустера (~384×560) |
+| `/booster.js` | `obs/booster.js` |
 | `/commands.html` | `obs/commands.html` (через `DocsRoutes`) |
 | `/admin.html` | `obs/admin.html` (через `AdminRoutes`) |
+| `/cards-admin.html` | `obs/cards-admin.html` — админка карт (серии, бустеры, тиражи) |
 | `/roulette.html` | `obs/roulette.html` — SVG-колесо рулетки для стрима |
 | `/roulette.js` | `obs/roulette.js` |
 | `/races.html` | `obs/races.html` — забег принцесс для стрима |
@@ -410,8 +413,10 @@ class Track:
 {"action": "skip", "token": "t-1"}
 {"action": "toggle_pause", "token": "t-1"}
 {"action": "queue_state", "playing": false, "queueLength": 0, "current": null}
+{"action": "booster_open", "openingId": "…", "userName": "nick", "cards": [{"id":"elsa","name":"…","rarity":"mythic","isDuplicate":false,"refund":0,"imageUrl":"/assets/cards/elsa.webp","cardBackUrl":"/assets/cards/card-back.svg"}]}
 ```
 
+`booster_open` обрабатывает только `booster.html` (плеер игнорирует). Ответ overlay: `{status:"ready", overlay:"booster"}` и `{status:"booster_done", openingId}`.
 ---
 
 ### 6.4. `youtube.py`
@@ -719,10 +724,11 @@ python scripts/migrate_json_to_sqlite.py
 
 | status | Поля | Когда |
 |--------|------|-------|
-| `ready` | — | WS подключён, API готов |
+| `ready` | `overlay?` (`booster`) | WS подключён; бустер-overlay шлёт `overlay:"booster"` |
 | `ended` | `token`, `videoId` | Видео доиграло |
 | `error` | `token`, `videoId`, `code` | YouTube onError |
 | `too_long` | `token`, `videoId`, `durationSec` | duration > maxDurationSec или live |
+| `booster_done` | `openingId` | Анимация открытия бустера завершена |
 
 ### Python → плеер
 

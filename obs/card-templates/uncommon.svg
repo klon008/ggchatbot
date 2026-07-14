@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+  class="card-svg" data-rarity="uncommon" viewBox="0 0 350 490"
+  style="overflow:visible;width:100%;height:100%;display:block" role="img" aria-label="Uncommon card template">
+  <defs>
+    <radialGradient id="bguncommon" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#142238"/>
+      <stop offset="100%" stop-color="#0a1520"/>
+    </radialGradient>
+    <linearGradient id="gvuncommon" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#78D878"/>
+      <stop offset="30%" stop-color="#3A9850"/>
+      <stop offset="55%" stop-color="#78D878"/>
+      <stop offset="80%" stop-color="#3A9850"/>
+      <stop offset="100%" stop-color="#78D878"/>
+    </linearGradient>
+    <linearGradient id="ghuncommon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#78D878"/>
+      <stop offset="50%" stop-color="#3A9850"/>
+      <stop offset="100%" stop-color="#78D878"/>
+    </linearGradient>
+    <filter id="scfuncommon" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="ccuncommon"><rect x="0" y="0" width="350" height="490" rx="16"/></clipPath>
+    <clipPath id="icuncommon"><rect x="20" y="80" width="310" height="330" rx="7"/></clipPath>
+    <filter id="glwuncommon" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3.3333333333333335" result="blur"/>
+      <feFlood flood-color="#48A858" flood-opacity="0.7" result="col"/>
+      <feComposite in="col" in2="blur" operator="in" result="sh"/>
+      <feMerge><feMergeNode in="sh"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter></defs>
+  <rect x="0" y="0" width="350" height="490" rx="16" fill="url(#bguncommon)"/>
+    <g clip-path="url(#ccuncommon)" opacity="0.07">
+      <circle cx="175" cy="240" r="190" fill="none" stroke="#3A9850" stroke-width="0.5"/>
+      <circle cx="175" cy="240" r="140" fill="none" stroke="#3A9850" stroke-width="0.4"/>
+      <circle cx="175" cy="240" r="90" fill="none" stroke="#3A9850" stroke-width="0.3"/>
+    </g><g clip-path="url(#ccuncommon)"><circle cx="77.64766157984013" cy="457.9299380967859" r="1.8993523124649072" fill="#78D878" opacity="0.6221954508915588"/><circle cx="250.35076938856946" cy="464.3566980442847" r="0.6413184426550288" fill="#78D878" opacity="0.7397283215382231"/><circle cx="84.34006271345424" cy="35.22871692581248" r="2.2904366306087467" fill="#78D878" opacity="0.3294098130594648"/><circle cx="37.7681742365894" cy="29.916616348127718" r="0.9817150408947782" fill="#78D878" opacity="0.6118226586640958"/><circle cx="151.15267021611913" cy="71.19335239753127" r="1.8896627391135552" fill="#78D878" opacity="0.22491391590319837"/><circle cx="11.57554220444581" cy="211.15854462892457" r="0.9822637471428607" fill="#78D878" opacity="0.5608268359696013"/><circle cx="279.3321471663148" cy="34.23955970814859" r="2.3251843715901486" fill="#78D878" opacity="0.32827391914761395"/><circle cx="146.81912432213267" cy="478.7627839515335" r="1.2530500733540975" fill="#78D878" opacity="0.7711748871797681"/></g>
+      <rect x="7" y="7" width="336" height="476" rx="12.5" fill="none" stroke="url(#gvuncommon)" stroke-width="14"/>
+      <rect x="1" y="1" width="348" height="488" rx="15.5" fill="none" stroke="#78D878" stroke-width="0.5" opacity="0.5"/>
+      <rect x="15" y="15" width="320" height="460" rx="9.5" fill="none" stroke="#78D878" stroke-width="0.75" opacity="0.6"/><rect x="7" y="7" width="336" height="476" rx="12.5" fill="none" stroke="#48A858" stroke-width="9" filter="url(#glwuncommon)" opacity="0.55"/><g transform="translate(14,14) rotate(0)"><g>
+    <path d="M 0,18 L 0,4 C 0,2 2,0 4,0 L 18,0" stroke="#3A9850" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="#78D878" opacity="0.8"/><g transform="translate(11,11)">
+      <path d="M 0,-9 C 3,-5 3,0 0,3 C -3,0 -3,-5 0,-9 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M 9,0 C 5,3 0,3 -3,0 C 0,-3 5,-3 9,0 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M 0,9 C -3,5 -3,0 0,-3 C 3,0 3,5 0,9 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M -9,0 C -5,-3 0,-3 3,0 C 0,3 -5,3 -9,0 Z" fill="#3A9850" opacity="0.8"/>
+      <circle cx="0" cy="0" r="3" fill="#78D878" opacity="0.9"/>
+    </g></g></g><g transform="translate(336,14) rotate(90)"><g>
+    <path d="M 0,18 L 0,4 C 0,2 2,0 4,0 L 18,0" stroke="#3A9850" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="#78D878" opacity="0.8"/><g transform="translate(11,11)">
+      <path d="M 0,-9 C 3,-5 3,0 0,3 C -3,0 -3,-5 0,-9 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M 9,0 C 5,3 0,3 -3,0 C 0,-3 5,-3 9,0 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M 0,9 C -3,5 -3,0 0,-3 C 3,0 3,5 0,9 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M -9,0 C -5,-3 0,-3 3,0 C 0,3 -5,3 -9,0 Z" fill="#3A9850" opacity="0.8"/>
+      <circle cx="0" cy="0" r="3" fill="#78D878" opacity="0.9"/>
+    </g></g></g><g transform="translate(336,476) rotate(180)"><g>
+    <path d="M 0,18 L 0,4 C 0,2 2,0 4,0 L 18,0" stroke="#3A9850" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="#78D878" opacity="0.8"/><g transform="translate(11,11)">
+      <path d="M 0,-9 C 3,-5 3,0 0,3 C -3,0 -3,-5 0,-9 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M 9,0 C 5,3 0,3 -3,0 C 0,-3 5,-3 9,0 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M 0,9 C -3,5 -3,0 0,-3 C 3,0 3,5 0,9 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M -9,0 C -5,-3 0,-3 3,0 C 0,3 -5,3 -9,0 Z" fill="#3A9850" opacity="0.8"/>
+      <circle cx="0" cy="0" r="3" fill="#78D878" opacity="0.9"/>
+    </g></g></g><g transform="translate(14,476) rotate(270)"><g>
+    <path d="M 0,18 L 0,4 C 0,2 2,0 4,0 L 18,0" stroke="#3A9850" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="#78D878" opacity="0.8"/><g transform="translate(11,11)">
+      <path d="M 0,-9 C 3,-5 3,0 0,3 C -3,0 -3,-5 0,-9 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M 9,0 C 5,3 0,3 -3,0 C 0,-3 5,-3 9,0 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M 0,9 C -3,5 -3,0 0,-3 C 3,0 3,5 0,9 Z" fill="#3A9850" opacity="0.8"/>
+      <path d="M -9,0 C -5,-3 0,-3 3,0 C 0,3 -5,3 -9,0 Z" fill="#3A9850" opacity="0.8"/>
+      <circle cx="0" cy="0" r="3" fill="#78D878" opacity="0.9"/>
+    </g></g></g>
+    <rect x="14" y="14" width="322" height="64" rx="3" fill="#0a1520" opacity="0.72"/>
+    <rect x="17" y="17" width="316" height="58" rx="2.5" fill="none" stroke="url(#ghuncommon)" stroke-width="1"/>
+    <rect x="23" y="27" width="304" height="32" rx="2" fill="#142238" opacity="0.8"/>
+    <rect x="23" y="27" width="304" height="32" rx="2" fill="none" stroke="#3A9850" stroke-width="0.6" opacity="0.5"/>
+    <path d="M 23,27 C 18,28 16,33 19,38 C 21,42 25,41 23,36" fill="#3A9850" opacity="0.42"/>
+    <path d="M 327,27 C 332,28 334,33 331,38 C 329,42 325,41 327,36" fill="#3A9850" opacity="0.42"/>
+    <text data-slot="name" class="card-princess-name" x="175" y="44" text-anchor="middle" dominant-baseline="middle" fill="#78D878" opacity="0.45" font-family="Georgia, 'Times New Roman', serif" font-size="14" letter-spacing="2">NAME</text><polygon points="36,38 39.5,43 36,48 32.5,43" fill="#3A9850" stroke="none" stroke-width="0" opacity="0.7"/><polygon points="314,38 317.5,43 314,48 310.5,43" fill="#3A9850" stroke="none" stroke-width="0" opacity="0.7"/><rect x="15" y="75" width="320" height="340" rx="11" fill="#48A858" opacity="0.1" filter="url(#glwuncommon)"/>
+    <rect x="20" y="80" width="310" height="330" rx="7" fill="#142238"/>
+    <rect data-slot="portrait-bg" x="20" y="80" width="310" height="330" rx="7" fill="none" stroke="#3A9850" stroke-width="1" stroke-dasharray="6 5" opacity="0.35"/>
+    <text x="175" y="245" text-anchor="middle" dominant-baseline="middle" fill="#78D878" opacity="0.28" font-family="Georgia, serif" font-size="13" letter-spacing="1.5">PORTRAIT</text>
+    <image data-slot="portrait" class="card-portrait" href="" x="20" y="80" width="310" height="330" preserveAspectRatio="xMidYMid slice" clip-path="url(#icuncommon)"/>
+    <rect x="20" y="80" width="310" height="330" rx="7" fill="none" stroke="url(#gvuncommon)" stroke-width="2.5"/>
+    <rect x="23" y="83" width="304" height="324" rx="5" fill="none" stroke="#78D878" stroke-width="0.5" opacity="0.5"/><g transform="translate(30,90) scale(1,1)" opacity="0.75">
+      <path d="M -7,0 C -7,-7 0,-7 0,0" stroke="#3A9850" stroke-width="0.85" fill="none"/>
+      <path d="M 0,-7 C 7,-7 7,0 0,0" stroke="#3A9850" stroke-width="0.85" fill="none"/>
+      <circle cx="0" cy="0" r="1.5" fill="#78D878"/>
+    </g><g transform="translate(320,90) scale(-1,1)" opacity="0.75">
+      <path d="M -7,0 C -7,-7 0,-7 0,0" stroke="#3A9850" stroke-width="0.85" fill="none"/>
+      <path d="M 0,-7 C 7,-7 7,0 0,0" stroke="#3A9850" stroke-width="0.85" fill="none"/>
+      <circle cx="0" cy="0" r="1.5" fill="#78D878"/>
+    </g><g transform="translate(30,400) scale(1,-1)" opacity="0.75">
+      <path d="M -7,0 C -7,-7 0,-7 0,0" stroke="#3A9850" stroke-width="0.85" fill="none"/>
+      <path d="M 0,-7 C 7,-7 7,0 0,0" stroke="#3A9850" stroke-width="0.85" fill="none"/>
+      <circle cx="0" cy="0" r="1.5" fill="#78D878"/>
+    </g><g transform="translate(320,400) scale(-1,-1)" opacity="0.75">
+      <path d="M -7,0 C -7,-7 0,-7 0,0" stroke="#3A9850" stroke-width="0.85" fill="none"/>
+      <path d="M 0,-7 C 7,-7 7,0 0,0" stroke="#3A9850" stroke-width="0.85" fill="none"/>
+      <circle cx="0" cy="0" r="1.5" fill="#78D878"/>
+    </g>
+    <rect x="14" y="416" width="322" height="56" rx="3" fill="#0a1520" opacity="0.72"/>
+    <line x1="18" y1="422" x2="332" y2="422" stroke="url(#ghuncommon)" stroke-width="0.8"/>
+    <line x1="18" y1="425" x2="332" y2="425" stroke="#78D878" stroke-width="0.25" opacity="0.4"/>
+    <g transform="translate(175,446)" opacity="0.85">
+      <line x1="-153" y1="0" x2="-32" y2="0" stroke="url(#ghuncommon)" stroke-width="0.8"/>
+      <line x1="32" y1="0" x2="153" y2="0" stroke="url(#ghuncommon)" stroke-width="0.8"/>
+      <polygon points="5.51091059616309e-16,-9 1.7099999999999995,-2.96180688094278 7.794228634059947,-4.5 3.42,0 7.794228634059948,4.499999999999998 1.7099999999999995,2.96180688094278 5.51091059616309e-16,9 -1.7099999999999993,2.96180688094278 -7.794228634059946,4.500000000000003 -3.42,4.188292053083948e-16 -7.794228634059947,-4.500000000000001 -1.7100000000000015,-2.9618068809427798" fill="#3A9850" opacity="0.7"/>
+      <polygon points="2.755455298081545e-16,-4.5 0.8549999999999998,-1.48090344047139 3.8971143170299736,-2.25 1.71,0 3.897114317029974,2.249999999999999 0.8549999999999998,1.48090344047139 2.755455298081545e-16,4.5 -0.8549999999999996,1.48090344047139 -3.897114317029973,2.2500000000000013 -1.71,2.094146026541974e-16 -3.8971143170299736,-2.2500000000000004 -0.8550000000000008,-1.4809034404713899" fill="#78D878" opacity="0.5"/>
+    </g><g filter="url(#scfuncommon)">
+        <polygon points="175,454 179,460 175,466 171,460" fill="#3A9850" stroke="none" stroke-width="0" opacity="0.88"/>
+        <polygon points="175,455.5 177,458 175,460.5 173,458" fill="white" stroke="none" stroke-width="0" opacity="0.1"/>
+      </g><polygon points="28,441.5 29.209152595828996,444.790847404171 32.5,446 29.209152595828996,447.209152595829 28,450.5 26.790847404171004,447.209152595829 23.5,446 26.790847404171004,444.790847404171" fill="#3A9850" opacity="0.55"/><polygon points="322,441.5 323.209152595829,444.790847404171 326.5,446 323.209152595829,447.209152595829 322,450.5 320.790847404171,447.209152595829 317.5,446 320.790847404171,444.790847404171" fill="#3A9850" opacity="0.55"/><line x1="18" y1="467" x2="332" y2="467" stroke="#3A9850" stroke-width="0.75" opacity="0.6"/>
+    <g transform="translate(175,483)"><circle cx="-4.5" cy="0" r="2.5" fill="#7AD868" opacity="0.88"/><circle cx="4.5" cy="0" r="2.5" fill="#7AD868" opacity="0.88"/></g>
+</svg>

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+  class="card-svg" data-rarity="common" viewBox="0 0 350 490"
+  style="overflow:visible;width:100%;height:100%;display:block" role="img" aria-label="Common card template">
+  <defs>
+    <radialGradient id="bgcommon" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#1a2038"/>
+      <stop offset="100%" stop-color="#0e1220"/>
+    </radialGradient>
+    <linearGradient id="gvcommon" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#B89858"/>
+      <stop offset="30%" stop-color="#8B7040"/>
+      <stop offset="55%" stop-color="#B89858"/>
+      <stop offset="80%" stop-color="#8B7040"/>
+      <stop offset="100%" stop-color="#B89858"/>
+    </linearGradient>
+    <linearGradient id="ghcommon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#B89858"/>
+      <stop offset="50%" stop-color="#8B7040"/>
+      <stop offset="100%" stop-color="#B89858"/>
+    </linearGradient>
+    <filter id="scfcommon" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="cccommon"><rect x="0" y="0" width="350" height="490" rx="16"/></clipPath>
+    <clipPath id="iccommon"><rect x="20" y="80" width="310" height="330" rx="7"/></clipPath></defs>
+  <rect x="0" y="0" width="350" height="490" rx="16" fill="url(#bgcommon)"/>
+    <g clip-path="url(#cccommon)" opacity="0.07">
+      <circle cx="175" cy="240" r="190" fill="none" stroke="#8B7040" stroke-width="0.5"/>
+      <circle cx="175" cy="240" r="140" fill="none" stroke="#8B7040" stroke-width="0.4"/>
+      <circle cx="175" cy="240" r="90" fill="none" stroke="#8B7040" stroke-width="0.3"/>
+    </g><g clip-path="url(#cccommon)"></g>
+      <rect x="5.5" y="5.5" width="339" height="479" rx="13.25" fill="none" stroke="url(#gvcommon)" stroke-width="11"/>
+      <rect x="1" y="1" width="348" height="488" rx="15.5" fill="none" stroke="#B89858" stroke-width="0.5" opacity="0.5"/>
+      <rect x="12" y="12" width="326" height="466" rx="10.25" fill="none" stroke="#B89858" stroke-width="0.75" opacity="0.6"/><g transform="translate(11,11) rotate(0)"><g>
+    <path d="M 0,18 L 0,4 C 0,2 2,0 4,0 L 18,0" stroke="#8B7040" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="#B89858" opacity="0.8"/></g></g><g transform="translate(339,11) rotate(90)"><g>
+    <path d="M 0,18 L 0,4 C 0,2 2,0 4,0 L 18,0" stroke="#8B7040" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="#B89858" opacity="0.8"/></g></g><g transform="translate(339,479) rotate(180)"><g>
+    <path d="M 0,18 L 0,4 C 0,2 2,0 4,0 L 18,0" stroke="#8B7040" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="#B89858" opacity="0.8"/></g></g><g transform="translate(11,479) rotate(270)"><g>
+    <path d="M 0,18 L 0,4 C 0,2 2,0 4,0 L 18,0" stroke="#8B7040" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="#B89858" opacity="0.8"/></g></g>
+    <rect x="11" y="11" width="328" height="64" rx="3" fill="#0e1220" opacity="0.72"/>
+    <rect x="14" y="14" width="322" height="58" rx="2.5" fill="none" stroke="url(#ghcommon)" stroke-width="1"/>
+    <rect x="20" y="24" width="310" height="32" rx="2" fill="#1a2038" opacity="0.8"/>
+    <rect x="20" y="24" width="310" height="32" rx="2" fill="none" stroke="#8B7040" stroke-width="0.6" opacity="0.5"/>
+    <path d="M 20,24 C 15,25 13,30 16,35 C 18,39 22,38 20,33" fill="#8B7040" opacity="0.42"/>
+    <path d="M 330,24 C 335,25 337,30 334,35 C 332,39 328,38 330,33" fill="#8B7040" opacity="0.42"/>
+    <text data-slot="name" class="card-princess-name" x="175" y="41" text-anchor="middle" dominant-baseline="middle" fill="#B89858" opacity="0.45" font-family="Georgia, 'Times New Roman', serif" font-size="14" letter-spacing="2">NAME</text>
+    <rect x="20" y="80" width="310" height="330" rx="7" fill="#1a2038"/>
+    <rect data-slot="portrait-bg" x="20" y="80" width="310" height="330" rx="7" fill="none" stroke="#8B7040" stroke-width="1" stroke-dasharray="6 5" opacity="0.35"/>
+    <text x="175" y="245" text-anchor="middle" dominant-baseline="middle" fill="#B89858" opacity="0.28" font-family="Georgia, serif" font-size="13" letter-spacing="1.5">PORTRAIT</text>
+    <image data-slot="portrait" class="card-portrait" href="" x="20" y="80" width="310" height="330" preserveAspectRatio="xMidYMid slice" clip-path="url(#iccommon)"/>
+    <rect x="20" y="80" width="310" height="330" rx="7" fill="none" stroke="url(#gvcommon)" stroke-width="2.5"/>
+    <rect x="23" y="83" width="304" height="324" rx="5" fill="none" stroke="#B89858" stroke-width="0.5" opacity="0.5"/><g transform="translate(30,90) scale(1,1)" opacity="0.75">
+      <path d="M -7,0 C -7,-7 0,-7 0,0" stroke="#8B7040" stroke-width="0.85" fill="none"/>
+      <path d="M 0,-7 C 7,-7 7,0 0,0" stroke="#8B7040" stroke-width="0.85" fill="none"/>
+      <circle cx="0" cy="0" r="1.5" fill="#B89858"/>
+    </g><g transform="translate(320,90) scale(-1,1)" opacity="0.75">
+      <path d="M -7,0 C -7,-7 0,-7 0,0" stroke="#8B7040" stroke-width="0.85" fill="none"/>
+      <path d="M 0,-7 C 7,-7 7,0 0,0" stroke="#8B7040" stroke-width="0.85" fill="none"/>
+      <circle cx="0" cy="0" r="1.5" fill="#B89858"/>
+    </g><g transform="translate(30,400) scale(1,-1)" opacity="0.75">
+      <path d="M -7,0 C -7,-7 0,-7 0,0" stroke="#8B7040" stroke-width="0.85" fill="none"/>
+      <path d="M 0,-7 C 7,-7 7,0 0,0" stroke="#8B7040" stroke-width="0.85" fill="none"/>
+      <circle cx="0" cy="0" r="1.5" fill="#B89858"/>
+    </g><g transform="translate(320,400) scale(-1,-1)" opacity="0.75">
+      <path d="M -7,0 C -7,-7 0,-7 0,0" stroke="#8B7040" stroke-width="0.85" fill="none"/>
+      <path d="M 0,-7 C 7,-7 7,0 0,0" stroke="#8B7040" stroke-width="0.85" fill="none"/>
+      <circle cx="0" cy="0" r="1.5" fill="#B89858"/>
+    </g>
+    <rect x="11" y="416" width="328" height="59" rx="3" fill="#0e1220" opacity="0.72"/>
+    <line x1="15" y1="422" x2="335" y2="422" stroke="url(#ghcommon)" stroke-width="0.8"/>
+    <line x1="15" y1="425" x2="335" y2="425" stroke="#B89858" stroke-width="0.25" opacity="0.4"/>
+    <g transform="translate(175,447.5)" opacity="0.85">
+      <line x1="-156" y1="0" x2="-32" y2="0" stroke="url(#ghcommon)" stroke-width="0.8"/>
+      <line x1="32" y1="0" x2="156" y2="0" stroke="url(#ghcommon)" stroke-width="0.8"/>
+      <polygon points="5.51091059616309e-16,-9 1.7099999999999995,-2.96180688094278 7.794228634059947,-4.5 3.42,0 7.794228634059948,4.499999999999998 1.7099999999999995,2.96180688094278 5.51091059616309e-16,9 -1.7099999999999993,2.96180688094278 -7.794228634059946,4.500000000000003 -3.42,4.188292053083948e-16 -7.794228634059947,-4.500000000000001 -1.7100000000000015,-2.9618068809427798" fill="#8B7040" opacity="0.7"/>
+      <polygon points="2.755455298081545e-16,-4.5 0.8549999999999998,-1.48090344047139 3.8971143170299736,-2.25 1.71,0 3.897114317029974,2.249999999999999 0.8549999999999998,1.48090344047139 2.755455298081545e-16,4.5 -0.8549999999999996,1.48090344047139 -3.897114317029973,2.2500000000000013 -1.71,2.094146026541974e-16 -3.8971143170299736,-2.2500000000000004 -0.8550000000000008,-1.4809034404713899" fill="#B89858" opacity="0.5"/>
+    </g><line x1="15" y1="470" x2="335" y2="470" stroke="#8B7040" stroke-width="0.75" opacity="0.6"/>
+    <g transform="translate(175,484.5)"><circle cx="0" cy="0" r="2.5" fill="#9A8050" opacity="0.88"/></g>
+</svg>
