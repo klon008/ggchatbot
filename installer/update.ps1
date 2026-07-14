@@ -308,6 +308,24 @@ else {
     Write-Warn ".venv не найден - запустите install.cmd для полной установки."
 }
 
+# Синхронизация артов и описаний карт с GitHub (SITE_BASE_URL → …/src/imports + cardDetails.json)
+$syncCards = Join-Path $projectDir "scripts\sync-card-assets.ps1"
+if (Test-Path -LiteralPath $syncCards) {
+    Write-Step "Синхронизация карт (арты + описания)"
+    try {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $syncCards -ProjectDir $projectDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Синхронизация карт завершилась с ошибкой (код $LASTEXITCODE) — админка может без превью/лора."
+        }
+    }
+    catch {
+        Write-Warn "Синхронизация карт не удалась: $($_.Exception.Message)"
+    }
+}
+else {
+    Write-Warn "scripts\sync-card-assets.ps1 не найден — пропуск."
+}
+
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host " Обновление завершено" -ForegroundColor Green

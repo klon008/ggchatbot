@@ -86,6 +86,8 @@ async def main() -> int:
     assert "!заказ" in PUBLIC_COMMANDS
     assert "!рулетка" in PUBLIC_COMMANDS
     assert "!забег" in PUBLIC_COMMANDS
+    assert "!бустер" in PUBLIC_COMMANDS
+    assert "!альбом" in PUBLIC_COMMANDS
     assert "!пропуск" not in PUBLIC_COMMANDS
     assert "!списать" not in PUBLIC_COMMANDS
     assert "!рулетка_банк" not in PUBLIC_COMMANDS
@@ -93,6 +95,8 @@ async def main() -> int:
     cfg = Config.load()
     cfg.gg_channel_id = ""  # не подключаемся к GG
     cfg.obs_port = 18765
+    cfg.album_link_secret = "smoke-test-album-secret-32b!!!!"
+    cfg.clo_public_url = "http://127.0.0.1:18770"
     tmp_db = Path(tempfile.gettempdir()) / f"smoke-botmsc-{int(time.time())}.db"
     for path in (tmp_db, Path(str(tmp_db) + "-wal"), Path(str(tmp_db) + "-shm")):
         if path.exists():
@@ -114,9 +118,13 @@ async def main() -> int:
     await bot.sr.queue.clear()
     await bot.sr.set_orders_enabled(True)
     await bot.web.start()
+    await bot.album_web.start()
+    await bot.clo.start()
+    bot.cards.bind_points(bot.princess.points)
 
-    base = f"http://{cfg.obs_host}:{cfg.obs_port}"
+    album_base = "http://127.0.0.1:18770"
     ok = True
+    base = f"http://{cfg.obs_host}:{cfg.obs_port}"
     async with aiohttp.ClientSession() as s:
         async with s.get(f"{base}/player.html") as r:
             html = await r.text()
@@ -125,6 +133,61 @@ async def main() -> int:
         async with s.get(f"{base}/player.js") as r:
             assert r.status == 200, "player.js не отдался"
             print("[OK] HTTP player.js")
+
+        async with s.get(f"{album_base}/api/v1/health") as r:
+            assert r.status == 200, await r.text()
+            print("[OK] GET /api/v1/health (album)")
+
+        from urllib.parse import parse_qs, urlparse
+
+        from bot.cards.album_token import build_album_url
+
+        await bot.princess.points.touch_name_if_new("album-smoke", "smokeplayer")
+        link = build_album_url(
+            site_base_url=cfg.site_base_url,
+            link_secret=cfg.album_link_secret,
+            nick="smokeplayer",
+            api_base_url=album_base,
+        )
+        qs = parse_qs(urlparse(link).query)
+        async with s.get(
+            f"{album_base}/api/v1/album",
+            params={"u": qs["u"][0], "k": qs["k"][0], "exp": qs["exp"][0]},
+        ) as r:
+            assert r.status == 200, await r.text()
+            data = await r.json()
+            assert data["collection"]["total"] == 28
+            print("[OK] GET /api/v1/album")
+
+        async with s.get(f"{album_base}/api/v1/album", params={"u": "x", "k": "bad", "exp": "1"}) as r:
+            assert r.status == 401
+            print("[OK] GET /api/v1/album invalid token")
+
+        async with s.get(f"{base}/api/cards/catalog") as r:
+            assert r.status == 200, await r.text()
+            catalog = await r.json()
+            assert len(catalog["items"]) == 28
+            assert any(c["id"] == "elsa" and c["rarity"] == "mythic" for c in catalog["items"])
+            assert any(
+                c.get("image_url") == "/assets/cards/anna.webp" for c in catalog["items"]
+            )
+            print("[OK] GET /api/cards/catalog")
+
+        async with s.get(f"{base}/api/cards/boosters") as r:
+            assert r.status == 200
+            boosters = await r.json()
+            assert any(b["id"] == "start" and b["name"] == "Стартовый набор" for b in boosters["items"])
+            print("[OK] GET /api/cards/boosters")
+
+        async with s.get(f"{base}/api/cards/draws") as r:
+            assert r.status == 200
+            draws = await r.json()
+            assert any(d["status"] == "active" for d in draws["items"])
+            print("[OK] GET /api/cards/draws")
+
+        async with s.put(f"{base}/api/cards/meta", json={"daily_open_limit": 5}) as r:
+            assert r.status == 200
+            print("[OK] PUT /api/cards/meta")
 
         async def wait_action(ws, action, timeout=3):
             """Дождаться сообщения с нужным action (пропуская прочие)."""
@@ -644,6 +707,8 @@ async def main() -> int:
     await bot.roulette.close()
     await bot.races.close()
     await bot.sr.close()
+    await bot.clo.stop()
+    await bot.album_web.stop()
     await bot.web.stop()
     from bot.db.migrate import get_schema_version
     from bot.db.schema import SCHEMA_VERSION

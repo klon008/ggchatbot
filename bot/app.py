@@ -5,9 +5,13 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from bot.cards import CardsHandler
+from bot.cards.album_server import AlbumWebServer
+from bot.cards.clo_tunnel import CloTunnel, CloTunnelError
 from bot.commands import HELP_COMMAND, format_help
 from bot.db import Database
 from bot.web import LocalWebServer
+from bot.cards.routes.admin_api import CardsAdminRoutes
 from bot.web.routes.admin import AdminRoutes
 from bot.web.routes.docs import DocsRoutes
 from config import Config
@@ -40,9 +44,26 @@ class StreamBot:
             db=self.db,
             admin_user_id=cfg.gg_admin_user_id,
         )
+        self.album_web = AlbumWebServer(
+            self.db,
+            cfg.album_link_secret,
+            cfg.site_base_url,
+        )
+        self.clo = CloTunnel(
+            cfg.clo_exe_path,
+            fallback_url=cfg.clo_public_url,
+            token=cfg.clo_token,
+        )
+        self.cards = CardsHandler(
+            self.db,
+            link_secret=cfg.album_link_secret,
+            site_base_url=cfg.site_base_url,
+            clo=self.clo,
+        )
         DocsRoutes().register(self.web.app)
         self.admin = AdminRoutes(self.db, self.sr.queue, self.sr, self.roulette, self.races)
         self.admin.register(self.web.app)
+        CardsAdminRoutes(self.db).register(self.web.app)
         self.gg = GoodGameClient(
             login=cfg.gg_login,
             password=cfg.gg_password,
@@ -55,6 +76,15 @@ class StreamBot:
         await self.db.open()
         await self.sr.start()
         await self.web.start()
+        await self.album_web.start()
+        try:
+            await self.clo.start()
+        except CloTunnelError:
+            log.error(
+                "Album CLO не поднялся — !альбом недоступен. "
+                "Проверь CLO_TOKEN / CLO_EXE_PATH или задай CLO_PUBLIC_URL для тестов."
+            )
+            raise
         log.info("OBS-плеер: http://%s:%d/player.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Рулетка OBS: http://%s:%d/roulette.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Скачки OBS: http://%s:%d/races.html", self.cfg.obs_host, self.cfg.obs_port)
@@ -75,6 +105,8 @@ class StreamBot:
         self.roulette.bind_points(self.princess.points)
         self.races.bind_points(self.princess.points)
         self.sr.bind_points(self.princess.points)
+        self.cards.bind_points(self.princess.points)
+        self.cards.bind_reply(self._reply)
         await self.gg.run()
 
     async def close(self) -> None:
@@ -82,6 +114,8 @@ class StreamBot:
         await self.roulette.close()
         await self.races.close()
         await self.sr.close()
+        await self.clo.stop()
+        await self.album_web.stop()
         await self.web.stop()
         await self.gg.close()
         await self.db.close()
@@ -92,6 +126,8 @@ class StreamBot:
             await self._reply(f"{msg.user_name}, {format_help()}")
             return
         if await self.princess.handle_message(msg):
+            return
+        if await self.cards.handle_message(msg):
             return
         if await self.roulette.handle_message(msg):
             return

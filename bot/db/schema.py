@@ -152,6 +152,86 @@ CREATE TABLE IF NOT EXISTS roulette_bets (
     bet_payload TEXT NOT NULL,
     UNIQUE (round_id, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS card_series (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    card_back_id TEXT NOT NULL DEFAULT 'card-back'
+);
+
+CREATE TABLE IF NOT EXISTS cards (
+    id TEXT PRIMARY KEY,
+    series_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    rarity TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    image_url TEXT,
+    FOREIGN KEY (series_id) REFERENCES card_series(id)
+);
+
+CREATE TABLE IF NOT EXISTS boosters (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    promo_image_url TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS booster_pool (
+    booster_id TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    PRIMARY KEY (booster_id, card_id),
+    FOREIGN KEY (booster_id) REFERENCES boosters(id),
+    FOREIGN KEY (card_id) REFERENCES cards(id)
+);
+
+CREATE TABLE IF NOT EXISTS draws (
+    id TEXT PRIMARY KEY,
+    booster_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    cost_points INTEGER NOT NULL,
+    cards_per_open INTEGER NOT NULL,
+    rarity_weights TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'inactive',
+    daily_limit INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (booster_id) REFERENCES boosters(id)
+);
+
+CREATE TABLE IF NOT EXISTS user_cards (
+    user_id TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    obtained_at TEXT NOT NULL,
+    draw_id TEXT,
+    draw_name TEXT,
+    booster_id TEXT,
+    booster_name TEXT,
+    PRIMARY KEY (user_id, card_id),
+    FOREIGN KEY (card_id) REFERENCES cards(id)
+);
+
+CREATE TABLE IF NOT EXISTS booster_openings (
+    opening_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    draw_id TEXT NOT NULL,
+    booster_id TEXT NOT NULL,
+    opened_at TEXT NOT NULL,
+    cost_points INTEGER NOT NULL,
+    cards_rolled TEXT NOT NULL,
+    total_refund INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS user_daily_opens (
+    user_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day)
+);
+
+CREATE TABLE IF NOT EXISTS cards_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    daily_open_limit INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -181,7 +261,15 @@ async def init_schema(
         "INSERT OR IGNORE INTO races_meta (id, auto_enabled, state, round_id, collect_sec, cooldown_sec, race_delay_sec) "
         "VALUES (1, 1, 'IDLE', 0, 60, 180, 10)"
     )
+    await conn.execute(
+        "INSERT OR IGNORE INTO cards_meta (id, daily_open_limit) VALUES (1, 0)"
+    )
     from .migrate import run_migrations
+    from .migrations.m009_elsa_mythic import seed_if_empty
+    from .migrations.m010_card_asset_urls import upgrade as refresh_card_urls
 
     await run_migrations(conn, db_path=db_path)
+    await seed_if_empty(conn)
+    # На актуальной схеме пути image_url всегда /assets/cards/...
+    await refresh_card_urls(conn)
     await conn.commit()

@@ -6,7 +6,18 @@ from typing import Protocol
 
 import aiosqlite
 
-from . import m002_paid_cost, m003_orders_enabled, m004_user_names, m005_roulette, m006_minigames_bank, m007_races
+from . import (
+    m002_paid_cost,
+    m003_orders_enabled,
+    m004_user_names,
+    m005_roulette,
+    m006_minigames_bank,
+    m007_races,
+    m008_cards,
+    m009_elsa_mythic,
+    m010_card_asset_urls,
+    m011_series_card_back,
+)
 
 
 class Migration(Protocol):
@@ -23,4 +34,8 @@ MIGRATIONS: list[Migration] = [
     m005_roulette,
     m006_minigames_bank,
     m007_races,
+    m008_cards,
+    m009_elsa_mythic,
+    m010_card_asset_urls,
+    m011_series_card_back,
 ]

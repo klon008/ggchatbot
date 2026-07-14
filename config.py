@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -38,8 +39,16 @@ class Config:
 
     youtube_api_key: str
 
+    album_link_secret: str
+    site_base_url: str
+    clo_exe_path: str
+    clo_token: str
+    clo_public_url: str
+
     @classmethod
     def load(cls) -> "Config":
+        root = Path(__file__).resolve().parent
+        default_clo = str(root / "tools" / "clo" / "clo.exe")
         return cls(
             gg_login=os.getenv("GG_LOGIN", "").strip(),
             gg_password=os.getenv("GG_PASSWORD", "").strip(),
@@ -54,4 +63,12 @@ class Config:
             track_watchdog_extra_sec=_get_int("TRACK_WATCHDOG_EXTRA_SEC", 60),
             user_cooldown_sec=_get_int("USER_COOLDOWN_SEC", 0),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY", "").strip(),
+            album_link_secret=os.getenv("ALBUM_LINK_SECRET", "").strip(),
+            site_base_url=os.getenv(
+                "SITE_BASE_URL",
+                "https://dartvalkkiprincess.github.io/princtascdwk",
+            ).strip(),
+            clo_exe_path=os.getenv("CLO_EXE_PATH", default_clo).strip() or default_clo,
+            clo_token=os.getenv("CLO_TOKEN", "").strip(),
+            clo_public_url=os.getenv("CLO_PUBLIC_URL", "").strip(),
         )
