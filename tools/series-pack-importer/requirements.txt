@@ -1,0 +1,9 @@
+# Series Pack Importer — applies ZIP from series-pack to bot + frontend.
+#
+# Install:
+#   python -m venv .venv
+#   .\.venv\Scripts\pip install -r requirements.txt
+# Run:
+#   run.cmd
+#
+PySide6>=6.6.0
