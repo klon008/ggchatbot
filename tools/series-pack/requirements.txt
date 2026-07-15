@@ -1,0 +1,10 @@
+# Series Pack UI — упаковка новой серии карт в ZIP (без записи в bot.db).
+#
+# Install:
+#   python -m venv .venv
+#   .\.venv\Scripts\pip install -r requirements.txt
+# Run:
+#   run.cmd
+#
+PySide6>=6.6.0
+Pillow>=10.0.0
