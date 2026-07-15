@@ -5,7 +5,7 @@
 
 Механика для людей: [SPEC.md](https://github.com/klon008/princtascdwk/blob/main/SPEC.md). План реализации: [TODO_album.md](./TODO_album.md).
 
-**Обновлено:** 2026-07-14 · схема БД **v11**
+**Обновлено:** 2026-07-15 · схема БД **v16**
 
 ---
 
@@ -22,6 +22,15 @@
 | Описания (лор) | `data/card-assets-repo/src/app/cardDetails.json` ← сайт (только чтение в Admin) |
 
 Фронт рисует портреты из **своего** бандла (`src/imports`). Бот в API отдаёт `id` + метаданные; путь `image_url` нужен админке OBS.
+
+**Серии (на 2026-07-15):**
+
+| id | name | card_back_id | карт |
+|----|------|--------------|------|
+| `fantast` | Фантастический коллекционер | `card-back` | 28 |
+| `classic` | Классический набор | `card-back-classic` | 30 |
+
+Бустер `classic` / тираж `draw-classic-001` (queued) — пул только classic-карт; не смешивается со `start`/`draw001`.
 
 ---
 
@@ -235,9 +244,10 @@ bot/cards/                 # команды, draws, CLO, album server
 bot/cards/card_stories.py  # чтение data/card-assets-repo/src/app/cardDetails.json
 bot/db/cards.py            # SQL-слой
 bot/db/migrations/m008…    # таблицы
-bot/db/migrations/m009…    # каталог 28 карт + image_url
+bot/db/migrations/m009…    # каталог fantast 28 карт + image_url
 bot/db/migrations/m010…    # image_url → /assets/cards/
 bot/db/migrations/m011…    # card_back_id, имя бустера
+bot/db/migrations/m016…    # серия classic (30 карт) + бустер/тираж
 obs/assets/cards/          # webp + svg рубашек для Admin
 data/card-assets-repo/     # sparse-кэш сайта (imports + cardDetails.json)
 obs/cards-admin.html / cards-admin.js
@@ -255,3 +265,11 @@ scripts/migrate_db.py
 - [ ] Миграция/SQL: `cards` + при необходимости `booster_pool`
 - [ ] `sync-card-assets.ps1` / update.cmd (арты + json лора)
 - [ ] Проверка: Admin → превью и описание; `!бустер` / `!альбом` в чате
+
+### Новая серия (образец: classic / m016)
+
+1. Сайт: `classic-*.webp`, `card-back-*.svg`, `cardCatalog` / `cardBacks` / `cardDetails` / `seriesMeta`
+2. Бот: миграция — `card_series` + `cards` + `boosters` + `booster_pool` (+ опционально `draws` со статусом `queued`)
+3. `sync-card-assets.ps1` (копирует `*.webp` и `card-back*.svg`)
+4. `python scripts/migrate_db.py` (бот остановлен)
+5. В админке активировать тираж, когда нужно заменить текущий

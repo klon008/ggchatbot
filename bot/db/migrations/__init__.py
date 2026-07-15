@@ -21,6 +21,7 @@ from . import (
     m013_draws_fifo,
     m014_anim_speed,
     m015_draw001_cost,
+    m016_classic_series,
 )
 
 
@@ -46,4 +47,5 @@ MIGRATIONS: list[Migration] = [
     m013_draws_fifo,
     m014_anim_speed,
     m015_draw001_cost,
+    m016_classic_series,
 ]
