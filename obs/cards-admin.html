@@ -460,14 +460,30 @@
     }
     .booster-row.selected { background: #1e2a40; }
     .promo-cell {
-      min-width: 220px;
-      max-width: 320px;
+      min-width: 280px;
+      max-width: 420px;
     }
     .promo-cell .promo-row {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
       align-items: center;
+    }
+    .promo-cell a.btn-promo-gen {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid #4a6080;
+      background: #243048;
+      color: #d8e4ff;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+    .promo-cell a.btn-promo-gen:hover {
+      background: #2c3a58;
+      border-color: #6a88b0;
     }
     .promo-cell input.promo-url {
       flex: 1;
@@ -673,7 +689,10 @@
         <strong>Бустеры</strong> - набор (пул) карт, из которого тираж выдаёт дроп.
         Создайте бустер, отметьте карты чипами; «Показать состав» - галерея,
         «Переименовать» сохраняет имя. Promo - ссылка на картинку для стрима
-        (<span class="mono">https://…</span> или <span class="mono">/assets/…</span>).
+        (<span class="mono">https://…</span> или <span class="mono">/assets/…</span>);
+        «Генерировать» открывает 3D-сцену
+        (<span class="mono">/promo-generator.html?booster=…</span>) —
+        скачайте JPG, загрузите на imgbb и вставьте URL сюда.
         Бустер ≠ серия: в одном пуле могут быть карты из разных серий.
       </p>
 

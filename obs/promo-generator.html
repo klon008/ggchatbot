@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Promo generator — бустер</title>
+  <link rel="stylesheet" href="/card-templates/card-fx.css" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel: #141820;
+      --panel-border: #2a3344;
+      --text: #e8e4d8;
+      --muted: #9aa3b2;
+      --accent: #7eb0ff;
+      --tilt: 58deg;
+      --spin: -6deg;
+      --card-w: 148px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #0b0d12;
+      color: var(--text);
+    }
+
+    .page {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100%;
+      min-height: 100vh;
+    }
+
+    .howto {
+      padding: 12px 18px;
+      background: linear-gradient(90deg, #1a2438, #141820);
+      border-bottom: 1px solid var(--panel-border);
+      font-size: 13px;
+      line-height: 1.45;
+      color: #d2d8e4;
+    }
+    .howto a { color: var(--accent); }
+    .howto strong { color: #fff; }
+
+    .main {
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) 1fr;
+      min-height: 0;
+    }
+
+    .sidebar {
+      overflow: auto;
+      padding: 14px 16px 24px;
+      background: var(--panel);
+      border-right: 1px solid var(--panel-border);
+    }
+    .sidebar h1 {
+      margin: 0 0 4px;
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .sidebar .sub {
+      margin: 0 0 14px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .sidebar h2 {
+      margin: 16px 0 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    label.row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+    label.row input[type="range"] { width: 140px; }
+    label.row select,
+    label.row input[type="number"] {
+      width: 140px;
+      background: #0e121a;
+      color: var(--text);
+      border: 1px solid #334056;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font: inherit;
+    }
+    .val {
+      min-width: 36px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .face-list {
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      background: #0e121a;
+    }
+    .face-item {
+      display: grid;
+      grid-template-columns: 18px 36px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 8px;
+      border-bottom: 1px solid #1c2432;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .face-item:last-child { border-bottom: 0; }
+    .face-item:hover { background: #161c28; }
+    .face-item img {
+      width: 36px;
+      height: 38px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #080a10;
+    }
+    .face-item .rarity {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .face-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 8px 0;
+    }
+    .btn, button.btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 7px;
+      border: 1px solid #3a4a66;
+      background: #1c2638;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn:hover { background: #243048; }
+    .btn.primary {
+      background: #2a4a8a;
+      border-color: #4a78c8;
+    }
+    .btn.primary:hover { background: #3358a0; }
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: wait;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .err {
+      color: #ff8a9a;
+      font-size: 13px;
+      margin: 8px 0;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+      margin: 8px 0 0;
+    }
+
+    .stage-wrap {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      padding: 16px;
+      gap: 10px;
+    }
+    .stage-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .stage-toolbar .meta {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .stage-frame {
+      flex: 1;
+      min-height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      background: #080a0f;
+    }
+
+    /* Export root — fixed design size, scaled via CSS zoom/transform in UI */
+    #exportRoot {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      flex-shrink: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse 90% 70% at 50% 35%, #1a2238 0%, transparent 55%),
+        linear-gradient(180deg, #12151e 0%, #080a10 55%, #05060a 100%);
+      transform-origin: center center;
+    }
+    #exportRoot.is-bg-white {
+      background: #ffffff;
+    }
+    #exportRoot.is-cutout {
+      background: transparent !important;
+    }
+    #exportRoot[data-size="1280x720"] { width: 1280px; height: 720px; }
+    #exportRoot[data-size="1080x1080"] { width: 1080px; height: 1080px; }
+    #exportRoot[data-size="1920x1080"] { width: 1920px; height: 1080px; }
+
+    .title-overlay {
+      position: absolute;
+      top: 36px;
+      left: 48px;
+      right: 48px;
+      z-index: 5;
+      pointer-events: none;
+      text-shadow: 0 2px 14px rgba(0, 0, 0, 0.75);
+    }
+    .title-overlay.hidden { display: none; }
+    .title-overlay .booster-name {
+      margin: 0;
+      font-size: clamp(28px, 3.2vw, 52px);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .title-overlay .pool-line {
+      margin: 8px 0 0;
+      font-size: clamp(14px, 1.3vw, 22px);
+      color: #c8d0e0;
+      opacity: 0.9;
+    }
+    #exportRoot.is-bg-white .title-overlay {
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+    #exportRoot.is-bg-white .title-overlay .booster-name { color: #1a1e28; }
+    #exportRoot.is-bg-white .title-overlay .pool-line { color: #4a5568; }
+
+    .table-viewport {
+      position: absolute;
+      inset: 110px 40px 40px;
+      perspective: 1600px;
+      perspective-origin: 50% 35%;
+    }
+    #exportRoot[data-size="1080x1080"] .table-viewport {
+      inset: 140px 30px 50px;
+    }
+
+    .table-surface {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transform: rotateX(var(--tilt)) rotateZ(var(--spin));
+    }
+
+    .table-felt {
+      position: absolute;
+      inset: 8% 4% 4%;
+      border-radius: 18px;
+      background:
+        radial-gradient(ellipse at 50% 40%, rgba(40, 58, 88, 0.55), rgba(10, 14, 22, 0.92));
+      border: 1px solid rgba(120, 150, 200, 0.12);
+      box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.45);
+      transform: translateZ(-2px);
+    }
+    .table-felt.is-white {
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow:
+        inset 0 0 40px rgba(0, 0, 0, 0.04),
+        0 8px 28px rgba(0, 0, 0, 0.12);
+    }
+    .table-felt.is-hidden {
+      display: none;
+    }
+
+    /* html2canvas: без CSS 3D / filter / сложных градиентов */
+    #exportRoot.is-export-flat .table-viewport {
+      perspective: none !important;
+    }
+    #exportRoot.is-export-flat .table-surface {
+      transform-style: flat !important;
+      transform: rotate(var(--spin)) scaleY(var(--tilt-flat, 1)) !important;
+    }
+    #exportRoot.is-export-flat .table-felt {
+      transform: none !important;
+      background-image: none !important;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35) !important;
+    }
+    #exportRoot.is-export-flat .table-felt:not(.is-white) {
+      background: #152032 !important;
+      border: 1px solid #2a3a52 !important;
+    }
+    #exportRoot.is-export-flat .card-slot {
+      transform-style: flat !important;
+      transform: translate(var(--tx, 0px), var(--ty, 0px)) rotate(var(--rot, 0deg)) !important;
+      filter: none !important;
+      box-shadow: 0 12px 22px rgba(0, 0, 0, 0.5);
+    }
+    #exportRoot.is-export-flat .card3d {
+      transform-style: flat !important;
+    }
+
+    .card-slot {
+      position: absolute;
+      width: var(--card-w);
+      aspect-ratio: 5 / 7;
+      left: 50%;
+      top: 50%;
+      margin-left: calc(var(--card-w) / -2);
+      margin-top: calc(var(--card-w) * 1.4 / -2);
+      transform-style: preserve-3d;
+      /* position set via --tx --ty --rot in JS */
+      transform: translate3d(var(--tx, 0px), var(--ty, 0px), var(--tz, 0px)) rotateZ(var(--rot, 0deg));
+      filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.55));
+    }
+
+    .card3d {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transform: rotateY(180deg);
+    }
+    .card3d.is-face {
+      transform: rotateY(0deg);
+    }
+    .card3d.is-flat-export {
+      transform: none !important;
+    }
+
+    .face {
+      position: absolute;
+      inset: 0;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0e1220;
+    }
+    .face * {
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+    .face-front {
+      transform: rotateY(0deg) translateZ(1px);
+    }
+    .face-back {
+      transform: rotateY(180deg) translateZ(1px);
+    }
+    .face-back img,
+    .face-front .front-host,
+    .face-front .front-host svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    #statusLine {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #statusLine.err { color: #ff8a9a; }
+    #statusLine.ok { color: #8fd99a; }
+
+    @media (max-width: 980px) {
+      .main { grid-template-columns: 1fr; }
+      .sidebar { max-height: 42vh; border-right: 0; border-bottom: 1px solid var(--panel-border); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="howto">
+      <strong>Как сохранить promo:</strong>
+      настройте сцену → «Скачать JPG» (или «Убрать стол и фон → PNG») → загрузите файл на
+      <a href="https://imgbb.com" target="_blank" rel="noopener">imgbb.com</a>
+      → скопируйте прямую ссылку на изображение → вставьте её в
+      <a href="/cards-admin.html" id="backAdminLink">cards-admin</a>
+      в колонке Promo этого бустера и нажмите «Сохранить».
+      Для <code>!бустер инфо</code> нужна ссылка <code>https://…</code>.
+      Если скачивание не сработает — Win+Shift+S по области сцены.
+    </div>
+
+    <div class="main">
+      <aside class="sidebar">
+        <h1 id="boosterTitle">Promo</h1>
+        <p class="sub" id="boosterSub">Загрузка…</p>
+        <div id="loadError" class="err" hidden></div>
+
+        <h2>Карты лицом вверх</h2>
+        <div class="face-actions">
+          <button type="button" class="btn" id="btnSelectTop">Топ редкости</button>
+          <button type="button" class="btn" id="btnSelectNone">Снять все</button>
+          <button type="button" class="btn" id="btnSelectAll">Все</button>
+        </div>
+        <div class="face-list" id="faceList"></div>
+
+        <h2>Сцена</h2>
+        <label class="row">
+          Рубашкой вверх
+          <span style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="backsCount" min="0" max="24" value="10" />
+            <span class="val" id="backsCountVal">10</span>
+          </span>
+        </label>
+        <label class="row">
+          Раскладка
+          <select id="layout">
+            <option value="fan">Веер</option>
+            <option value="heap" selected>Куча на столе</option>
+            <option value="arc">Дуга</option>
+            <option value="row">Ряд</option>
+          </select>
+        </label>
+        <label class="row">
+          Наклон камеры
+          <span style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="tilt" min="0" max="72" value="58" />
+            <span class="val" id="tiltVal">58°</span>
+          </span>
+        </label>
+        <label class="row">
+          Поворот стола
+          <span style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="spin" min="-25" max="25" value="-6" />
+            <span class="val" id="spinVal">-6°</span>
+          </span>
+        </label>
+        <label class="row">
+          Размер карт
+          <span style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="cardScale" min="90" max="200" value="148" />
+            <span class="val" id="cardScaleVal">148</span>
+          </span>
+        </label>
+        <label class="row">
+          Перекрытие
+          <span style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="overlap" min="0" max="100" value="45" />
+            <span class="val" id="overlapVal">45%</span>
+          </span>
+        </label>
+        <label class="row">
+          Seed
+          <span style="display:flex;align-items:center;gap:8px">
+            <input type="number" id="seed" value="42" step="1" />
+            <button type="button" class="btn" id="btnReseed" title="Случайный seed">🎲</button>
+          </span>
+        </label>
+        <label class="row">
+          Размер кадра
+          <select id="frameSize">
+            <option value="1920x1080" selected>1920×1080 (стрим)</option>
+            <option value="1280x720">1280×720</option>
+            <option value="1080x1080">1080×1080</option>
+          </select>
+        </label>
+        <label class="row">
+          Заголовок
+          <input type="checkbox" id="showTitle" checked />
+        </label>
+        <label class="row">
+          Фон белый
+          <input type="checkbox" id="bgWhite" />
+        </label>
+        <label class="row">
+          Стол белый
+          <input type="checkbox" id="tableWhite" />
+        </label>
+
+        <div class="actions">
+          <button type="button" class="btn primary" id="btnDownload">Скачать JPG</button>
+          <button type="button" class="btn" id="btnDownloadCutout" title="Только карты, без стола и фона, прозрачный PNG">
+            Убрать стол и фон → PNG
+          </button>
+          <a class="btn" href="https://imgbb.com" target="_blank" rel="noopener">Открыть imgbb</a>
+          <a class="btn" href="/cards-admin.html" id="btnBackAdmin">К админке</a>
+        </div>
+        <p class="hint" id="statusLine">Сцена обновится при изменении настроек.</p>
+      </aside>
+
+      <section class="stage-wrap">
+        <div class="stage-toolbar">
+          <div class="meta" id="stageMeta">—</div>
+          <div class="meta">Превью масштабируется под окно; файл сохраняется в полном размере.</div>
+        </div>
+        <div class="stage-frame" id="stageFrame">
+          <div id="exportRoot" data-size="1920x1080">
+            <div class="title-overlay" id="titleOverlay">
+              <p class="booster-name" id="overlayName">Бустер</p>
+              <p class="pool-line" id="overlayPool"></p>
+            </div>
+            <div class="table-viewport">
+              <div class="table-surface" id="tableSurface">
+                <div class="table-felt" aria-hidden="true"></div>
+                <div id="cardsLayer"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script type="module" src="/promo-generator.js"></script>
+</body>
+</html>

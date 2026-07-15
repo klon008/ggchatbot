@@ -386,6 +386,7 @@
           <td class="promo-cell">
             <div class="promo-row">
               <input type="text" class="promo-url" data-id="${esc(b.id)}" value="${esc(promoUrl)}" placeholder="https://… или /assets/…" />
+              <a class="small btn-promo-gen" href="/promo-generator.html?booster=${encodeURIComponent(b.id)}" target="_blank" rel="noopener">Генерировать</a>
               <button type="button" class="small primary btn-booster-promo-save" data-id="${esc(b.id)}">Сохранить</button>
               <button type="button" class="small btn-booster-promo-clear" data-id="${esc(b.id)}">Очистить</button>
               ${promoLink}

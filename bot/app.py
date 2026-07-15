@@ -89,6 +89,11 @@ class StreamBot:
         log.info("Рулетка OBS: http://%s:%d/roulette.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Скачки OBS: http://%s:%d/races.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Admin-панель: http://%s:%d/admin.html", self.cfg.obs_host, self.cfg.obs_port)
+        log.info(
+            "Promo-генератор: http://%s:%d/promo-generator.html",
+            self.cfg.obs_host,
+            self.cfg.obs_port,
+        )
         log.info("Логика команд: http://%s:%d/commands.html", self.cfg.obs_host, self.cfg.obs_port)
         self.admin.bind_user_names(
             self.gg.get_users_list,

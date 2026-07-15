@@ -166,6 +166,7 @@ UPDATE card_series SET card_back_id = 'my-back' WHERE id = 'fantast';
 | `!бустер` | Открыть **активный** тираж: чат (анонс → итог) + OBS-анимация |
 | `!бустер инфо` | Активный тираж: карты за открытие, размер пула, цена, promo |
 | Admin → Карты | `cards-admin.html`: настройки (+выкл. команд), серии, бустеры, тиражи/шансы, promo |
+| Promo generator | `promo-generator.html?booster={id}` — 3D-сцена пула → JPG → imgbb → URL в Promo |
 | OBS → Бустер | `booster.html` (~384×560): 3D-флип; скорость из `anim_speed` в meta / payload |
 
 После `!бустер`:
@@ -181,7 +182,8 @@ UPDATE card_series SET card_back_id = 'my-back' WHERE id = 'fantast';
 
 Стартовый бустер: id `start`, имя **«Стартовый набор»**.
 
-Promo: `PUT /api/cards/boosters/{id}/promo` с `{ "promo_image_url": "https://…" }` (или `""` чтобы очистить).
+Promo: `PUT /api/cards/boosters/{id}/promo` с `{ "promo_image_url": "https://…" }` (или `""` чтобы очистить).  
+Генератор постера: `/promo-generator.html?booster={id}` (кнопка «Генерировать» во вкладке Бустеры) → JPG → imgbb → URL в Promo.
 
 ---
 
