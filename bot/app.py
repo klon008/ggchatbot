@@ -17,6 +17,7 @@ from bot.web.routes.docs import DocsRoutes
 from config import Config
 
 from .goodgame import GoodGameClient
+from .polls import PollsHandler
 from .princess import PrincessHandler
 from .races import RacesHandler
 from .roulette import RouletteHandler
@@ -44,6 +45,7 @@ class StreamBot:
             db=self.db,
             admin_user_id=cfg.gg_admin_user_id,
         )
+        self.polls = PollsHandler(db=self.db)
         self.album_web = AlbumWebServer(
             self.db,
             cfg.album_link_secret,
@@ -61,7 +63,9 @@ class StreamBot:
             clo=self.clo,
         )
         DocsRoutes().register(self.web.app)
-        self.admin = AdminRoutes(self.db, self.sr.queue, self.sr, self.roulette, self.races)
+        self.admin = AdminRoutes(
+            self.db, self.sr.queue, self.sr, self.roulette, self.races, self.polls
+        )
         self.admin.register(self.web.app)
         CardsAdminRoutes(self.db).register(self.web.app)
         self.gg = GoodGameClient(
@@ -88,6 +92,7 @@ class StreamBot:
         log.info("OBS-плеер: http://%s:%d/player.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Рулетка OBS: http://%s:%d/roulette.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Скачки OBS: http://%s:%d/races.html", self.cfg.obs_host, self.cfg.obs_port)
+        log.info("Прогнозы OBS: http://%s:%d/prediction.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info("Admin-панель: http://%s:%d/admin.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info(
             "Promo-генератор: http://%s:%d/promo-generator.html",
@@ -105,10 +110,13 @@ class StreamBot:
         await self.princess.start()
         await self.roulette.start()
         await self.races.start()
+        await self.polls.start()
         self.roulette.bind_reply(self._reply)
         self.races.bind_reply(self._reply)
+        self.polls.bind_reply(self._reply)
         self.roulette.bind_points(self.princess.points)
         self.races.bind_points(self.princess.points)
+        self.polls.bind_points(self.princess.points)
         self.sr.bind_points(self.princess.points)
         self.cards.bind_points(self.princess.points)
         self.cards.bind_reply(self._reply)
@@ -120,6 +128,7 @@ class StreamBot:
         await self.princess.close()
         await self.roulette.close()
         await self.races.close()
+        await self.polls.close()
         await self.sr.close()
         await self.clo.stop()
         await self.album_web.stop()
@@ -139,6 +148,8 @@ class StreamBot:
         if await self.roulette.handle_message(msg):
             return
         if await self.races.handle_message(msg):
+            return
+        if await self.polls.handle_message(msg):
             return
         await self.sr.handle_message(msg)
 

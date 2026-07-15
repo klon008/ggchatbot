@@ -153,6 +153,29 @@ CREATE TABLE IF NOT EXISTS roulette_bets (
     UNIQUE (round_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS poll_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    state TEXT NOT NULL DEFAULT 'IDLE',
+    round_id INTEGER NOT NULL DEFAULT 0,
+    title TEXT NOT NULL DEFAULT '',
+    options TEXT NOT NULL DEFAULT '[]',
+    round_opened_at REAL,
+    closes_at REAL,
+    collect_sec INTEGER NOT NULL DEFAULT 300,
+    winning_option INTEGER,
+    last_result TEXT
+);
+
+CREATE TABLE IF NOT EXISTS poll_bets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    round_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    amount INTEGER NOT NULL,
+    option_index INTEGER NOT NULL,
+    UNIQUE (round_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS card_series (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -262,6 +285,10 @@ async def init_schema(
     await conn.execute(
         "INSERT OR IGNORE INTO races_meta (id, auto_enabled, state, round_id, collect_sec, cooldown_sec, race_delay_sec) "
         "VALUES (1, 1, 'IDLE', 0, 60, 180, 10)"
+    )
+    await conn.execute(
+        "INSERT OR IGNORE INTO poll_meta (id, state, round_id, title, options, collect_sec) "
+        "VALUES (1, 'IDLE', 0, '', '[]', 300)"
     )
     await conn.execute(
         "INSERT OR IGNORE INTO cards_meta (id, daily_open_limit) VALUES (1, 0)"

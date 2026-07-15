@@ -34,12 +34,31 @@
   const racesStart = document.getElementById("racesStart");
   const racesTopUp = document.getElementById("racesTopUp");
   const racesCancel = document.getElementById("racesCancel");
+  const pollTitle = document.getElementById("pollTitle");
+  const pollDurationMin = document.getElementById("pollDurationMin");
+  const pollOptionsList = document.getElementById("pollOptionsList");
+  const pollStatusLine = document.getElementById("pollStatusLine");
+  const pollPool = document.getElementById("pollPool");
+  const pollOptionsBody = document.getElementById("pollOptionsBody");
+  const pollBetsBody = document.getElementById("pollBetsBody");
+  const pollLastResult = document.getElementById("pollLastResult");
+  const pollCreateCard = document.getElementById("pollCreateCard");
+  const pollResolveRow = document.getElementById("pollResolveRow");
+  const pollResolveSelect = document.getElementById("pollResolveSelect");
+  const pollLock = document.getElementById("pollLock");
+  const pollResolve = document.getElementById("pollResolve");
+  const pollResolveConfirm = document.getElementById("pollResolveConfirm");
+  const pollCancel = document.getElementById("pollCancel");
+  const pollCreate = document.getElementById("pollCreate");
+  const pollAddOption = document.getElementById("pollAddOption");
 
   let allPoints = [];
   let ordersEnabled = true;
   let queuePaused = false;
   let roulettePollTimer = null;
   let racesPollTimer = null;
+  let pollsPollTimer = null;
+  let pollOptionCount = 0;
 
   function setStatus(text, kind) {
     statusBar.textContent = text;
@@ -727,6 +746,262 @@
     }
   });
 
+  function addPollOptionInput(value) {
+    if (pollOptionCount >= 8) return;
+    pollOptionCount += 1;
+    const idx = pollOptionCount;
+    const row = document.createElement("div");
+    row.className = "toolbar";
+    row.style.gap = "8px";
+    row.dataset.pollOpt = String(idx);
+    row.innerHTML = `
+      <label style="flex:1">
+        Вариант ${idx}
+        <input type="text" class="poll-option-input" placeholder="Вариант ${idx}" value="${esc(value || "")}" />
+      </label>
+      <button type="button" class="small danger poll-option-remove">−</button>
+    `;
+    const removeBtn = row.querySelector(".poll-option-remove");
+    removeBtn.addEventListener("click", () => {
+      if (pollOptionsList.querySelectorAll("[data-poll-opt]").length <= 2) {
+        setStatus("Нужно минимум 2 варианта", "err");
+        return;
+      }
+      row.remove();
+      renumberPollOptions();
+    });
+    pollOptionsList.appendChild(row);
+  }
+
+  function renumberPollOptions() {
+    const rows = [...pollOptionsList.querySelectorAll("[data-poll-opt]")];
+    pollOptionCount = rows.length;
+    rows.forEach((row, i) => {
+      row.dataset.pollOpt = String(i + 1);
+      const label = row.querySelector("label");
+      const input = row.querySelector(".poll-option-input");
+      if (label && input) {
+        label.innerHTML = "";
+        label.appendChild(document.createTextNode(`Вариант ${i + 1} `));
+        input.placeholder = `Вариант ${i + 1}`;
+        label.appendChild(input);
+      }
+    });
+  }
+
+  function resetPollCreateForm() {
+    pollTitle.value = "";
+    pollDurationMin.value = "5";
+    pollOptionsList.innerHTML = "";
+    pollOptionCount = 0;
+    addPollOptionInput("Да");
+    addPollOptionInput("Нет");
+  }
+
+  function formatPollLastResult(lr) {
+    if (!lr) return '<span class="empty">—</span>';
+    const win = lr.winning_label || "?";
+    const pool = lr.total_pool != null ? lr.total_pool : "—";
+    const winners = lr.winners || [];
+    const top = winners
+      .slice()
+      .sort((a, b) => (b.payout || 0) - (a.payout || 0))
+      .slice(0, 8)
+      .map((w) => `${esc(w.user_name)} +${esc(w.payout)}`)
+      .join(", ");
+    return `<strong>Победил:</strong> ${esc(win)} · банк ${esc(pool)}`
+      + (top ? `<br/><span>Выплаты: ${top}</span>` : "");
+  }
+
+  function renderPolls(data) {
+    const state = data.state || "IDLE";
+    const timer = data.timer_sec || 0;
+    pollPool.textContent = String(data.total_pool ?? "—");
+    if (state === "OPEN" && timer > 0) {
+      pollStatusLine.textContent = `Состояние: ${state}, до закрытия приёма ~${timer} сек`;
+    } else if (state === "RESOLVED" && timer > 0) {
+      pollStatusLine.textContent = `Состояние: ${state}, сброс через ~${timer} сек`;
+    } else {
+      pollStatusLine.textContent = `Состояние: ${state}`
+        + (data.title ? ` — ${data.title}` : "");
+    }
+
+    const isIdle = state === "IDLE";
+    const isOpen = state === "OPEN";
+    const isLocked = state === "LOCKED";
+    pollCreateCard.style.opacity = isIdle ? "1" : "0.55";
+    pollCreate.disabled = !isIdle;
+    pollLock.disabled = !isOpen;
+    pollResolve.disabled = !isLocked;
+    pollCancel.disabled = !isOpen && !isLocked;
+    if (!isLocked) {
+      pollResolveRow.style.display = "none";
+    }
+
+    const options = data.options || [];
+    if (!options.length) {
+      pollOptionsBody.innerHTML =
+        '<tr><td colspan="5" class="empty">Нет вариантов</td></tr>';
+      pollResolveSelect.innerHTML = "";
+    } else {
+      pollOptionsBody.innerHTML = options
+        .map(
+          (o) => `
+        <tr>
+          <td>${esc(o.index + 1)}</td>
+          <td>${esc(o.label)}</td>
+          <td>${esc(o.total)}</td>
+          <td>${esc(o.bets_count)}</td>
+          <td>×${esc(o.coefficient)}</td>
+        </tr>`
+        )
+        .join("");
+      pollResolveSelect.innerHTML = options
+        .map(
+          (o) =>
+            `<option value="${esc(o.index)}">${esc(o.index + 1)}. ${esc(o.label)} (${esc(o.total)})</option>`
+        )
+        .join("");
+    }
+
+    const bets = data.bets || [];
+    if (!bets.length) {
+      pollBetsBody.innerHTML =
+        '<tr><td colspan="3" class="empty">Нет ставок</td></tr>';
+    } else {
+      pollBetsBody.innerHTML = bets
+        .map(
+          (b) => `
+        <tr>
+          <td>${esc(b.user_name || b.user_id)}</td>
+          <td>${esc(b.option_label || b.option_index + 1)}</td>
+          <td>${esc(b.amount)}</td>
+        </tr>`
+        )
+        .join("");
+    }
+
+    pollLastResult.innerHTML = formatPollLastResult(data.last_result);
+
+    if (isOpen || isLocked || state === "RESOLVED") {
+      startPollsPoll();
+    } else {
+      stopPollsPoll();
+    }
+  }
+
+  function stopPollsPoll() {
+    if (pollsPollTimer) {
+      clearInterval(pollsPollTimer);
+      pollsPollTimer = null;
+    }
+  }
+
+  function startPollsPoll() {
+    stopPollsPoll();
+    pollsPollTimer = setInterval(() => loadPolls(true), 2500);
+  }
+
+  async function loadPolls(silent) {
+    if (!silent) setStatus("Загрузка опроса…");
+    try {
+      const data = await api("GET", "/api/poll");
+      renderPolls(data);
+      if (!silent) setStatus("Опрос обновлён", "ok");
+    } catch (e) {
+      if (!silent) setStatus(e.message, "err");
+    }
+  }
+
+  pollAddOption.addEventListener("click", () => {
+    if (pollOptionCount >= 8) {
+      setStatus("Максимум 8 вариантов", "err");
+      return;
+    }
+    addPollOptionInput("");
+  });
+
+  pollCreate.addEventListener("click", async () => {
+    const title = (pollTitle.value || "").trim();
+    const mins = parseInt(pollDurationMin.value, 10);
+    const options = [...pollOptionsList.querySelectorAll(".poll-option-input")]
+      .map((el) => (el.value || "").trim())
+      .filter(Boolean);
+    if (!title) {
+      setStatus("Укажите вопрос", "err");
+      return;
+    }
+    if (options.length < 2) {
+      setStatus("Нужно минимум 2 варианта", "err");
+      return;
+    }
+    if (Number.isNaN(mins) || mins < 1 || mins > 10) {
+      setStatus("Длительность: 1–10 минут", "err");
+      return;
+    }
+    setStatus("Создание опроса…");
+    try {
+      const data = await api("POST", "/api/poll/create", {
+        title,
+        options,
+        collect_sec: mins * 60,
+      });
+      renderPolls(data);
+      setStatus("Опрос открыт", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  document.getElementById("pollRefresh").addEventListener("click", () => loadPolls(false));
+
+  pollLock.addEventListener("click", async () => {
+    setStatus("Закрытие приёма…");
+    try {
+      const data = await api("POST", "/api/poll/lock");
+      renderPolls(data);
+      setStatus("Приём ставок закрыт", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  pollResolve.addEventListener("click", () => {
+    pollResolveRow.style.display = "flex";
+  });
+
+  pollResolveConfirm.addEventListener("click", async () => {
+    const option_index = parseInt(pollResolveSelect.value, 10);
+    if (Number.isNaN(option_index)) {
+      setStatus("Выберите вариант", "err");
+      return;
+    }
+    const label = pollResolveSelect.options[pollResolveSelect.selectedIndex]?.text || "";
+    if (!confirm(`Подтвердить победу: ${label}?`)) return;
+    setStatus("Резолв опроса…");
+    try {
+      const data = await api("POST", "/api/poll/resolve", { option_index });
+      renderPolls(data);
+      pollResolveRow.style.display = "none";
+      setStatus("Победитель выбран", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  pollCancel.addEventListener("click", async () => {
+    if (!confirm("Отменить опрос и вернуть баллы всем участникам?")) return;
+    setStatus("Отмена опроса…");
+    try {
+      const data = await api("POST", "/api/poll/cancel");
+      renderPolls(data);
+      pollResolveRow.style.display = "none";
+      setStatus("Опрос отменён, баллы возвращены", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
   document.querySelectorAll(".tab[data-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -739,8 +1014,11 @@
       else stopRoulettePoll();
       if (id === "races") loadRaces(false);
       else stopRacesPoll();
+      if (id === "polls") loadPolls(false);
+      else stopPollsPoll();
     });
   });
 
+  resetPollCreateForm();
   loadPoints();
 })();

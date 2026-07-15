@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OBS Prediction</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    body.debug-mode {
+      background: radial-gradient(circle at center, #1a1a28 0%, #0d0d14 70%);
+    }
+    #pollWrap {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(720px, 94vw);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.4s ease, visibility 0s linear 0.4s;
+    }
+    #pollWrap.is-visible {
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 0.4s ease, visibility 0s linear 0s;
+    }
+    #pollCard {
+      background: linear-gradient(160deg, rgba(18, 18, 28, 0.92), rgba(10, 10, 16, 0.95));
+      border: 1px solid rgba(158, 203, 255, 0.28);
+      border-radius: 14px;
+      padding: 16px 18px 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      color: #e8e8f0;
+    }
+    #pollTitle {
+      margin: 0 0 6px;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      line-height: 1.25;
+    }
+    #pollMeta {
+      margin: 0 0 12px;
+      font-size: 13px;
+      color: #9ecbff;
+      opacity: 0.95;
+    }
+    .opt {
+      margin-bottom: 10px;
+    }
+    .opt:last-child {
+      margin-bottom: 0;
+    }
+    .opt-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .opt-head .label {
+      font-weight: 600;
+    }
+    .opt-head .stats {
+      color: #b8c0d0;
+      white-space: nowrap;
+    }
+    .bar {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #5b9fd4, #9ecbff);
+      transition: width 0.45s ease;
+    }
+    .opt.is-winner .bar > span {
+      background: linear-gradient(90deg, #3d9b5f, #7ddea0);
+    }
+    .opt.is-winner .label::after {
+      content: " ✓";
+      color: #7ddea0;
+    }
+    #pollBanner {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 14px;
+      font-weight: 600;
+      color: #7ddea0;
+      display: none;
+    }
+    #pollBanner.is-on {
+      display: block;
+    }
+    #debugPanel {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      max-width: 360px;
+      font-size: 12px;
+      color: #cde;
+      background: rgba(0, 0, 0, 0.65);
+      padding: 8px 10px;
+      border-radius: 8px;
+      display: none;
+    }
+    body.debug-mode #debugPanel {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="pollWrap">
+    <div id="pollCard">
+      <h1 id="pollTitle">Опрос</h1>
+      <p id="pollMeta">—</p>
+      <div id="pollOptions"></div>
+      <div id="pollBanner"></div>
+    </div>
+  </div>
+  <div id="debugPanel">
+    <div id="debugStatus">—</div>
+  </div>
+  <script src="prediction.js"></script>
+</body>
+</html>

@@ -201,6 +201,7 @@
       <button type="button" class="tab" data-tab="queue">Очередь</button>
       <button type="button" class="tab" data-tab="roulette">Рулетка</button>
       <button type="button" class="tab" data-tab="races">Скачки</button>
+      <button type="button" class="tab" data-tab="polls">Опросы</button>
       <a href="cards-admin.html" class="tab tab-link">Карты</a>
     </div>
 
@@ -416,6 +417,89 @@
             <tr><td colspan="4" class="empty">—</td></tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="panel-polls" class="panel">
+      <div class="card" id="pollCreateCard">
+        <h3>Создать опрос</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          Прогноз за баллы принцесс: победители делят банк проигравших. Команда в чате:
+          <code>!опрос &lt;сумма&gt; &lt;номер&gt;</code>
+        </p>
+        <div class="add-form" style="flex-wrap: wrap">
+          <label style="flex: 1 1 100%">
+            Вопрос
+            <input type="text" id="pollTitle" placeholder="Умрет ли стример в ближайшие 20 минут?" />
+          </label>
+          <label>
+            Длительность (мин)
+            <input type="number" id="pollDurationMin" min="1" max="10" value="5" />
+          </label>
+        </div>
+        <div id="pollOptionsList" style="margin: 12px 0; display: flex; flex-direction: column; gap: 8px"></div>
+        <div class="toolbar">
+          <button type="button" id="pollAddOption">+ Вариант</button>
+          <button type="button" id="pollCreate" class="primary">Создать и открыть ставки</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Статус</h3>
+        <p id="pollStatusLine">—</p>
+        <p>Банк опроса: <strong id="pollPool">—</strong></p>
+        <div class="toolbar">
+          <button type="button" id="pollLock" class="primary">Закрыть приём</button>
+          <button type="button" id="pollResolve" class="primary">Выбрать победителя</button>
+          <button type="button" id="pollCancel" class="danger">Отменить и вернуть баллы</button>
+          <button type="button" id="pollRefresh">Обновить</button>
+        </div>
+        <div class="toolbar" id="pollResolveRow" style="display: none">
+          <label>
+            Победивший вариант
+            <select id="pollResolveSelect"></select>
+          </label>
+          <button type="button" id="pollResolveConfirm" class="primary">Подтвердить</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Варианты</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>№</th>
+              <th>вариант</th>
+              <th>сумма</th>
+              <th>ставок</th>
+              <th>коэфф.</th>
+            </tr>
+          </thead>
+          <tbody id="pollOptionsBody">
+            <tr><td colspan="5" class="empty">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Ставки</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ник</th>
+              <th>вариант</th>
+              <th>сумма</th>
+            </tr>
+          </thead>
+          <tbody id="pollBetsBody">
+            <tr><td colspan="3" class="empty">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Последний результат</h3>
+        <div id="pollLastResult" class="empty">—</div>
       </div>
     </section>
 

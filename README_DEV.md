@@ -36,6 +36,7 @@
 | `princess` | Игровая валюта «принцессы», кражи, daily, кубик и т.д. |
 | `roulette` | Мини-игра `!рулетка`: раунды, общая казна, ставки за баллы |
 | `races` | Мини-игра `!забег`: забеги принцесс, динамические коэффициенты |
+| `polls` | Прогнозы `!опрос`: peer-pool ставки за баллы принцесс |
 | `goodgame` | Общий транспорт: авторизация, reconnect, приём/отправка сообщений |
 
 ```mermaid
@@ -644,6 +645,28 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 | `races_lineup` | Состав (№, принцесса) |
 | `races_princess_stats` | История участий и побед для odds |
 
+## 8b. Опросы (predictions)
+
+Peer-pool прогноз за баллы принцесс (не использует `minigames_bank`): `IDLE → OPEN → LOCKED → RESOLVED`.
+
+| Команда | Описание |
+|---------|----------|
+| `!опрос` | Статус / банк / коэффициенты |
+| `!опрос <сумма> <номер>` | Ставка (мин. 10), можно докинуть на тот же вариант |
+| `!опрос правила` | Справка |
+
+| Метод | Путь |
+|-------|------|
+| GET | `/api/poll` |
+| POST | `/api/poll/create`, `/lock`, `/resolve`, `/cancel` |
+
+OBS: `/prediction.html`. Админка: вкладка «Опросы».
+
+| Таблица | Содержимое |
+|---------|------------|
+| `poll_meta` | Состояние, вопрос, варианты JSON, таймер, last_result |
+| `poll_bets` | Ставки раунда (`UNIQUE(round_id, user_id)`) |
+
 ## 9. Маршрутизация сообщений чата
 
 ```mermaid
@@ -664,14 +687,16 @@ flowchart TD
     RouletteCheck -->|roulette cmd| HandleR[roulette handler + return True]
     RouletteCheck -->|no| RacesCheck[races.handle_message]
     RacesCheck -->|races cmd| HandleRc[races handler + return True]
-    RacesCheck -->|no| SRCheck
+    RacesCheck -->|no| PollsCheck[polls.handle_message]
+    PollsCheck -->|poll cmd| HandleP2[polls handler + return True]
+    PollsCheck -->|no| SRCheck
 
     SRCheck --> SR{song_request.handle_message}
     SR -->|SR command| HandleSR[SR handler]
     SR -->|unknown !| Ignore[return False]
 ```
 
-**Приоритет:** princess → roulette → races → song_request. Если модуль вернул `True`, следующие не вызываются.
+**Приоритет:** princess → cards → roulette → races → polls → song_request. Если модуль вернул `True`, следующие не вызываются.
 
 **Формат ответов:**
 

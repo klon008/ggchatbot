@@ -23,6 +23,7 @@ from bot.web.static import serve_obs_asset, serve_obs_card_template, serve_obs_f
 
 if TYPE_CHECKING:
     from bot.economy.points import PointsStore
+    from bot.polls.handler import PollsHandler
     from bot.races.handler import RacesHandler
     from bot.roulette.handler import RouletteHandler
     from bot.song_request.handler import SongRequestHandler
@@ -41,12 +42,14 @@ class AdminRoutes:
         sr_handler: "SongRequestHandler",
         roulette_handler: "RouletteHandler",
         races_handler: "RacesHandler",
+        polls_handler: "PollsHandler",
     ) -> None:
         self._db = db
         self._queue = queue
         self._sr = sr_handler
         self._roulette = roulette_handler
         self._races = races_handler
+        self._polls = polls_handler
         self._fetch_viewers: Optional[ViewersFetchFn] = None
         self._points: Optional["PointsStore"] = None
 
@@ -99,6 +102,13 @@ class AdminRoutes:
                 web.post("/api/races/cancel", self._api_races_cancel),
                 web.get("/races.html", self._handle_races_html),
                 web.get("/races.js", self._handle_races_js),
+                web.get("/api/poll", self._api_poll_get),
+                web.post("/api/poll/create", self._api_poll_create),
+                web.post("/api/poll/lock", self._api_poll_lock),
+                web.post("/api/poll/resolve", self._api_poll_resolve),
+                web.post("/api/poll/cancel", self._api_poll_cancel),
+                web.get("/prediction.html", self._handle_prediction_html),
+                web.get("/prediction.js", self._handle_prediction_js),
                 web.get("/card-templates/{path:.*}", self._handle_card_templates),
                 web.get("/assets/{path:.*}", self._handle_assets),
             ]
@@ -135,6 +145,12 @@ class AdminRoutes:
 
     async def _handle_races_js(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("races.js", "application/javascript; charset=utf-8")
+
+    async def _handle_prediction_html(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("prediction.html", "text/html; charset=utf-8")
+
+    async def _handle_prediction_js(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("prediction.js", "application/javascript; charset=utf-8")
 
     async def _handle_assets(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_asset(request.match_info["path"])
@@ -420,3 +436,70 @@ class AdminRoutes:
                 return error_response("Нет открытого забега для отмены", status=409)
             raise
         return json_response(await self._races.get_status())
+
+    async def _api_poll_get(self, request: web.Request) -> web.Response:
+        return json_response(await self._polls.get_status())
+
+    async def _api_poll_create(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        title = data.get("title")
+        options = data.get("options")
+        collect_sec = data.get("collect_sec")
+        if not isinstance(title, str) or not title.strip():
+            return error_response("title обязателен")
+        if not isinstance(options, list) or not all(isinstance(o, str) for o in options):
+            return error_response("options должен быть массивом строк")
+        if not isinstance(collect_sec, int):
+            return error_response("collect_sec должен быть целым числом")
+        try:
+            await self._polls.admin_create(title.strip(), options, collect_sec)
+        except RuntimeError as exc:
+            code = str(exc)
+            messages = {
+                "empty_title": "Укажите вопрос опроса",
+                "too_few_options": "Нужно минимум 2 варианта",
+                "too_many_options": "Максимум 8 вариантов",
+                "bad_collect_sec": "Длительность должна быть от 60 до 600 секунд",
+                "not_idle": "Уже есть активный опрос",
+            }
+            return error_response(messages.get(code, code), status=409)
+        return json_response(await self._polls.get_status())
+
+    async def _api_poll_lock(self, request: web.Request) -> web.Response:
+        try:
+            await self._polls.admin_lock()
+        except RuntimeError as exc:
+            if str(exc) == "not_open":
+                return error_response("Опрос не принимает ставки", status=409)
+            raise
+        return json_response(await self._polls.get_status())
+
+    async def _api_poll_resolve(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        option_index = data.get("option_index")
+        if not isinstance(option_index, int) or option_index < 0:
+            return error_response("option_index должен быть целым числом >= 0")
+        try:
+            await self._polls.admin_resolve(option_index)
+        except RuntimeError as exc:
+            code = str(exc)
+            messages = {
+                "not_locked": "Сначала закройте приём ставок",
+                "bad_option": "Неверный номер варианта",
+                "no_winners": "На выбранном варианте нет ставок — выберите другой или отмените опрос",
+            }
+            return error_response(messages.get(code, code), status=409)
+        return json_response(await self._polls.get_status())
+
+    async def _api_poll_cancel(self, request: web.Request) -> web.Response:
+        try:
+            await self._polls.admin_cancel()
+        except RuntimeError as exc:
+            if str(exc) == "not_active":
+                return error_response("Нет активного опроса для отмены", status=409)
+            raise
+        return json_response(await self._polls.get_status())

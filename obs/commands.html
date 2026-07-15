@@ -301,6 +301,7 @@
       <a href="#dice">Кубик</a>
       <a href="#steal">Кража</a>
       <a href="#roulette">Рулетка</a>
+      <a href="#poll">Опрос</a>
       <a href="#admin">Админ</a>
       <a href="#order">Заказ</a>
       <a href="#sr-other">Музыка</a>
@@ -573,6 +574,42 @@ flowchart TD
       </div>
     </article>
 
+    <!-- Опросы -->
+    <article class="card" id="poll">
+      <div class="card-head">
+        <span class="tag princess">Princess</span>
+        <h2><code style="color:var(--cmd)">!опрос</code> — прогноз за баллы</h2>
+        <p>Twitch Predictions: ставки на варианты, победители делят банк проигравших</p>
+      </div>
+      <div class="card-body flush">
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    P0["!опрос правила"] --> PRULES["Краткая справка"]
+    PSTAT["!опрос"] --> PS["Статус / банк / коэфф."]
+    P1["!опрос сумма номер"] --> PO{"OPEN?"}
+    PO -->|нет| PF["Отказ"]
+    PO -->|да| PB{"Баллы / тот же вариант?"}
+    PB -->|нет| PF2["Отказ"]
+    PB -->|да| POK["Списание + escrow"]
+    LOCK["Таймер / admin lock"] --> LOCKED["LOCKED"]
+    LOCKED --> RES["Admin: победитель"]
+    RES --> PAY["Выплаты победителям"]
+    LOCKED --> CAN["Отмена = возврат всем"]
+    class P0,PSTAT,P1,POK,LOCK,RES action
+    class PO,PB cond
+    class PRULES,PS ok
+    class PF,PF2 fail
+    class POK,PAY,CAN eco
+          </pre>
+        </div>
+        <div class="note">
+          Ставка: <code>!опрос &lt;сумма&gt; &lt;номер&gt;</code> (мин. 10). Можно докинуть на тот же вариант, сменить сторону нельзя.
+          Создание/резолв/отмена — вкладка «Опросы» в <code>/admin.html</code>. OBS: <code>/prediction.html</code>.
+        </div>
+      </div>
+    </article>
+
     <!-- Админ -->
     <article class="card" id="admin">
       <div class="card-head">
@@ -727,6 +764,7 @@ flowchart LR
           <span class="chip">!коллекция</span>
           <span class="chip">!рулетка</span>
           <span class="chip">!забег</span>
+          <span class="chip">!опрос</span>
           <span class="chip">!заказ</span>
           <span class="chip">!очередь</span>
           <span class="chip">!играет</span>
@@ -739,6 +777,7 @@ flowchart LR
           <span class="chip dim">!пропуск</span>
           <span class="chip dim">!рулетка правила</span>
           <span class="chip dim">!забег правила</span>
+          <span class="chip dim">!опрос правила</span>
           <span class="chip admin">!начислить</span>
           <span class="chip admin">!списать</span>
           <span class="chip admin">!рулетка_банк</span>
