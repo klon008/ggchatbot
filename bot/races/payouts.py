@@ -7,12 +7,18 @@ from dataclasses import dataclass
 from bot.db.races import RacesBet
 from bot.minigames import payouts as shared_payouts
 
+from . import settings
+
+PLACE2_PAYOUT_RATIO = getattr(settings, "PLACE2_PAYOUT_RATIO", 0.30)
+PLACE3_PAYOUT_RATIO = getattr(settings, "PLACE3_PAYOUT_RATIO", 0.10)
+
 
 @dataclass
 class WinnerPayout:
     user_id: str
     user_name: str
     horse_number: int
+    place: int
     ideal: int
     actual: int
 
@@ -26,20 +32,33 @@ class PayoutResult:
     new_bank: int
 
 
+def _ideal_for_place(full_win: int, place: int) -> int:
+    if place == 1:
+        return full_win
+    if place == 2:
+        return int(full_win * PLACE2_PAYOUT_RATIO)
+    if place == 3:
+        return int(full_win * PLACE3_PAYOUT_RATIO)
+    return 0
+
+
 def calculate_payouts(
     bet_list: list[RacesBet],
-    winner_horse: int,
+    finish_order: list[int],
     odds: dict[int, float],
     bank_balance: int,
 ) -> PayoutResult:
     winners: list[WinnerPayout] = []
     ideals: list[int] = []
+    place_by_horse = {horse: idx + 1 for idx, horse in enumerate(finish_order[:3])}
 
     for bet in bet_list:
-        if bet.horse_number != winner_horse:
+        place = place_by_horse.get(bet.horse_number)
+        if place is None:
             continue
         coeff = odds.get(bet.horse_number, 1.0)
-        ideal = int(bet.amount * coeff)
+        full_win = int(bet.amount * coeff)
+        ideal = _ideal_for_place(full_win, place)
         if ideal <= 0:
             continue
         winners.append(
@@ -47,6 +66,7 @@ def calculate_payouts(
                 user_id=bet.user_id,
                 user_name=bet.user_name,
                 horse_number=bet.horse_number,
+                place=place,
                 ideal=ideal,
                 actual=ideal,
             )

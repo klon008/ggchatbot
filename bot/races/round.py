@@ -42,6 +42,10 @@ CLOSE_BETS_MESSAGE = "Ставки больше не принимаются!"
 _ACTIVE_ROUND_STATES = (STATE_OPEN, STATE_RACE_WAIT, STATE_RACE)
 
 
+def _format_payout_part(w: payouts.WinnerPayout) -> str:
+    return f"{w.user_name} — {w.actual} ({w.place}-е место)"
+
+
 class RoundManager:
     def __init__(self, db: Database) -> None:
         self._db = db
@@ -468,7 +472,7 @@ class RoundManager:
         bank_balance = await minigames_bank.get_bank(self._db)
         payout = payouts.calculate_payouts(
             bet_list,
-            result.winner_horse,
+            result.finish_order,
             odds_map,
             bank_balance,
         )
@@ -494,6 +498,7 @@ class RoundManager:
                     "user_id": w.user_id,
                     "user_name": w.user_name,
                     "horse_number": w.horse_number,
+                    "place": w.place,
                     "ideal": w.ideal,
                     "actual": w.actual,
                 }
@@ -522,27 +527,21 @@ class RoundManager:
         if not payout.winners:
             await self._chat(f"{header} Никто не угадал. Ставки остались в казне.")
             return
-        if payout.bankrupted:
-            parts = [
-                f"{w.user_name} — {w.actual}"
-                for w in payout.winners
-                if w.actual > 0
-            ]
-            await self._chat(
-                f"{header} Выплаты урезаны: в казне не хватило средств. "
-                f"Победители: {', '.join(parts)} баллов."
-            )
-            return
-        if len(payout.winners) == 1:
-            w = payout.winners[0]
-            await self._chat(f"{header} {w.user_name} выиграл {w.actual} баллов!")
-            return
         parts = [
-            f"{w.user_name} — {w.actual}"
+            _format_payout_part(w)
             for w in payout.winners
             if w.actual > 0
         ]
-        await self._chat(f"{header} Победители: {', '.join(parts)} баллов.")
+        if payout.bankrupted:
+            await self._chat(
+                f"{header} Выплаты урезаны: в казне не хватило средств. "
+                f"Выплаты: {', '.join(parts)}."
+            )
+            return
+        if len(parts) == 1:
+            await self._chat(f"{header} {parts[0]}.")
+            return
+        await self._chat(f"{header} Выплаты: {', '.join(parts)}.")
 
     async def _enter_cooldown_unlocked(self) -> None:
         meta = await races_db.get_meta(self._db)

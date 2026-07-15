@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import settings
 from .settings import RACES_COLLECT_SEC, RACES_MAX_BET, RACES_MIN_BET, RUNNERS_COUNT
+
+PLACE2_PAYOUT_RATIO = getattr(settings, "PLACE2_PAYOUT_RATIO", 0.30)
+PLACE3_PAYOUT_RATIO = getattr(settings, "PLACE3_PAYOUT_RATIO", 0.10)
 
 RACE_CMD = "!забег"
 RACE_RULES_CMD = f"{RACE_CMD} правила"
@@ -16,7 +20,9 @@ RULES_TEXT = (
     f"{RACE_CMD} — открыть забег и показать состав (№1–{RUNNERS_COUNT}); "
     f"{RACE_CMD} <сумма> <1–{RUNNERS_COUNT}> — ставка после просмотра состава. "
     f"Один забег на чат, одна ставка на игрока, ~{RACES_COLLECT_SEC} сек на приём. "
-    "Выигрыш = ставка × коэффициент (чем популярнее лошадь, тем ниже коэффициент)."
+    "Выигрыш = ставка × коэффициент (чем популярнее лошадь, тем ниже коэффициент). "
+    f"За 2-е место — {int(PLACE2_PAYOUT_RATIO * 100)}% от полного выигрыша, "
+    f"за 3-е — {int(PLACE3_PAYOUT_RATIO * 100)}%."
 )
 
 
