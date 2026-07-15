@@ -1,7 +1,9 @@
 /**
- * Promo JPG generator — 3D table of booster pool cards.
+ * Promo generator — Three.js стол с картами бустера.
  * URL: /promo-generator.html?booster=<id>
+ * Экспорт: renderer.domElement.toBlob (тот же кадр, что на превью).
  */
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";
 import { mountCardTemplate } from "/card-templates/fill-card.js";
 
 const RARITY_RANK = {
@@ -15,19 +17,40 @@ const RARITY_RANK = {
 };
 
 const DEFAULT_FACE_UP = 6;
+const CARD_ASPECT = 5 / 7;
+/** World units for card width at scale slider = 148 */
+const BASE_CARD_W = 1.35;
 
-/** @type {Map<string, object>} */
 const catalogById = new Map();
-/** @type {Map<string, string>} */
 const seriesBackById = new Map();
+/** @type {Map<string, THREE.Texture>} */
+const frontTexCache = new Map();
+/** @type {Map<string, THREE.Texture>} */
+const backTexCache = new Map();
 
 let booster = null;
 /** @type {object[]} */
 let poolCards = [];
-/** @type {Set<string>} */
 const faceUpIds = new Set();
 let renderToken = 0;
 let previewScale = 1;
+
+/** @type {THREE.WebGLRenderer | null} */
+let renderer = null;
+/** @type {THREE.Scene | null} */
+let scene = null;
+/** @type {THREE.PerspectiveCamera | null} */
+let camera = null;
+/** @type {THREE.Group | null} */
+let tableGroup = null;
+/** @type {THREE.Mesh | null} */
+let tableMesh = null;
+/** @type {THREE.Group | null} */
+let cardsGroup = null;
+/** @type {THREE.AmbientLight | null} */
+let ambient = null;
+/** @type {THREE.DirectionalLight | null} */
+let keyLight = null;
 
 const els = {
   boosterTitle: document.getElementById("boosterTitle"),
@@ -54,9 +77,8 @@ const els = {
   overlayName: document.getElementById("overlayName"),
   overlayPool: document.getElementById("overlayPool"),
   exportRoot: document.getElementById("exportRoot"),
-  tableSurface: document.getElementById("tableSurface"),
-  tableFelt: document.querySelector(".table-felt"),
-  cardsLayer: document.getElementById("cardsLayer"),
+  threeHost: document.getElementById("threeHost"),
+  bakeHost: document.getElementById("bakeHost"),
   stageFrame: document.getElementById("stageFrame"),
   stageMeta: document.getElementById("stageMeta"),
   statusLine: document.getElementById("statusLine"),
@@ -86,7 +108,8 @@ function mulberry32(seed) {
 
 function setStatus(text, kind) {
   els.statusLine.textContent = text;
-  els.statusLine.className = kind === "err" ? "err" : kind === "ok" ? "ok" : "hint";
+  els.statusLine.className =
+    kind === "err" ? "hint err" : kind === "ok" ? "hint ok" : "hint";
 }
 
 function portraitUrl(card) {
@@ -103,7 +126,10 @@ function sortPool(cards) {
     const ra = RARITY_RANK[a.rarity] ?? 99;
     const rb = RARITY_RANK[b.rarity] ?? 99;
     if (ra !== rb) return ra - rb;
-    return (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name, "ru");
+    return (
+      (a.sort_order ?? 0) - (b.sort_order ?? 0) ||
+      a.name.localeCompare(b.name, "ru")
+    );
   });
 }
 
@@ -123,91 +149,6 @@ function syncRangeLabels() {
   els.overlapVal.textContent = `${els.overlap.value}%`;
 }
 
-function applyCameraCss() {
-  const tiltDeg = Number(els.tilt.value) || 0;
-  document.documentElement.style.setProperty("--tilt", `${tiltDeg}deg`);
-  document.documentElement.style.setProperty("--spin", `${els.spin.value}deg`);
-  document.documentElement.style.setProperty("--card-w", `${els.cardScale.value}px`);
-  // 2D-форешортенинг для экспорта (cos наклона)
-  const flat = Math.max(0.35, Math.cos((tiltDeg * Math.PI) / 180));
-  document.documentElement.style.setProperty("--tilt-flat", String(Number(flat.toFixed(3))));
-}
-
-/**
- * Убираем 3D/filter/translateZ — html2canvas иначе рисует «аномалии» на столе.
- */
-function flattenSceneForExport() {
-  els.exportRoot.classList.add("is-export-flat");
-  if (els.tableFelt && !els.tableFelt.classList.contains("is-hidden")) {
-    // На всякий случай убиваем translateZ и сложный background inline
-    els.tableFelt.style.transform = "none";
-    if (!els.tableFelt.classList.contains("is-white")) {
-      els.tableFelt.style.background = "#152032";
-      els.tableFelt.style.backgroundImage = "none";
-    } else {
-      els.tableFelt.style.background = "#ffffff";
-      els.tableFelt.style.backgroundImage = "none";
-    }
-  }
-  if (els.tableSurface) {
-    els.tableSurface.style.transformStyle = "flat";
-  }
-  const viewport = els.exportRoot.querySelector(".table-viewport");
-  if (viewport) viewport.style.perspective = "none";
-}
-
-function applySceneChrome() {
-  els.exportRoot.classList.toggle("is-bg-white", Boolean(els.bgWhite?.checked));
-  els.exportRoot.classList.remove("is-cutout");
-  if (els.tableFelt) {
-    els.tableFelt.classList.toggle("is-white", Boolean(els.tableWhite?.checked));
-    els.tableFelt.classList.remove("is-hidden");
-  }
-}
-
-function applyFrameSize() {
-  const size = els.frameSize.value;
-  els.exportRoot.dataset.size = size;
-  fitPreview();
-}
-
-function fitPreview() {
-  const frame = els.stageFrame;
-  const root = els.exportRoot;
-  const pad = 24;
-  const availW = Math.max(200, frame.clientWidth - pad);
-  const availH = Math.max(200, frame.clientHeight - pad);
-  const w = root.offsetWidth || 1920;
-  const h = root.offsetHeight || 1080;
-  previewScale = Math.min(1, availW / w, availH / h);
-  root.style.transform = `scale(${previewScale})`;
-  els.stageMeta.textContent = `${w}×${h} · масштаб ${Math.round(previewScale * 100)}% · лицом ${faceUpIds.size} · рубашек ${els.backsCount.value}`;
-}
-
-function renderFaceList() {
-  const sorted = sortPool(poolCards);
-  els.faceList.innerHTML = sorted
-    .map((c) => {
-      const checked = faceUpIds.has(c.id) ? "checked" : "";
-      return `<label class="face-item">
-        <input type="checkbox" data-id="${escapeAttr(c.id)}" ${checked} />
-        <img src="${escapeAttr(portraitUrl(c))}" alt="" loading="lazy" onerror="this.style.visibility='hidden'" />
-        <span>${escapeHtml(c.name)}<br/><span class="rarity">${escapeHtml(c.rarity)}</span></span>
-      </label>`;
-    })
-    .join("");
-
-  els.faceList.querySelectorAll('input[type="checkbox"]').forEach((input) => {
-    input.addEventListener("change", () => {
-      const id = input.getAttribute("data-id");
-      if (!id) return;
-      if (input.checked) faceUpIds.add(id);
-      else faceUpIds.delete(id);
-      scheduleRender();
-    });
-  });
-}
-
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -216,228 +157,228 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function escapeAttr(s) {
-  return escapeHtml(s).replace(/'/g, "&#39;");
+function frameSizePx() {
+  const [w, h] = (els.frameSize.value || "1920x1080").split("x").map(Number);
+  return { w: w || 1920, h: h || 1080 };
+}
+
+function fitPreview() {
+  const { w, h } = frameSizePx();
+  els.exportRoot.dataset.size = els.frameSize.value;
+  const frame = els.stageFrame;
+  const pad = 24;
+  const availW = Math.max(200, frame.clientWidth - pad);
+  const availH = Math.max(200, frame.clientHeight - pad);
+  previewScale = Math.min(1, availW / w, availH / h);
+  els.exportRoot.style.transform = `scale(${previewScale})`;
+  els.stageMeta.textContent = `${w}×${h} · ${Math.round(previewScale * 100)}% · лицом ${faceUpIds.size} · рубашек ${els.backsCount.value}`;
+}
+
+function initThree() {
+  const { w, h } = frameSizePx();
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 100);
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    preserveDrawingBuffer: true,
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(w, h, false);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  els.threeHost.innerHTML = "";
+  els.threeHost.appendChild(renderer.domElement);
+
+  ambient = new THREE.AmbientLight(0xffffff, 1.35);
+  keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+  keyLight.position.set(4, 12, 6);
+  const fill = new THREE.DirectionalLight(0xfff2e0, 0.55);
+  fill.position.set(-5, 6, -3);
+  const rim = new THREE.HemisphereLight(0xffffff, 0x2a3348, 0.45);
+  scene.add(ambient);
+  scene.add(keyLight);
+  scene.add(fill);
+  scene.add(rim);
+
+  tableGroup = new THREE.Group();
+  scene.add(tableGroup);
+
+  const tableGeo = new THREE.PlaneGeometry(14, 9);
+  const tableMat = new THREE.MeshStandardMaterial({
+    color: 0x152032,
+    roughness: 0.92,
+    metalness: 0.05,
+  });
+  tableMesh = new THREE.Mesh(tableGeo, tableMat);
+  tableMesh.rotation.x = -Math.PI / 2;
+  tableMesh.position.y = -0.02;
+  tableGroup.add(tableMesh);
+
+  cardsGroup = new THREE.Group();
+  tableGroup.add(cardsGroup);
+
+  updateCamera();
+  applyBackground();
+  renderFrame();
+}
+
+function applyBackground() {
+  if (!scene || !renderer) return;
+  if (els.bgWhite.checked) {
+    scene.background = new THREE.Color(0xffffff);
+    els.exportRoot.classList.add("is-bg-white");
+  } else {
+    scene.background = new THREE.Color(0x080a10);
+    els.exportRoot.classList.remove("is-bg-white");
+  }
+}
+
+function applyTableColor() {
+  if (!tableMesh) return;
+  const mat = tableMesh.material;
+  mat.color.set(els.tableWhite.checked ? 0xffffff : 0x152032);
+  mat.needsUpdate = true;
+}
+
+function updateCamera() {
+  if (!camera || !renderer) return;
+  const { w, h } = frameSizePx();
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+
+  const tiltDeg = Number(els.tilt.value) || 0;
+  const spinDeg = Number(els.spin.value) || 0;
+  // tilt 0 = top-down, 72 = low side angle
+  const elev = THREE.MathUtils.degToRad(90 - tiltDeg);
+  const dist = 11.5;
+  const spin = THREE.MathUtils.degToRad(spinDeg);
+  camera.position.set(
+    Math.sin(spin) * Math.cos(elev) * dist,
+    Math.sin(elev) * dist,
+    Math.cos(spin) * Math.cos(elev) * dist
+  );
+  // Keep upright-ish: look at table center
+  camera.up.set(0, 1, 0);
+  camera.lookAt(0, 0, 0);
+  // Avoid singularity when tilt≈0 (camera on +Y)
+  if (tiltDeg < 2) {
+    camera.position.set(0.001, dist, 0.001);
+    camera.lookAt(0, 0, 0);
+    camera.up.set(0, 0, -1);
+  }
+}
+
+function renderFrame() {
+  if (!renderer || !scene || !camera) return;
+  renderer.render(scene, camera);
+}
+
+function clearCards() {
+  if (!cardsGroup) return;
+  while (cardsGroup.children.length) {
+    const obj = cardsGroup.children[0];
+    cardsGroup.remove(obj);
+    obj.traverse((ch) => {
+      if (ch.geometry) ch.geometry.dispose();
+      // textures kept in cache — don't dispose maps
+      if (ch.material) {
+        if (Array.isArray(ch.material)) ch.material.forEach((m) => m.dispose());
+        else ch.material.dispose();
+      }
+    });
+  }
+}
+
+function cardWorldSize() {
+  const scale = Number(els.cardScale.value) || 148;
+  const w = BASE_CARD_W * (scale / 148);
+  const h = w / CARD_ASPECT;
+  return { w, h };
 }
 
 /**
- * Layout cards into positions relative to table center.
- * @returns {{ kind: 'face'|'back', card?: object, x: number, y: number, rot: number, z: number }[]}
+ * @returns {{ kind: 'face'|'back', card?: object, x: number, z: number, rot: number, y: number }[]}
  */
-function computeLayout(faces, backsCount, layout, seed, overlapPct) {
-  const rand = mulberry32(Number(seed) || 0);
+function computeLayout(faces, backsCount) {
+  const rand = mulberry32(Number(els.seed.value) || 0);
+  const squeeze = 1 - Number(els.overlap.value) / 200;
+  const { w: cardW } = cardWorldSize();
   const items = [];
-  const total = faces.length + backsCount;
-  if (total === 0) return items;
-
-  const squeeze = 1 - Number(overlapPct) / 200; // 0.5..1
-  const cardW = Number(els.cardScale.value);
-  const cardH = cardW * 1.4;
-
-  // Backs first (under), then faces on top
-  for (let i = 0; i < backsCount; i++) {
-    items.push({ kind: "back", i });
-  }
-  for (const card of faces) {
-    items.push({ kind: "face", card });
-  }
+  for (let i = 0; i < backsCount; i++) items.push({ kind: "back", i });
+  for (const card of faces) items.push({ kind: "face", card });
 
   const placed = [];
+  const layout = els.layout.value;
+
   if (layout === "row") {
     const n = items.length;
-    const span = Math.min(920, n * cardW * 0.72 * squeeze + 40);
+    const span = Math.min(10, n * cardW * 0.72 * squeeze + 0.5);
     items.forEach((it, idx) => {
       const t = n === 1 ? 0.5 : idx / (n - 1);
       placed.push({
         ...it,
         x: (t - 0.5) * span,
-        y: (rand() - 0.5) * 18,
-        rot: (rand() - 0.5) * 8,
-        z: idx,
+        z: (rand() - 0.5) * 0.25,
+        rot: (rand() - 0.5) * 0.14,
+        y: 0.01 + idx * 0.004,
       });
     });
   } else if (layout === "arc" || layout === "fan") {
     const n = items.length;
     const spread = layout === "fan" ? 70 : 110;
-    const radius = layout === "fan" ? 220 * squeeze + 80 : 340 * squeeze + 60;
+    const radius = (layout === "fan" ? 2.8 : 4.2) * squeeze + 1.2;
     items.forEach((it, idx) => {
       const t = n === 1 ? 0.5 : idx / (n - 1);
-      const ang = ((t - 0.5) * spread * Math.PI) / 180;
+      const ang = THREE.MathUtils.degToRad((t - 0.5) * spread);
       placed.push({
         ...it,
         x: Math.sin(ang) * radius,
-        y: -Math.cos(ang) * radius * 0.35 + radius * 0.2,
-        rot: (t - 0.5) * spread * 0.85,
-        z: idx,
+        z: -Math.cos(ang) * radius * 0.35 + radius * 0.15,
+        rot: ang * 0.85,
+        y: 0.01 + idx * 0.004,
       });
     });
   } else {
-    // heap
     items.forEach((it, idx) => {
       const angle = rand() * Math.PI * 2;
-      const radius = Math.sqrt(rand()) * (220 + faces.length * 12) * squeeze;
+      const radius = Math.sqrt(rand()) * (2.6 + faces.length * 0.12) * squeeze;
       placed.push({
         ...it,
         x: Math.cos(angle) * radius * 1.35,
-        y: Math.sin(angle) * radius * 0.75,
-        rot: (rand() - 0.5) * 50,
-        z: idx,
+        z: Math.sin(angle) * radius * 0.85,
+        rot: (rand() - 0.5) * 0.9,
+        y: 0.01 + idx * 0.005,
       });
     });
   }
-
-  // Keep faces roughly toward viewer / center bias for backs
-  return placed.map((p) => ({
-    ...p,
-    x: Math.max(-900, Math.min(900, p.x)),
-    y: Math.max(-420, Math.min(420, p.y)),
-  }));
+  return placed;
 }
 
-function makeSlotEl(pos) {
-  const slot = document.createElement("div");
-  slot.className = "card-slot";
-  slot.style.setProperty("--tx", `${pos.x}px`);
-  slot.style.setProperty("--ty", `${pos.y}px`);
-  slot.style.setProperty("--tz", `${pos.z}px`);
-  slot.style.setProperty("--rot", `${pos.rot}deg`);
-  slot.style.zIndex = String(10 + pos.z);
-
-  const card3d = document.createElement("div");
-  card3d.className = `card3d${pos.kind === "face" ? " is-face" : ""}`;
-
-  const front = document.createElement("div");
-  front.className = "face face-front";
-  const frontHost = document.createElement("div");
-  frontHost.className = "front-host";
-  front.appendChild(frontHost);
-
-  const back = document.createElement("div");
-  back.className = "face face-back";
-  const backImg = document.createElement("img");
-  backImg.alt = "";
-  backImg.decoding = "async";
-
-  const sample = pos.card || poolCards[0];
-  backImg.src = sample ? backUrlForCard(sample) : "/assets/cards/card-back.svg";
-  back.appendChild(backImg);
-
-  card3d.appendChild(front);
-  card3d.appendChild(back);
-  slot.appendChild(card3d);
-
-  return { slot, frontHost, card: pos.card, kind: pos.kind };
+async function textureFromImageUrl(url) {
+  const loader = new THREE.TextureLoader();
+  const tex = await new Promise((resolve, reject) => {
+    loader.load(url, resolve, undefined, reject);
+  });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 4;
+  tex.needsUpdate = true;
+  return tex;
 }
 
-async function renderScene() {
-  const token = ++renderToken;
-  applyCameraCss();
-  applyFrameSize();
-  applySceneChrome();
-
-  const showTitle = els.showTitle.checked;
-  els.titleOverlay.classList.toggle("hidden", !showTitle);
-  if (booster) {
-    els.overlayName.textContent = booster.name || booster.id;
-    const seriesNames = [
-      ...new Set(poolCards.map((c) => c.series_name).filter(Boolean)),
-    ];
-    const seriesPart = seriesNames.length
-      ? seriesNames.join(" · ")
-      : "бустер";
-    els.overlayPool.textContent = `${seriesPart} · ${poolCards.length} карт в пуле`;
-  }
-
-  const faces = sortPool(poolCards.filter((c) => faceUpIds.has(c.id)));
-  let backs = Number(els.backsCount.value) || 0;
-  if (backs > 40) backs = 40;
-
-  const layout = computeLayout(
-    faces,
-    backs,
-    els.layout.value,
-    els.seed.value,
-    els.overlap.value
-  );
-
-  els.cardsLayer.innerHTML = "";
-  const mounts = [];
-  for (const pos of layout) {
-    const built = makeSlotEl(pos);
-    els.cardsLayer.appendChild(built.slot);
-    if (built.kind === "face" && built.card) {
-      mounts.push(
-        mountCardTemplate(built.frontHost, built.card.rarity || "common", {
-          name: built.card.name || "",
-          portraitUrl: portraitUrl(built.card),
-        }).catch((err) => {
-          console.warn("card template", built.card.id, err);
-        })
-      );
-    }
-  }
-
-  await Promise.all(mounts);
-  if (token !== renderToken) return;
-
-  fitPreview();
-  setStatus(
-    `Сцена: ${faces.length} лицом · ${backs} рубашкой · layout «${els.layout.value}»`,
-    "ok"
-  );
-}
-
-let renderTimer = null;
-function scheduleRender() {
-  syncRangeLabels();
-  fitPreview();
-  clearTimeout(renderTimer);
-  renderTimer = setTimeout(() => {
-    renderScene().catch((e) => {
-      console.error(e);
-      setStatus(String(e.message || e), "err");
-    });
-  }, 80);
-}
-
-async function svgHostToPngDataUrl(host, w, h) {
-  const svg = host.querySelector("svg");
-  if (!svg) return null;
-  const clone = svg.cloneNode(true);
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  if (!clone.getAttribute("width")) clone.setAttribute("width", String(w));
-  if (!clone.getAttribute("height")) clone.setAttribute("height", String(h));
-  // Inline portrait as data URL so html2canvas / drawImage see pixels
-  const imgEl = clone.querySelector('[data-slot="portrait"]');
-  if (imgEl) {
-    const href =
-      imgEl.getAttribute("href") ||
-      imgEl.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
-      "";
-    if (href && !href.startsWith("data:")) {
-      try {
-        const abs = new URL(href, location.origin).href;
-        const res = await fetch(abs);
-        const blob = await res.blob();
-        const dataUrl = await new Promise((resolve, reject) => {
-          const fr = new FileReader();
-          fr.onload = () => resolve(fr.result);
-          fr.onerror = reject;
-          fr.readAsDataURL(blob);
-        });
-        imgEl.setAttribute("href", dataUrl);
-        imgEl.setAttributeNS("http://www.w3.org/1999/xlink", "href", dataUrl);
-      } catch (e) {
-        console.warn("portrait inline failed", e);
-      }
-    }
-  }
-  const xml = new XMLSerializer().serializeToString(clone);
-  const svgUrl =
-    "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+/** SVG/image → canvas data URL (for backs and fallbacks). */
+async function rasterizeUrl(url, w, h) {
+  const abs = new URL(url, location.origin).href;
+  const res = await fetch(abs);
+  const blob = await res.blob();
+  const dataUrl = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
   const img = new Image();
-  img.decoding = "async";
-  img.src = svgUrl;
+  img.src = dataUrl;
   try {
     await img.decode();
   } catch {
@@ -450,199 +391,304 @@ async function svgHostToPngDataUrl(host, w, h) {
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
+  if (!ctx) throw new Error("no 2d ctx");
+  ctx.fillStyle = "#0e1220";
+  ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0, w, h);
   return canvas.toDataURL("image/png");
 }
 
-async function loadImageDataUrl(src, w, h) {
-  if (!src) return null;
-  let dataUrl = src;
-  if (!src.startsWith("data:")) {
-    const abs = new URL(src, location.origin).href;
-    const res = await fetch(abs);
-    const blob = await res.blob();
-    dataUrl = await new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(fr.result);
-      fr.onerror = reject;
-      fr.readAsDataURL(blob);
-    });
+async function bakeFrontTexture(card) {
+  const cacheKey = card.id;
+  if (frontTexCache.has(cacheKey)) return frontTexCache.get(cacheKey);
+
+  const host = els.bakeHost;
+  host.innerHTML = "";
+  await mountCardTemplate(host, card.rarity || "common", {
+    name: card.name || "",
+    portraitUrl: portraitUrl(card),
+  });
+  const svg = host.querySelector("svg");
+  if (!svg) throw new Error(`no svg for ${card.id}`);
+
+  // Inline portrait so drawImage works offline
+  const imgEl = svg.querySelector('[data-slot="portrait"]');
+  if (imgEl) {
+    const href =
+      imgEl.getAttribute("href") ||
+      imgEl.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
+      "";
+    if (href && !href.startsWith("data:")) {
+      try {
+        const png = await rasterizeUrl(href, 620, 660);
+        imgEl.setAttribute("href", png);
+        imgEl.setAttributeNS("http://www.w3.org/1999/xlink", "href", png);
+      } catch (e) {
+        console.warn("portrait bake", card.id, e);
+      }
+    }
   }
-  const bitmap = new Image();
-  bitmap.src = dataUrl;
-  try {
-    await bitmap.decode();
-  } catch {
-    await new Promise((resolve, reject) => {
-      bitmap.onload = resolve;
-      bitmap.onerror = reject;
-    });
-  }
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext("2d");
-  if (!ctx) return dataUrl;
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  return c.toDataURL("image/png");
+
+  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svg.setAttribute("width", "350");
+  svg.setAttribute("height", "490");
+  const xml = new XMLSerializer().serializeToString(svg);
+  const svgUrl =
+    "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+  const dataUrl = await rasterizeUrl(svgUrl, 700, 980);
+  const tex = await textureFromImageUrl(dataUrl);
+  frontTexCache.set(cacheKey, tex);
+  host.innerHTML = "";
+  return tex;
 }
 
-/**
- * html2canvas не умеет CSS 3D (rotateY + backface-visibility) —
- * оставляет только видимую сторону как плоский &lt;img&gt;.
- */
-async function flattenCardsForExport() {
-  const cardW = Number(els.cardScale.value) || 148;
-  const cardH = Math.round(cardW * 1.4);
-  const pxW = cardW * 2;
-  const pxH = cardH * 2;
-  const slots = [...els.cardsLayer.querySelectorAll(".card-slot")];
+async function bakeBackTexture(card) {
+  const url = backUrlForCard(card || poolCards[0] || { series_id: "" });
+  if (backTexCache.has(url)) return backTexCache.get(url);
+  const dataUrl = await rasterizeUrl(url, 700, 980);
+  const tex = await textureFromImageUrl(dataUrl);
+  backTexCache.set(url, tex);
+  return tex;
+}
 
-  await Promise.all(
-    slots.map(async (slot) => {
-      const card3d = slot.querySelector(".card3d");
-      if (!card3d) return;
-      const isFace = card3d.classList.contains("is-face");
-      let dataUrl = null;
+function makeCardMesh(frontTex, backTex) {
+  const { w, h } = cardWorldSize();
+  const group = new THREE.Group();
+  const geo = new THREE.PlaneGeometry(w, h);
 
-      if (isFace) {
-        const host = card3d.querySelector(".front-host");
-        if (host?.querySelector("svg")) {
-          dataUrl = await svgHostToPngDataUrl(host, pxW, pxH);
-        } else {
-          const img = host?.querySelector("img");
-          if (img?.src) dataUrl = await loadImageDataUrl(img.src, pxW, pxH);
-        }
+  const frontMat = new THREE.MeshBasicMaterial({
+    map: frontTex,
+    side: THREE.FrontSide,
+  });
+  const backMat = new THREE.MeshBasicMaterial({
+    map: backTex,
+    side: THREE.FrontSide,
+  });
+
+  const front = new THREE.Mesh(geo, frontMat);
+  front.position.z = 0.008;
+
+  const back = new THREE.Mesh(geo.clone(), backMat);
+  back.rotation.y = Math.PI;
+  back.position.z = -0.008;
+
+  group.add(front);
+  group.add(back);
+  return group;
+}
+
+async function rebuildScene() {
+  const token = ++renderToken;
+  if (!renderer) initThree();
+
+  applyBackground();
+  applyTableColor();
+  els.exportRoot.classList.toggle("is-bg-white", els.bgWhite.checked);
+  els.titleOverlay.classList.toggle("hidden", !els.showTitle.checked);
+
+  if (booster) {
+    els.overlayName.textContent = booster.name || booster.id;
+    const seriesNames = [
+      ...new Set(poolCards.map((c) => c.series_name).filter(Boolean)),
+    ];
+    els.overlayPool.textContent = `${
+      seriesNames.length ? seriesNames.join(" · ") : "бустер"
+    } · ${poolCards.length} карт в пуле`;
+  }
+
+  const faces = sortPool(poolCards.filter((c) => faceUpIds.has(c.id)));
+  let backs = Number(els.backsCount.value) || 0;
+  if (backs > 40) backs = 40;
+
+  const layout = computeLayout(faces, backs);
+  clearCards();
+
+  const sample = poolCards[0] || faces[0];
+  let sharedBack = null;
+  try {
+    sharedBack = await bakeBackTexture(sample);
+  } catch (e) {
+    console.warn(e);
+  }
+
+  for (const pos of layout) {
+    if (token !== renderToken) return;
+    try {
+      let frontTex;
+      let backTex = sharedBack;
+      const faceUp = pos.kind === "face";
+      if (faceUp && pos.card) {
+        frontTex = await bakeFrontTexture(pos.card);
+        backTex = (await bakeBackTexture(pos.card)) || sharedBack;
       } else {
-        const backImg = card3d.querySelector(".face-back img");
-        if (backImg?.src) dataUrl = await loadImageDataUrl(backImg.src, pxW, pxH);
+        frontTex = sharedBack;
+        backTex = sharedBack;
       }
+      if (!frontTex || !backTex) continue;
 
-      if (!dataUrl) return;
+      const mesh = makeCardMesh(frontTex, backTex);
+      mesh.position.set(pos.x, pos.y, pos.z);
+      // YXZ: yaw на столе, затем наклон плоскости
+      mesh.rotation.order = "YXZ";
+      mesh.rotation.y = pos.rot;
+      mesh.rotation.x = faceUp ? -Math.PI / 2 : Math.PI / 2;
+      mesh.rotation.z = 0;
+      cardsGroup.add(mesh);
+    } catch (e) {
+      console.warn("card place", e);
+    }
+  }
 
-      // Плоская карта — без preserve-3d / rotateY
-      card3d.className = "card3d is-flat-export";
-      card3d.style.transform = "none";
-      card3d.innerHTML = "";
-      const img = document.createElement("img");
-      img.src = dataUrl;
-      img.alt = "";
-      img.decoding = "async";
-      img.style.display = "block";
-      img.style.width = "100%";
-      img.style.height = "100%";
-      img.style.objectFit = "contain";
-      img.style.borderRadius = "10px";
-      card3d.appendChild(img);
-    })
+  if (token !== renderToken) return;
+  updateCamera();
+  if (tableMesh) tableMesh.visible = true;
+  renderFrame();
+  fitPreview();
+  setStatus(
+    `Three.js: ${faces.length} лицом · ${backs} рубашкой · «${els.layout.value}»`,
+    "ok"
   );
 }
 
+let renderTimer = null;
+function scheduleRebuild() {
+  syncRangeLabels();
+  fitPreview();
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => {
+    rebuildScene().catch((e) => {
+      console.error(e);
+      setStatus(String(e.message || e), "err");
+    });
+  }, 100);
+}
+
 /**
+ * Composite WebGL canvas + optional HTML title into one image.
  * @param {{ format: 'jpeg'|'png', cutout?: boolean }} opts
  */
 async function downloadScene(opts) {
   const format = opts.format || "jpeg";
   const cutout = Boolean(opts.cutout);
-  if (typeof html2canvas !== "function") {
-    setStatus("html2canvas не загрузился — сделайте скриншот Win+Shift+S", "err");
+  if (!renderer || !scene || !camera) {
+    setStatus("Сцена ещё не готова", "err");
     return;
   }
-  const btns = [els.btnDownload, els.btnDownloadCutout].filter(Boolean);
+  const btns = [els.btnDownload, els.btnDownloadCutout];
   btns.forEach((b) => {
     b.disabled = true;
   });
-  setStatus(
-    cutout
-      ? "Вырезаю карты без стола и фона (PNG)…"
-      : `Подготовка карт и рендер ${format.toUpperCase()}…`,
-    ""
-  );
-  const root = els.exportRoot;
-  const prevTransform = root.style.transform;
+  setStatus(cutout ? "PNG cutout…" : `Рендер ${format.toUpperCase()}…`, "");
+
+  const prevBg = scene.background;
+  const prevTableVis = tableMesh ? tableMesh.visible : true;
   const titleWasHidden = els.titleOverlay.classList.contains("hidden");
-  root.style.transform = "none";
+
   try {
     if (cutout) {
-      root.classList.add("is-cutout");
-      root.classList.remove("is-bg-white");
-      if (els.tableFelt) els.tableFelt.classList.add("is-hidden");
+      scene.background = null;
+      renderer.setClearColor(0x000000, 0);
+      if (tableMesh) tableMesh.visible = false;
+      els.exportRoot.classList.add("is-cutout");
       els.titleOverlay.classList.add("hidden");
     } else {
-      applySceneChrome();
+      applyBackground();
+      applyTableColor();
+      if (tableMesh) tableMesh.visible = true;
+      renderer.setClearColor(
+        els.bgWhite.checked ? 0xffffff : 0x080a10,
+        1
+      );
     }
 
-    await flattenCardsForExport();
-    flattenSceneForExport();
-    // Дать браузеру применить стили до съёмки
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    updateCamera();
+    renderFrame();
 
-    let bgColor;
-    if (cutout) bgColor = null;
-    else if (els.bgWhite?.checked) bgColor = "#ffffff";
-    else bgColor = "#080a10";
+    const glCanvas = renderer.domElement;
+    const { w, h } = frameSizePx();
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext("2d");
+    if (!ctx) throw new Error("no 2d ctx");
 
-    const canvas = await html2canvas(root, {
-      backgroundColor: bgColor,
-      scale: 1,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      width: root.offsetWidth,
-      height: root.offsetHeight,
-      windowWidth: root.offsetWidth,
-      windowHeight: root.offsetHeight,
-      ignoreElements: (el) => el.classList?.contains?.("html2canvas-ignore"),
-    });
+    if (!cutout) {
+      ctx.fillStyle = els.bgWhite.checked ? "#ffffff" : "#080a10";
+      ctx.fillRect(0, 0, w, h);
+    }
+    ctx.drawImage(glCanvas, 0, 0, w, h);
+
+    // Burn title overlay if visible
+    if (!cutout && els.showTitle.checked && !els.titleOverlay.classList.contains("hidden")) {
+      ctx.fillStyle = els.bgWhite.checked ? "#1a1e28" : "#f2f0ea";
+      ctx.font = `700 ${Math.round(w * 0.028)}px "Segoe UI", system-ui, sans-serif`;
+      ctx.textBaseline = "top";
+      ctx.fillText(els.overlayName.textContent || "", 48, 36);
+      ctx.fillStyle = els.bgWhite.checked ? "#4a5568" : "#c8d0e0";
+      ctx.font = `400 ${Math.round(w * 0.012)}px "Segoe UI", system-ui, sans-serif`;
+      ctx.fillText(els.overlayPool.textContent || "", 48, 36 + Math.round(w * 0.036));
+    }
 
     const mime = format === "png" ? "image/png" : "image/jpeg";
     const quality = format === "png" ? undefined : 0.92;
     const blob = await new Promise((resolve) =>
-      canvas.toBlob((b) => resolve(b), mime, quality)
+      out.toBlob((b) => resolve(b), mime, quality)
     );
-    if (!blob) throw new Error(`Не удалось создать ${format.toUpperCase()}`);
+    if (!blob) throw new Error("toBlob failed");
+
     const a = document.createElement("a");
     const id = booster?.id || "booster";
-    const suffix = cutout ? "cutout" : "promo";
-    const ext = format === "png" ? "png" : "jpg";
     a.href = URL.createObjectURL(blob);
-    a.download = `${suffix}-${id}.${ext}`;
+    a.download = `${cutout ? "cutout" : "promo"}-${id}.${format === "png" ? "png" : "jpg"}`;
     a.click();
     URL.revokeObjectURL(a.href);
     setStatus(
       cutout
-        ? "PNG без стола/фона скачан (прозрачный фон). Загрузите на imgbb при необходимости."
-        : "JPG скачан. Загрузите на imgbb и вставьте ссылку в Promo.",
+        ? "PNG cutout скачан (прозрачный фон)."
+        : "JPG скачан — тот же кадр, что на превью.",
       "ok"
     );
   } catch (err) {
     console.error(err);
-    setStatus(
-      `Не удалось снять сцену (${err.message || err}). Используйте Win+Shift+S.`,
-      "err"
-    );
+    setStatus(`Ошибка экспорта: ${err.message || err}`, "err");
   } finally {
-    root.style.transform = prevTransform;
-    root.classList.remove("is-cutout");
-    root.classList.remove("is-export-flat");
-    if (els.tableFelt) {
-      els.tableFelt.classList.remove("is-hidden");
-      els.tableFelt.style.transform = "";
-      els.tableFelt.style.background = "";
-      els.tableFelt.style.backgroundImage = "";
-    }
-    if (els.tableSurface) els.tableSurface.style.transformStyle = "";
-    const viewport = root.querySelector(".table-viewport");
-    if (viewport) viewport.style.perspective = "";
+    scene.background = prevBg;
+    if (tableMesh) tableMesh.visible = prevTableVis;
+    els.exportRoot.classList.remove("is-cutout");
     if (!titleWasHidden && els.showTitle.checked) {
       els.titleOverlay.classList.remove("hidden");
     }
+    renderer.setClearColor(0x080a10, 1);
+    applyBackground();
+    renderFrame();
     btns.forEach((b) => {
       b.disabled = false;
     });
-    await renderScene();
   }
+}
+
+function renderFaceList() {
+  const sorted = sortPool(poolCards);
+  els.faceList.innerHTML = sorted
+    .map((c) => {
+      const checked = faceUpIds.has(c.id) ? "checked" : "";
+      return `<label class="face-item">
+        <input type="checkbox" data-id="${escapeHtml(c.id)}" ${checked} />
+        <img src="${escapeHtml(portraitUrl(c))}" alt="" loading="lazy" onerror="this.style.visibility='hidden'" />
+        <span>${escapeHtml(c.name)}<br/><span class="rarity">${escapeHtml(c.rarity)}</span></span>
+      </label>`;
+    })
+    .join("");
+
+  els.faceList.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      const id = input.getAttribute("data-id");
+      if (!id) return;
+      if (input.checked) faceUpIds.add(id);
+      else faceUpIds.delete(id);
+      scheduleRebuild();
+    });
+  });
 }
 
 async function load() {
@@ -650,12 +696,13 @@ async function load() {
   if (!boosterId) {
     els.loadError.hidden = false;
     els.loadError.textContent =
-      "Укажите id бустера в URL: /promo-generator.html?booster=start";
+      "Укажите id: /promo-generator.html?booster=start";
     els.boosterSub.textContent = "нет ?booster=";
     return;
   }
 
   try {
+    initThree();
     const [boostersRes, catalogRes, seriesRes] = await Promise.all([
       fetch("/api/cards/boosters").then((r) => r.json()),
       fetch("/api/cards/catalog").then((r) => r.json()),
@@ -677,8 +724,7 @@ async function load() {
       return;
     }
 
-    const ids = booster.card_ids || [];
-    poolCards = ids
+    poolCards = (booster.card_ids || [])
       .map((id) => catalogById.get(id))
       .filter(Boolean);
 
@@ -692,11 +738,11 @@ async function load() {
     pickDefaultFaceUp(poolCards);
     renderFaceList();
     syncRangeLabels();
-    await renderScene();
+    await rebuildScene();
   } catch (err) {
     console.error(err);
     els.loadError.hidden = false;
-    els.loadError.textContent = `Ошибка загрузки: ${err.message || err}`;
+    els.loadError.textContent = `Ошибка: ${err.message || err}`;
   }
 }
 
@@ -714,29 +760,29 @@ function bind() {
     els.bgWhite,
     els.tableWhite,
   ].forEach((el) => {
-    el.addEventListener("input", scheduleRender);
-    el.addEventListener("change", scheduleRender);
+    el.addEventListener("input", scheduleRebuild);
+    el.addEventListener("change", scheduleRebuild);
   });
 
   els.btnSelectTop.addEventListener("click", () => {
     pickDefaultFaceUp(poolCards);
     renderFaceList();
-    scheduleRender();
+    scheduleRebuild();
   });
   els.btnSelectNone.addEventListener("click", () => {
     faceUpIds.clear();
     renderFaceList();
-    scheduleRender();
+    scheduleRebuild();
   });
   els.btnSelectAll.addEventListener("click", () => {
     faceUpIds.clear();
     for (const c of poolCards) faceUpIds.add(c.id);
     renderFaceList();
-    scheduleRender();
+    scheduleRebuild();
   });
   els.btnReseed.addEventListener("click", () => {
     els.seed.value = String(Math.floor(Math.random() * 1e9));
-    scheduleRender();
+    scheduleRebuild();
   });
   els.btnDownload.addEventListener("click", () => {
     downloadScene({ format: "jpeg", cutout: false });
@@ -745,7 +791,10 @@ function bind() {
     downloadScene({ format: "png", cutout: true });
   });
 
-  window.addEventListener("resize", () => fitPreview());
+  window.addEventListener("resize", () => {
+    fitPreview();
+    renderFrame();
+  });
 }
 
 bind();
