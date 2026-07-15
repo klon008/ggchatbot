@@ -366,17 +366,26 @@ async function textureFromImageUrl(url) {
   return tex;
 }
 
-/** SVG/image → canvas data URL (for backs and fallbacks). */
-async function rasterizeUrl(url, w, h) {
-  const abs = new URL(url, location.origin).href;
-  const res = await fetch(abs);
-  const blob = await res.blob();
-  const dataUrl = await new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(fr.result);
-    fr.onerror = reject;
-    fr.readAsDataURL(blob);
-  });
+/** SVG/image → PNG data URL.
+ * @param {{ transparent?: boolean, cornerRadius?: number }} [opts]
+ */
+async function rasterizeUrl(url, w, h, opts = {}) {
+  const transparent = Boolean(opts.transparent);
+  const cornerRadius = Math.max(0, Number(opts.cornerRadius) || 0);
+  const abs = url.startsWith("data:")
+    ? url
+    : new URL(url, location.origin).href;
+  let dataUrl = abs;
+  if (!abs.startsWith("data:")) {
+    const res = await fetch(abs);
+    const blob = await res.blob();
+    dataUrl = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = reject;
+      fr.readAsDataURL(blob);
+    });
+  }
   const img = new Image();
   img.src = dataUrl;
   try {
@@ -390,13 +399,39 @@ async function rasterizeUrl(url, w, h) {
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { alpha: true });
   if (!ctx) throw new Error("no 2d ctx");
-  ctx.fillStyle = "#0e1220";
-  ctx.fillRect(0, 0, w, h);
+  ctx.clearRect(0, 0, w, h);
+  if (!transparent) {
+    ctx.fillStyle = "#0e1220";
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.save();
+  if (cornerRadius > 0) {
+    const r = Math.min(cornerRadius, w / 2, h / 2);
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(0, 0, w, h, r);
+    } else {
+      // fallback path
+      ctx.moveTo(r, 0);
+      ctx.arcTo(w, 0, w, h, r);
+      ctx.arcTo(w, h, 0, h, r);
+      ctx.arcTo(0, h, 0, 0, r);
+      ctx.arcTo(0, 0, w, 0, r);
+      ctx.closePath();
+    }
+    ctx.clip();
+  }
   ctx.drawImage(img, 0, 0, w, h);
+  ctx.restore();
   return canvas.toDataURL("image/png");
 }
+
+/** Card art bake size: 350×490 template → 2×, rx=16 → 32 */
+const CARD_TEX_W = 700;
+const CARD_TEX_H = 980;
+const CARD_TEX_RX = 32;
 
 async function bakeFrontTexture(card) {
   const cacheKey = card.id;
@@ -420,7 +455,7 @@ async function bakeFrontTexture(card) {
       "";
     if (href && !href.startsWith("data:")) {
       try {
-        const png = await rasterizeUrl(href, 620, 660);
+        const png = await rasterizeUrl(href, 620, 660, { transparent: false });
         imgEl.setAttribute("href", png);
         imgEl.setAttributeNS("http://www.w3.org/1999/xlink", "href", png);
       } catch (e) {
@@ -435,8 +470,12 @@ async function bakeFrontTexture(card) {
   const xml = new XMLSerializer().serializeToString(svg);
   const svgUrl =
     "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
-  const dataUrl = await rasterizeUrl(svgUrl, 700, 980);
+  const dataUrl = await rasterizeUrl(svgUrl, CARD_TEX_W, CARD_TEX_H, {
+    transparent: true,
+    cornerRadius: CARD_TEX_RX,
+  });
   const tex = await textureFromImageUrl(dataUrl);
+  tex.premultiplyAlpha = false;
   frontTexCache.set(cacheKey, tex);
   host.innerHTML = "";
   return tex;
@@ -445,8 +484,12 @@ async function bakeFrontTexture(card) {
 async function bakeBackTexture(card) {
   const url = backUrlForCard(card || poolCards[0] || { series_id: "" });
   if (backTexCache.has(url)) return backTexCache.get(url);
-  const dataUrl = await rasterizeUrl(url, 700, 980);
+  const dataUrl = await rasterizeUrl(url, CARD_TEX_W, CARD_TEX_H, {
+    transparent: true,
+    cornerRadius: CARD_TEX_RX,
+  });
   const tex = await textureFromImageUrl(dataUrl);
+  tex.premultiplyAlpha = false;
   backTexCache.set(url, tex);
   return tex;
 }
@@ -456,14 +499,14 @@ function makeCardMesh(frontTex, backTex) {
   const group = new THREE.Group();
   const geo = new THREE.PlaneGeometry(w, h);
 
-  const frontMat = new THREE.MeshBasicMaterial({
-    map: frontTex,
+  const matOpts = {
     side: THREE.FrontSide,
-  });
-  const backMat = new THREE.MeshBasicMaterial({
-    map: backTex,
-    side: THREE.FrontSide,
-  });
+    transparent: true,
+    alphaTest: 0.08,
+    depthWrite: true,
+  };
+  const frontMat = new THREE.MeshBasicMaterial({ map: frontTex, ...matOpts });
+  const backMat = new THREE.MeshBasicMaterial({ map: backTex, ...matOpts });
 
   const front = new THREE.Mesh(geo, frontMat);
   front.position.z = 0.008;
