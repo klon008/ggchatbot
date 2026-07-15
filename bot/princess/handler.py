@@ -119,9 +119,8 @@ class PrincessHandler:
                 await cmd_srok(self, msg)
             return True
 
-        await self.points.add(user_id, MESSAGE_POINTS)
-
         if not text.startswith("!"):
+            await self.points.add(user_id, MESSAGE_POINTS)
             return False
 
         handlers = {
