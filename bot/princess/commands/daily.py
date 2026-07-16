@@ -25,7 +25,7 @@ async def cmd_daily(handler: "PrincessHandler", msg: ChatMessage) -> None:
             data["user_progress"] = {}
 
         if today_str in data and uid in data[today_str]:
-            await handler._say(msg.user_name, "Ты уже получил(а) ежедневный бонус сегодня!")
+            await handler._say(msg.user_name, "Тебе уже начислен ежедневный бонус сегодня!")
             return
 
         counter = data["user_progress"].get(uid, 0) + 1
@@ -36,4 +36,4 @@ async def cmd_daily(handler: "PrincessHandler", msg: ChatMessage) -> None:
             data[today_str].append(uid)
 
     await handler.points.add(uid, bonus)
-    await handler._say(msg.user_name, f"Ты получил(а) ежедневный бонус {bonus} принцесс!")
+    await handler._say(msg.user_name, f"Тебе начислен ежедневный бонус {bonus} принцесс!")

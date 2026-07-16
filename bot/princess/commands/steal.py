@@ -91,11 +91,11 @@ async def cmd_steal(handler: "PrincessHandler", msg: ChatMessage) -> None:
         stolen = random.randint(STEAL_AMOUNT_MIN, min(STEAL_AMOUNT_MAX, max_possible))
         await handler.steal.execute_steal(handler.points, uid, victim_id, stolen)
 
-        await handler._say(msg.user_name, f"Успех! Ты украл {stolen} принцесс у {victim_name}.")
+        await handler._say(msg.user_name, f"Успех! Тебе удалось украсть {stolen} принцесс у {victim_name}.")
 
     chance_to_prison = prison_chance_for_amount(stolen)
     if chance_to_prison and random.randint(1, STEAL_ROLL_MAX) <= chance_to_prison:
         await handler.prison.imprison(uid)
         await handler.steal.increment_jail_count(uid)
         prison_minutes = PRISON_DURATION_SEC // 60
-        await handler._say(msg.user_name, f"Ты попал(а) в тюрьму на {prison_minutes} минут!")
+        await handler._say(msg.user_name, f"Тебя отправили в тюрьму на {prison_minutes} минут!")

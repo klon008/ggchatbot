@@ -58,4 +58,4 @@ async def cmd_dice(handler: "PrincessHandler", msg: ChatMessage) -> None:
             f"тебе начислены {DICE_CRITICAL_SUCCESS_REWARD} принцесс",
         )
     else:
-        await handler._say(msg.user_name, f"Ты бросил кубик, выпало {roll}")
+        await handler._say(msg.user_name, f"Бросок кубика: выпало {roll}")
