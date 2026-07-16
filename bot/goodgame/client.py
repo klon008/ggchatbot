@@ -7,8 +7,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import deque
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Deque, Optional
 
 import aiohttp
 import websockets
@@ -18,6 +19,7 @@ log = logging.getLogger("goodgame")
 WS_URL = "wss://chat-1.goodgame.ru/chat2/"
 CHATLOGIN_URL = "https://goodgame.ru/ajax/chatlogin"
 USERS_LIST_TIMEOUT_SEC = 10.0
+SEND_MESSAGE_ECHO_TIMEOUT_SEC = 5.0
 
 RIGHTS_STREAM_MODER = 10
 
@@ -57,6 +59,7 @@ class GoodGameClient:
         self._stop = False
         self._users_list_lock = asyncio.Lock()
         self._users_list_future: Optional[asyncio.Future] = None
+        self._pending_send_futures: Deque[asyncio.Future] = deque()
 
     async def _fetch_token(self) -> bool:
         if not self.login or not self.password:
@@ -115,6 +118,7 @@ class GoodGameClient:
                     await self._handle_raw(raw)
         finally:
             self._cancel_users_list_waiter()
+            self._fail_pending_sends(ConnectionError("WebSocket отключён"))
             self._ws = None
 
     async def _handle_raw(self, raw: str) -> None:
@@ -136,16 +140,41 @@ class GoodGameClient:
             await self._handle_message(data)
 
     async def _handle_message(self, data: dict) -> None:
+        user_id = str(data.get("user_id", "0"))
+        if self.user_id and user_id == self.user_id:
+            message_id = data.get("message_id")
+            self._resolve_own_send(str(message_id) if message_id is not None else "")
+            return
+
         msg = ChatMessage(
             channel_id=str(data.get("channel_id", self.channel_id)),
-            user_id=str(data.get("user_id", "0")),
+            user_id=user_id,
             user_name=str(data.get("user_name", "")),
             user_rights=int(data.get("user_rights", 0) or 0),
             text=str(data.get("text", "")),
         )
-        if self.user_id and msg.user_id == self.user_id:
+        # Не блокируем WS-reader: иначе send_message(wait echo) из handler — deadlock.
+        asyncio.create_task(self._dispatch_message(msg), name="gg-on-message")
+
+    async def _dispatch_message(self, msg: ChatMessage) -> None:
+        try:
+            await self._on_message(msg)
+        except Exception:  # noqa: BLE001
+            log.exception("Ошибка обработчика сообщения GG")
+
+    def _resolve_own_send(self, message_id: str) -> None:
+        while self._pending_send_futures:
+            fut = self._pending_send_futures.popleft()
+            if fut.done():
+                continue
+            fut.set_result(message_id or None)
             return
-        await self._on_message(msg)
+
+    def _fail_pending_sends(self, exc: BaseException) -> None:
+        while self._pending_send_futures:
+            fut = self._pending_send_futures.popleft()
+            if not fut.done():
+                fut.set_exception(exc)
 
     async def _send(self, obj: dict) -> None:
         if self._ws is None:
@@ -181,12 +210,52 @@ class GoodGameClient:
                 if self._users_list_future is fut:
                     self._users_list_future = None
 
-    async def send_message(self, text: str) -> None:
+    async def send_message(self, text: str) -> Optional[str]:
+        """Отправить сообщение и вернуть message_id из echo (или None)."""
         if not self.token:
             log.debug("Пропуск ответа в чат (гость): %s", text)
+            return None
+        if self._ws is None:
+            log.warning("Пропуск send_message: WebSocket не подключён")
+            return None
+
+        fut: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._pending_send_futures.append(fut)
+        try:
+            await self._send(
+                {
+                    "type": "send_message",
+                    "data": {"channel_id": self.channel_id, "text": text, "mobile": 0},
+                }
+            )
+            # shield: wait_for не должен cancel'ить fut до remove из очереди
+            message_id = await asyncio.wait_for(
+                asyncio.shield(fut), timeout=SEND_MESSAGE_ECHO_TIMEOUT_SEC
+            )
+            return str(message_id) if message_id else None
+        except asyncio.TimeoutError:
+            log.warning("Таймаут ожидания message_id для send_message")
+            return None
+        except ConnectionError:
+            log.warning("Соединение закрыто до получения message_id")
+            return None
+        finally:
+            try:
+                self._pending_send_futures.remove(fut)
+            except ValueError:
+                pass
+            if not fut.done():
+                fut.cancel()
+
+    async def remove_message(self, message_id: str) -> None:
+        """Удалить сообщение по id (нужны права stream_moder+)."""
+        if not message_id or not self.token:
             return
         await self._send(
-            {"type": "send_message", "data": {"channel_id": self.channel_id, "text": text, "mobile": 0}}
+            {
+                "type": "remove_message",
+                "data": {"channel_id": self.channel_id, "message_id": str(message_id)},
+            }
         )
 
     async def close(self) -> None:

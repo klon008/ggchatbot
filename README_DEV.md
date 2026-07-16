@@ -232,6 +232,7 @@ HTTP-маршруты регистрируются в `__init__`: `PlayerRoutes`
 
 - **Song Request:** `_reply(text)` → `gg.send_message(text)` как есть (формат `@nick, ...`).
 - **Princess:** `_princess_reply(user_name, text)` → `gg.send_message(f"{user_name}, {text}")`.
+- **Races live:** `bind_remove(self._remove_chat)` → `gg.remove_message`; комментарий забега зовёт `_chat_live` (удалить предыдущий id → отправить новое).
 
 Список команд для `!команды` — `bot/commands.py` (`PUBLIC_COMMANDS`, `format_help()`).
 
@@ -267,7 +268,13 @@ Dataclass входящего сообщения:
 
 **Reconnect:** exponential backoff 1→2→4→…→30 сек, перед каждым переподключением — повторный `chatlogin`.
 
-**Фильтрация:** собственные сообщения бота (`msg.user_id == self.user_id`) не передаются в `on_message` — иначе петля ответов.
+**Фильтрация:** собственные сообщения бота (`msg.user_id == self.user_id`) не передаются в `on_message` — иначе петля ответов. Echo своих сообщений используется для возврата `message_id` из `send_message`.
+
+**Методы чата:**
+- `send_message(text) -> Optional[str]` — отправка; возвращает `message_id` из echo (таймаут 5с → `None`).
+- `remove_message(message_id)` — удаление сообщения (`type: remove_message`). Нужны права **stream_moder+** (помощник стримера) на канале.
+
+Входящие чужие сообщения обрабатываются через `asyncio.create_task`, чтобы ожидание echo в `send_message` не блокировало WS-reader.
 
 **Гостевой режим:** без `GG_LOGIN`/`GG_PASSWORD` бот подключается без auth (readonly, `send_message` молча пропускается).
 
@@ -615,6 +622,7 @@ canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?
 
 - **Авто-режим**: `!забег` открывает забег и показывает состав; ставка — `!забег <сумма> <1–6>` только когда забег `OPEN`.
 - **OBS-оверлей**: `obs/races.html` + `races.js` — компактная нижняя полоска (~800×140), одна дорожка, иконки принцесс; события и комментарии — только в чате. Browser Source: **800×140** (или 800×200), прижать к низу экрана. URL: `http://127.0.0.1:PORT/races.html`. Отладка: `?debug=1`, превью: `?visible=1`.
+- **Live-комментарий в чате**: промежуточные сообщения забега (события, «Гонка: топ-3») заменяются через `remove_message` — в чате остаётся одно актуальное. Старт/финиш/ставки не удаляются. Аккаунт бота должен быть помощником стримера (права ≥ 10).
 
 ### Команды
 

@@ -21,7 +21,8 @@ from .round import RoundManager
 
 log = logging.getLogger("races")
 
-ReplyFn = Callable[[str], Awaitable[None]]
+ReplyFn = Callable[[str], Awaitable[Optional[str]]]
+RemoveFn = Callable[[str], Awaitable[None]]
 
 
 class RacesHandler:
@@ -41,6 +42,9 @@ class RacesHandler:
     def bind_reply(self, reply: ReplyFn) -> None:
         self._reply = reply
         self.rounds.bind_say(reply)
+
+    def bind_remove(self, remove: RemoveFn) -> None:
+        self.rounds.bind_remove(remove)
 
     def bind_points(self, store: PointsStore) -> None:
         self.rounds.bind_points(store)

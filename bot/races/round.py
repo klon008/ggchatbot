@@ -29,7 +29,8 @@ from .settings import (
 
 log = logging.getLogger("races")
 
-SayFn = Callable[[str], Awaitable[None]]
+SayFn = Callable[[str], Awaitable[Optional[str]]]
+RemoveFn = Callable[[str], Awaitable[None]]
 
 STATE_IDLE = "IDLE"
 STATE_OPEN = "OPEN"
@@ -51,6 +52,8 @@ class RoundManager:
         self._db = db
         self._points: Optional[PointsStore] = None
         self._say: Optional[SayFn] = None
+        self._remove: Optional[RemoveFn] = None
+        self._live_msg_id: Optional[str] = None
         self._timer_task: Optional[asyncio.Task] = None
         self._watchdog_task: Optional[asyncio.Task] = None
         self._transition_lock = asyncio.Lock()
@@ -63,6 +66,9 @@ class RoundManager:
 
     def bind_say(self, say: SayFn) -> None:
         self._say = say
+
+    def bind_remove(self, remove: RemoveFn) -> None:
+        self._remove = remove
 
     async def start(self) -> None:
         meta = await races_db.get_meta(self._db)
@@ -466,7 +472,7 @@ class RoundManager:
                 }
             await races_db.update_meta(self._db, race_progress=progress)
             for msg in race_commentator.on_tick(tick):
-                await self._chat(msg)
+                await self._chat_live(msg)
             await asyncio.sleep(RACE_TICK_SEC)
 
         bank_balance = await minigames_bank.get_bank(self._db)
@@ -506,6 +512,7 @@ class RoundManager:
             ],
         }
         await races_db.update_meta(self._db, last_result=last_result, race_progress=None)
+        await self._clear_live_chat()
         await self._announce_finish(result, payout, odds_map, name_by_horse)
         await self._enter_cooldown_unlocked()
 
@@ -621,3 +628,20 @@ class RoundManager:
     async def _chat(self, text: str) -> None:
         if self._say is not None:
             await self._say(text)
+
+    async def _chat_live(self, text: str) -> None:
+        """Отправить комментарий, удалив предыдущий live-месседж."""
+        await self._clear_live_chat()
+        if self._say is not None:
+            self._live_msg_id = await self._say(text)
+        else:
+            log.info("races (no reply): %s", text)
+
+    async def _clear_live_chat(self) -> None:
+        msg_id = self._live_msg_id
+        self._live_msg_id = None
+        if msg_id and self._remove is not None:
+            try:
+                await self._remove(msg_id)
+            except Exception:  # noqa: BLE001
+                log.exception("Не удалось удалить live-сообщение забега %s", msg_id)

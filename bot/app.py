@@ -113,6 +113,7 @@ class StreamBot:
         await self.polls.start()
         self.roulette.bind_reply(self._reply)
         self.races.bind_reply(self._reply)
+        self.races.bind_remove(self._remove_chat)
         self.polls.bind_reply(self._reply)
         self.roulette.bind_points(self.princess.points)
         self.races.bind_points(self.princess.points)
@@ -156,8 +157,15 @@ class StreamBot:
     async def _princess_reply(self, user_name: str, text: str) -> None:
         await self._reply(f"{user_name}, {text}")
 
-    async def _reply(self, text: str) -> None:
+    async def _reply(self, text: str):
         try:
-            await self.gg.send_message(text)
+            return await self.gg.send_message(text)
         except Exception:  # noqa: BLE001
             log.exception("Не удалось отправить сообщение в чат.")
+            return None
+
+    async def _remove_chat(self, message_id: str) -> None:
+        try:
+            await self.gg.remove_message(message_id)
+        except Exception:  # noqa: BLE001
+            log.exception("Не удалось удалить сообщение в чате.")
