@@ -52,6 +52,9 @@ class CardsHandler:
         self._reply: Optional[ReplyFn] = None
         self._player: Optional["PlayerRoutes"] = None
         self._present_lock = asyncio.Lock()
+        # True с момента принятия !бустер до booster_done / таймаута —
+        # другие игроки получают отказ, а не очередь.
+        self._opening_busy = False
         self._pending_opens: dict[str, asyncio.Future[bool]] = {}
 
     def bind_points(self, points: "PointsStore") -> None:
@@ -108,60 +111,74 @@ class CardsHandler:
         if self._points is None:
             await self._say("Модуль карт не настроен.")
             return
-        result, err = await open_booster(
-            self._db,
-            self._points,
-            user_id=msg.user_id,
-            user_name=msg.user_name,
-        )
-        if err:
-            await self._say(f"{msg.user_name}, {err}")
+        # Синхронный флаг: в asyncio нет гонки между check и set.
+        if self._opening_busy or self._present_lock.locked():
+            await self._say(
+                f"{msg.user_name}, сейчас уже открывают бустер — "
+                "подожди, пока закончится анимация."
+            )
             return
-        assert result is not None
-        await self._present_opening(msg.user_name, result)
+
+        self._opening_busy = True
+        try:
+            # Весь цикл под локом: списание → анимация → итог.
+            # Пока лок держится, другие !бустер получают отказ выше.
+            async with self._present_lock:
+                result, err = await open_booster(
+                    self._db,
+                    self._points,
+                    user_id=msg.user_id,
+                    user_name=msg.user_name,
+                )
+                if err:
+                    await self._say(f"{msg.user_name}, {err}")
+                    return
+                assert result is not None
+                await self._present_opening(msg.user_name, result)
+        finally:
+            self._opening_busy = False
 
     async def _present_opening(self, user_name: str, result: OpenResult) -> None:
-        """FIFO: шаг 1 → WS анимация → шаг 2."""
-        async with self._present_lock:
-            opening_id = str(uuid.uuid4())
-            await self._say(format_open_start(user_name, result))
+        """Шаг 1 → WS анимация → шаг 2. Вызывать только под _present_lock."""
+        opening_id = str(uuid.uuid4())
+        await self._say(format_open_start(user_name, result))
 
-            meta = await cards_db.get_cards_meta(self._db)
-            speed = float(meta.get("anim_speed") or 1.0)
-            if speed < cards_db.ANIM_SPEED_MIN:
-                speed = cards_db.ANIM_SPEED_MIN
-            elif speed > cards_db.ANIM_SPEED_MAX:
-                speed = cards_db.ANIM_SPEED_MAX
+        meta = await cards_db.get_cards_meta(self._db)
+        speed = float(meta.get("anim_speed") or 1.0)
+        if speed < cards_db.ANIM_SPEED_MIN:
+            speed = cards_db.ANIM_SPEED_MIN
+        elif speed > cards_db.ANIM_SPEED_MAX:
+            speed = cards_db.ANIM_SPEED_MAX
 
-            has_clients = bool(self._player and self._player.has_booster_clients)
-            fut: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
-            self._pending_opens[opening_id] = fut
-            try:
-                if has_clients and self._player is not None:
-                    await self._player.broadcast(
-                        opening_to_ws_payload(
-                            opening_id, user_name, result, anim_speed=speed
-                        )
+        has_clients = bool(self._player and self._player.has_booster_clients)
+        fut: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+        self._pending_opens[opening_id] = fut
+        try:
+            if has_clients and self._player is not None:
+                await self._player.broadcast(
+                    opening_to_ws_payload(
+                        opening_id, user_name, result, anim_speed=speed
                     )
-                    timeout = (
-                        len(result.rolls) * _CARD_ANIM_SEC + _ANIM_BASE_SEC
-                    ) / speed
-                    timeout = max(3.0, timeout)
-                    try:
-                        await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
-                    except asyncio.TimeoutError:
-                        log.warning(
-                            "OBS booster_done timeout openingId=%s (N=%d speed=%.2f)",
-                            opening_id,
-                            len(result.rolls),
-                            speed,
-                        )
-                else:
-                    await asyncio.sleep(_NO_CLIENTS_DELAY_SEC)
-            finally:
-                self._pending_opens.pop(opening_id, None)
+                )
+                timeout = (
+                    len(result.rolls) * _CARD_ANIM_SEC + _ANIM_BASE_SEC
+                ) / speed
+                timeout = max(3.0, timeout)
+                try:
+                    await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
+                except asyncio.TimeoutError:
+                    log.warning(
+                        "OBS booster_done timeout openingId=%s (N=%d speed=%.2f)",
+                        opening_id,
+                        len(result.rolls),
+                        speed,
+                    )
+            else:
+                await asyncio.sleep(_NO_CLIENTS_DELAY_SEC)
+        finally:
+            self._pending_opens.pop(opening_id, None)
 
-            await self._say(format_open_summary(user_name, result))
+        await self._say(format_open_summary(user_name, result))
 
     async def _cmd_booster_info(self, msg: ChatMessage) -> None:
         """!бустер инфо — активный тираж, пул, цена и promo."""
