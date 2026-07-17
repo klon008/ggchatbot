@@ -16,6 +16,7 @@ from bot.web.routes.admin import AdminRoutes
 from bot.web.routes.docs import DocsRoutes
 from config import Config
 
+from .fishing import FishingHandler
 from .goodgame import GoodGameClient
 from .polls import PollsHandler
 from .princess import PrincessHandler
@@ -46,6 +47,7 @@ class StreamBot:
             admin_user_id=cfg.gg_admin_user_id,
         )
         self.polls = PollsHandler(db=self.db)
+        self.fishing = FishingHandler(db=self.db)
         self.album_web = AlbumWebServer(
             self.db,
             cfg.album_link_secret,
@@ -64,7 +66,7 @@ class StreamBot:
         )
         DocsRoutes().register(self.web.app)
         self.admin = AdminRoutes(
-            self.db, self.sr.queue, self.sr, self.roulette, self.races, self.polls
+            self.db, self.sr.queue, self.sr, self.roulette, self.races, self.polls, self.fishing
         )
         self.admin.register(self.web.app)
         CardsAdminRoutes(self.db).register(self.web.app)
@@ -111,13 +113,16 @@ class StreamBot:
         await self.roulette.start()
         await self.races.start()
         await self.polls.start()
+        await self.fishing.start()
         self.roulette.bind_reply(self._reply)
         self.races.bind_reply(self._reply)
         self.races.bind_remove(self._remove_chat)
         self.polls.bind_reply(self._reply)
+        self.fishing.bind_reply(self._reply)
         self.roulette.bind_points(self.princess.points)
         self.races.bind_points(self.princess.points)
         self.polls.bind_points(self.princess.points)
+        self.fishing.bind_points(self.princess.points)
         self.sr.bind_points(self.princess.points)
         self.cards.bind_points(self.princess.points)
         self.cards.bind_reply(self._reply)
@@ -130,6 +135,7 @@ class StreamBot:
         await self.roulette.close()
         await self.races.close()
         await self.polls.close()
+        await self.fishing.close()
         await self.sr.close()
         await self.clo.stop()
         await self.album_web.stop()
@@ -151,6 +157,8 @@ class StreamBot:
         if await self.races.handle_message(msg):
             return
         if await self.polls.handle_message(msg):
+            return
+        if await self.fishing.handle_message(msg):
             return
         await self.sr.handle_message(msg)
 

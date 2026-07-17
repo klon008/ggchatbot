@@ -257,6 +257,43 @@ CREATE TABLE IF NOT EXISTS cards_meta (
     enabled INTEGER NOT NULL DEFAULT 1,
     anim_speed REAL NOT NULL DEFAULT 1.0
 );
+
+CREATE TABLE IF NOT EXISTS fishing_players (
+    user_id TEXT PRIMARY KEY,
+    user_name TEXT NOT NULL DEFAULT '',
+    energy INTEGER NOT NULL DEFAULT 100,
+    energy_updated_at REAL NOT NULL DEFAULT 0,
+    worms INTEGER NOT NULL DEFAULT 0,
+    maggots INTEGER NOT NULL DEFAULT 0,
+    rod_state TEXT NOT NULL DEFAULT 'none',
+    last_cast_at REAL NOT NULL DEFAULT 0,
+    day_key TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS fishing_records (
+    user_id TEXT NOT NULL,
+    species TEXT NOT NULL,
+    weight REAL NOT NULL,
+    PRIMARY KEY (user_id, species)
+);
+
+CREATE TABLE IF NOT EXISTS fishing_week_weights (
+    week_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    species TEXT NOT NULL,
+    weight REAL NOT NULL,
+    achieved_at REAL NOT NULL,
+    PRIMARY KEY (week_id, user_id, species)
+);
+
+CREATE TABLE IF NOT EXISTS fishing_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    day_key TEXT NOT NULL DEFAULT '',
+    first_fish_claimed INTEGER NOT NULL DEFAULT 0,
+    current_week_id TEXT NOT NULL DEFAULT '',
+    pending_rewards_week_id TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -292,6 +329,11 @@ async def init_schema(
     )
     await conn.execute(
         "INSERT OR IGNORE INTO cards_meta (id, daily_open_limit) VALUES (1, 0)"
+    )
+    await conn.execute(
+        "INSERT OR IGNORE INTO fishing_meta "
+        "(id, day_key, first_fish_claimed, current_week_id, pending_rewards_week_id) "
+        "VALUES (1, '', 0, '', '')"
     )
     from .migrate import run_migrations
     from .migrations.m009_elsa_mythic import seed_if_empty

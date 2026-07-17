@@ -34,6 +34,10 @@ POLLS_COMMANDS = (
     "!опрос",
 )
 
+FISHING_COMMANDS = (
+    "!рыбалка",
+)
+
 CARDS_COMMANDS = (
     "!бустер",
     "!альбом",
@@ -45,6 +49,7 @@ PUBLIC_COMMANDS = (
     + ROULETTE_COMMANDS
     + RACES_COMMANDS
     + POLLS_COMMANDS
+    + FISHING_COMMANDS
     + SONG_REQUEST_COMMANDS
 )
 

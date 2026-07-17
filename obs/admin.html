@@ -202,6 +202,7 @@
       <button type="button" class="tab" data-tab="roulette">Рулетка</button>
       <button type="button" class="tab" data-tab="races">Скачки</button>
       <button type="button" class="tab" data-tab="polls">Опросы</button>
+      <button type="button" class="tab" data-tab="fishing">Рыбалка</button>
       <a href="cards-admin.html" class="tab tab-link">Карты</a>
     </div>
 
@@ -500,6 +501,44 @@
       <div class="card">
         <h3>Последний результат</h3>
         <div id="pollLastResult" class="empty">—</div>
+      </div>
+    </section>
+
+    <section id="panel-fishing" class="panel">
+      <div class="card">
+        <h3>Рыбалка</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          Чат: <code>!рыбалка</code>, наживка, удочка, топ. Награды недели выдаются вручную здесь.
+        </p>
+        <p id="fishingStatusLine">—</p>
+        <p>
+          Сутки: <strong id="fishingDay">—</strong> ·
+          Неделя: <strong id="fishingWeek">—</strong> ·
+          Игроков: <strong id="fishingPlayers">—</strong>
+        </p>
+        <p id="fishingPendingLine">Ожидающие награды: —</p>
+        <div class="toolbar">
+          <button type="button" id="fishingRestoreEnergy" class="primary">Энергия всем = 100</button>
+          <button type="button" id="fishingPayRewards" class="primary">Выдать награды недели</button>
+          <button type="button" id="fishingRefresh">Обновить</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Топ текущей недели</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>вид</th>
+              <th>ник</th>
+              <th>вес (кг)</th>
+            </tr>
+          </thead>
+          <tbody id="fishingLeadersBody">
+            <tr><td colspan="3" class="empty">—</td></tr>
+          </tbody>
+        </table>
+        <p id="fishingFowLine" style="margin-top: 10px">Рыба недели: —</p>
       </div>
     </section>
 

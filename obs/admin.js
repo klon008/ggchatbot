@@ -1002,6 +1002,91 @@
     }
   });
 
+  const fishingStatusLine = document.getElementById("fishingStatusLine");
+  const fishingDay = document.getElementById("fishingDay");
+  const fishingWeek = document.getElementById("fishingWeek");
+  const fishingPlayers = document.getElementById("fishingPlayers");
+  const fishingPendingLine = document.getElementById("fishingPendingLine");
+  const fishingLeadersBody = document.getElementById("fishingLeadersBody");
+  const fishingFowLine = document.getElementById("fishingFowLine");
+  const fishingRestoreEnergy = document.getElementById("fishingRestoreEnergy");
+  const fishingPayRewards = document.getElementById("fishingPayRewards");
+
+  function renderFishing(data) {
+    fishingDay.textContent = data.day_key || "—";
+    fishingWeek.textContent = data.current_week_id || "—";
+    fishingPlayers.textContent = String(data.players ?? 0);
+    fishingStatusLine.textContent = data.first_fish_claimed
+      ? "Первая рыба дня уже поймана"
+      : "Первая рыба дня ещё доступна";
+    if (data.has_pending_rewards && data.pending_rewards_week_id) {
+      fishingPendingLine.textContent =
+        `Ожидающие награды: неделя ${data.pending_rewards_week_id}`;
+      fishingPendingLine.style.color = "#c62828";
+      fishingPayRewards.disabled = false;
+    } else {
+      fishingPendingLine.textContent = "Ожидающие награды: нет";
+      fishingPendingLine.style.color = "";
+      fishingPayRewards.disabled = true;
+    }
+    const leaders = data.week_leaders || [];
+    if (!leaders.length) {
+      fishingLeadersBody.innerHTML =
+        '<tr><td colspan="3" class="empty">Пока пусто</td></tr>';
+    } else {
+      fishingLeadersBody.innerHTML = leaders
+        .map(
+          (row) => `
+        <tr>
+          <td>${esc(row.species)}</td>
+          <td>${esc(row.user_name || row.user_id)}</td>
+          <td>${esc(Number(row.weight).toFixed(2))}</td>
+        </tr>`
+        )
+        .join("");
+    }
+    const fow = data.fish_of_week;
+    fishingFowLine.textContent = fow
+      ? `Рыба недели: ${fow.user_name || fow.user_id} — ${fow.species} (${Number(fow.weight).toFixed(2)} кг)`
+      : "Рыба недели: —";
+  }
+
+  async function loadFishing(silent) {
+    if (!silent) setStatus("Загрузка рыбалки…");
+    try {
+      const data = await api("GET", "/api/fishing");
+      renderFishing(data);
+      if (!silent) setStatus("Рыбалка обновлена", "ok");
+    } catch (e) {
+      if (!silent) setStatus(e.message, "err");
+    }
+  }
+
+  document.getElementById("fishingRefresh").addEventListener("click", () => loadFishing(false));
+
+  fishingRestoreEnergy.addEventListener("click", async () => {
+    setStatus("Восстановление энергии…");
+    try {
+      const data = await api("POST", "/api/fishing/restore-energy");
+      renderFishing(data);
+      setStatus(`Энергия восстановлена (${data.restored ?? 0} игроков)`, "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  fishingPayRewards.addEventListener("click", async () => {
+    if (!confirm("Выдать награды закрытой недели победителям?")) return;
+    setStatus("Выдача наград…");
+    try {
+      const data = await api("POST", "/api/fishing/pay-rewards");
+      renderFishing(data);
+      setStatus(`Награды выданы (неделя ${data.paid_week || ""})`, "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
   document.querySelectorAll(".tab[data-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -1016,6 +1101,7 @@
       else stopRacesPoll();
       if (id === "polls") loadPolls(false);
       else stopPollsPoll();
+      if (id === "fishing") loadFishing(false);
     });
   });
 

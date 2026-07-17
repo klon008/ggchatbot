@@ -23,6 +23,7 @@ from bot.web.static import serve_obs_asset, serve_obs_card_template, serve_obs_f
 
 if TYPE_CHECKING:
     from bot.economy.points import PointsStore
+    from bot.fishing.handler import FishingHandler
     from bot.polls.handler import PollsHandler
     from bot.races.handler import RacesHandler
     from bot.roulette.handler import RouletteHandler
@@ -43,6 +44,7 @@ class AdminRoutes:
         roulette_handler: "RouletteHandler",
         races_handler: "RacesHandler",
         polls_handler: "PollsHandler",
+        fishing_handler: "FishingHandler",
     ) -> None:
         self._db = db
         self._queue = queue
@@ -50,6 +52,7 @@ class AdminRoutes:
         self._roulette = roulette_handler
         self._races = races_handler
         self._polls = polls_handler
+        self._fishing = fishing_handler
         self._fetch_viewers: Optional[ViewersFetchFn] = None
         self._points: Optional["PointsStore"] = None
 
@@ -109,6 +112,9 @@ class AdminRoutes:
                 web.post("/api/poll/cancel", self._api_poll_cancel),
                 web.get("/prediction.html", self._handle_prediction_html),
                 web.get("/prediction.js", self._handle_prediction_js),
+                web.get("/api/fishing", self._api_fishing_get),
+                web.post("/api/fishing/restore-energy", self._api_fishing_restore_energy),
+                web.post("/api/fishing/pay-rewards", self._api_fishing_pay_rewards),
                 web.get("/card-templates/{path:.*}", self._handle_card_templates),
                 web.get("/assets/{path:.*}", self._handle_assets),
             ]
@@ -503,3 +509,22 @@ class AdminRoutes:
                 return error_response("Нет активного опроса для отмены", status=409)
             raise
         return json_response(await self._polls.get_status())
+
+    async def _api_fishing_get(self, request: web.Request) -> web.Response:
+        return json_response(await self._fishing.get_status())
+
+    async def _api_fishing_restore_energy(self, request: web.Request) -> web.Response:
+        status = await self._fishing.admin_restore_energy(announce=True)
+        return json_response(status)
+
+    async def _api_fishing_pay_rewards(self, request: web.Request) -> web.Response:
+        try:
+            status = await self._fishing.admin_pay_week_rewards(announce=True)
+        except RuntimeError as exc:
+            if str(exc) == "nothing_to_pay":
+                return error_response(
+                    "Нет закрытой недели с ожидающими наградами",
+                    status=409,
+                )
+            raise
+        return json_response(status)
