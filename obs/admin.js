@@ -1011,8 +1011,93 @@
   const fishingFowLine = document.getElementById("fishingFowLine");
   const fishingRestoreEnergy = document.getElementById("fishingRestoreEnergy");
   const fishingPayRewards = document.getElementById("fishingPayRewards");
+  const fishingRewardsFields = document.getElementById("fishingRewardsFields");
+  const fishingFowBonus = document.getElementById("fishingFowBonus");
+  const fishingRewardsPreview = document.getElementById("fishingRewardsPreview");
+  const fishingSaveRewards = document.getElementById("fishingSaveRewards");
+  const fishingResetRewards = document.getElementById("fishingResetRewards");
+  let fishingLastData = null;
+  let fishingRewardsBuilt = false;
+
+  function fishingReadRewardsFromForm() {
+    const species = {};
+    fishingRewardsFields.querySelectorAll("input[data-species]").forEach((input) => {
+      const name = input.getAttribute("data-species");
+      const n = parseInt(input.value, 10);
+      species[name] = Number.isFinite(n) && n >= 0 ? n : 0;
+    });
+    const fow = parseInt(fishingFowBonus.value, 10);
+    return {
+      species,
+      fish_of_week_bonus: Number.isFinite(fow) && fow >= 0 ? fow : 0,
+    };
+  }
+
+  function fishingFillRewardInputs(rewards, fowBonus) {
+    const species = rewards || {};
+    const names = Object.keys(species);
+    if (!fishingRewardsBuilt || fishingRewardsFields.childElementCount !== names.length) {
+      fishingRewardsFields.innerHTML = names
+        .map(
+          (name) => `
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px">
+          <span style="min-width:4.5em">${esc(name)}</span>
+          <input type="number" data-species="${esc(name)}" min="0" step="1"
+            style="width:90px" value="${esc(species[name])}" />
+        </label>`
+        )
+        .join("");
+      fishingRewardsBuilt = true;
+      fishingRewardsFields.querySelectorAll("input").forEach((input) => {
+        input.addEventListener("input", () => fishingUpdatePreview(fishingLastData));
+      });
+    } else {
+      fishingRewardsFields.querySelectorAll("input[data-species]").forEach((input) => {
+        const name = input.getAttribute("data-species");
+        if (name in species) input.value = String(species[name]);
+      });
+    }
+    fishingFowBonus.value = String(fowBonus ?? 0);
+  }
+
+  function fishingUpdatePreview(data) {
+    if (!data) {
+      fishingRewardsPreview.textContent = "—";
+      return;
+    }
+    const cfg = fishingReadRewardsFromForm();
+    const pending = data.has_pending_rewards;
+    const leaders = pending
+      ? data.pending_week_leaders || []
+      : data.week_leaders || [];
+    const fow = pending ? data.pending_fish_of_week : data.fish_of_week;
+    let total = 0;
+    const parts = [];
+    leaders.forEach((row) => {
+      const reward = cfg.species[row.species] || 0;
+      total += reward;
+      if (reward > 0) {
+        parts.push(`${row.species}: ${reward}`);
+      }
+    });
+    if (fow && cfg.fish_of_week_bonus > 0) {
+      total += cfg.fish_of_week_bonus;
+      parts.push(`рыба недели: +${cfg.fish_of_week_bonus}`);
+    }
+    const scope = pending
+      ? `закрытой недели ${data.pending_rewards_week_id}`
+      : "текущего топа";
+    if (!parts.length) {
+      fishingRewardsPreview.textContent =
+        `По ${scope} выплат нет (или награды = 0).`;
+      return;
+    }
+    fishingRewardsPreview.textContent =
+      `Превью выплат (${scope}): ${total} (${parts.join(", ")})`;
+  }
 
   function renderFishing(data) {
+    fishingLastData = data;
     fishingDay.textContent = data.day_key || "—";
     fishingWeek.textContent = data.current_week_id || "—";
     fishingPlayers.textContent = String(data.players ?? 0);
@@ -1029,10 +1114,14 @@
       fishingPendingLine.style.color = "";
       fishingPayRewards.disabled = true;
     }
+
+    fishingFillRewardInputs(data.week_rewards || {}, data.fish_of_week_bonus ?? 0);
+    const cfg = fishingReadRewardsFromForm();
+
     const leaders = data.week_leaders || [];
     if (!leaders.length) {
       fishingLeadersBody.innerHTML =
-        '<tr><td colspan="3" class="empty">Пока пусто</td></tr>';
+        '<tr><td colspan="4" class="empty">Пока пусто</td></tr>';
     } else {
       fishingLeadersBody.innerHTML = leaders
         .map(
@@ -1041,14 +1130,16 @@
           <td>${esc(row.species)}</td>
           <td>${esc(row.user_name || row.user_id)}</td>
           <td>${esc(Number(row.weight).toFixed(2))}</td>
+          <td>${esc(cfg.species[row.species] ?? 0)}</td>
         </tr>`
         )
         .join("");
     }
     const fow = data.fish_of_week;
     fishingFowLine.textContent = fow
-      ? `Рыба недели: ${fow.user_name || fow.user_id} — ${fow.species} (${Number(fow.weight).toFixed(2)} кг)`
+      ? `Рыба недели: ${fow.user_name || fow.user_id} — ${fow.species} (${Number(fow.weight).toFixed(2)} кг), бонус +${cfg.fish_of_week_bonus}`
       : "Рыба недели: —";
+    fishingUpdatePreview(data);
   }
 
   async function loadFishing(silent) {
@@ -1064,6 +1155,8 @@
 
   document.getElementById("fishingRefresh").addEventListener("click", () => loadFishing(false));
 
+  fishingFowBonus.addEventListener("input", () => fishingUpdatePreview(fishingLastData));
+
   fishingRestoreEnergy.addEventListener("click", async () => {
     setStatus("Восстановление энергии…");
     try {
@@ -1075,11 +1168,42 @@
     }
   });
 
+  fishingSaveRewards.addEventListener("click", async () => {
+    const body = fishingReadRewardsFromForm();
+    setStatus("Сохранение наград…");
+    try {
+      const data = await api("POST", "/api/fishing/rewards", body);
+      renderFishing(data);
+      setStatus("Награды недели сохранены", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  fishingResetRewards.addEventListener("click", async () => {
+    const defaults = (fishingLastData && fishingLastData.week_rewards_defaults) || null;
+    if (!defaults) {
+      setStatus("Нет defaults — обновите вкладку", "err");
+      return;
+    }
+    fishingFillRewardInputs(defaults.species || {}, defaults.fish_of_week_bonus ?? 0);
+    const body = fishingReadRewardsFromForm();
+    setStatus("Сброс наград к defaults…");
+    try {
+      const data = await api("POST", "/api/fishing/rewards", body);
+      renderFishing(data);
+      setStatus("Награды сброшены к defaults из settings", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
   fishingPayRewards.addEventListener("click", async () => {
-    if (!confirm("Выдать награды закрытой недели победителям?")) return;
+    const body = fishingReadRewardsFromForm();
+    if (!confirm("Выдать награды закрытой недели победителям по суммам из формы?")) return;
     setStatus("Выдача наград…");
     try {
-      const data = await api("POST", "/api/fishing/pay-rewards");
+      const data = await api("POST", "/api/fishing/pay-rewards", body);
       renderFishing(data);
       setStatus(`Награды выданы (неделя ${data.paid_week || ""})`, "ok");
     } catch (e) {

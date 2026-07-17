@@ -292,7 +292,8 @@ CREATE TABLE IF NOT EXISTS fishing_meta (
     day_key TEXT NOT NULL DEFAULT '',
     first_fish_claimed INTEGER NOT NULL DEFAULT 0,
     current_week_id TEXT NOT NULL DEFAULT '',
-    pending_rewards_week_id TEXT NOT NULL DEFAULT ''
+    pending_rewards_week_id TEXT NOT NULL DEFAULT '',
+    week_rewards_json TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -330,6 +331,8 @@ async def init_schema(
     await conn.execute(
         "INSERT OR IGNORE INTO cards_meta (id, daily_open_limit) VALUES (1, 0)"
     )
+    # Без week_rewards_json: колонка появляется в m019; на старых БД INSERT с ней падает
+    # до run_migrations.
     await conn.execute(
         "INSERT OR IGNORE INTO fishing_meta "
         "(id, day_key, first_fish_claimed, current_week_id, pending_rewards_week_id) "

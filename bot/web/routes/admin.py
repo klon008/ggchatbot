@@ -114,6 +114,7 @@ class AdminRoutes:
                 web.get("/prediction.js", self._handle_prediction_js),
                 web.get("/api/fishing", self._api_fishing_get),
                 web.post("/api/fishing/restore-energy", self._api_fishing_restore_energy),
+                web.post("/api/fishing/rewards", self._api_fishing_rewards),
                 web.post("/api/fishing/pay-rewards", self._api_fishing_pay_rewards),
                 web.get("/card-templates/{path:.*}", self._handle_card_templates),
                 web.get("/assets/{path:.*}", self._handle_assets),
@@ -517,9 +518,38 @@ class AdminRoutes:
         status = await self._fishing.admin_restore_energy(announce=True)
         return json_response(status)
 
+    async def _api_fishing_rewards(self, request: web.Request) -> web.Response:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        try:
+            status = await self._fishing.admin_set_week_rewards(
+                species=data.get("species"),
+                fish_of_week_bonus=data.get("fish_of_week_bonus"),
+            )
+        except ValueError:
+            return error_response("Некорректные суммы наград", status=400)
+        return json_response(status)
+
     async def _api_fishing_pay_rewards(self, request: web.Request) -> web.Response:
         try:
-            status = await self._fishing.admin_pay_week_rewards(announce=True)
+            data = await request.json()
+        except Exception:
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        try:
+            status = await self._fishing.admin_pay_week_rewards(
+                announce=True,
+                species=data.get("species"),
+                fish_of_week_bonus=data.get("fish_of_week_bonus"),
+                persist=True,
+            )
+        except ValueError:
+            return error_response("Некорректные суммы наград", status=400)
         except RuntimeError as exc:
             if str(exc) == "nothing_to_pay":
                 return error_response(

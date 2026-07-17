@@ -18,6 +18,7 @@ from .settings import (
     CAST_ENERGY_COST,
     FIRST_FISH_BONUS,
     FISH_OF_WEEK_BONUS,
+    FISH_SPECIES,
     FISHING_CMD,
     MAGGOT_COST,
     MAGGOT_GAIN,
@@ -71,6 +72,12 @@ class FishingHandler:
         meta = await self.store.meta()
         leaders, fow = await self.store.week_top()
         pending = meta.get("pending_rewards_week_id") or ""
+        pending_leaders: list = []
+        pending_fow = None
+        if pending:
+            pending_leaders = await self.store.week_leaders(pending)
+            pending_fow = await self.store.week_fish_of_week(pending)
+        rewards = await self.get_reward_config()
         return {
             "day_key": meta["day_key"],
             "current_week_id": meta["current_week_id"],
@@ -80,7 +87,89 @@ class FishingHandler:
             "players": await self.store.count_players(),
             "week_leaders": leaders,
             "fish_of_week": fow,
+            "pending_week_leaders": pending_leaders,
+            "pending_fish_of_week": pending_fow,
+            "week_rewards": rewards["species"],
+            "fish_of_week_bonus": rewards["fish_of_week_bonus"],
+            "week_rewards_defaults": rewards["defaults"],
         }
+
+    def _default_reward_config(self) -> dict:
+        species = {name: int(WEEK_REWARDS.get(name, 0)) for name in FISH_SPECIES}
+        fow = int(FISH_OF_WEEK_BONUS)
+        return {
+            "species": species,
+            "fish_of_week_bonus": fow,
+            "defaults": {
+                "species": dict(species),
+                "fish_of_week_bonus": fow,
+            },
+        }
+
+    async def get_reward_config(self) -> dict:
+        base = self._default_reward_config()
+        stored = await fishing_db.get_week_rewards_override(self._db)
+        if not stored:
+            return base
+        raw_species = stored.get("species") or {}
+        if not isinstance(raw_species, dict):
+            raw_species = {}
+        species: dict[str, int] = {}
+        for name in FISH_SPECIES:
+            if name in raw_species:
+                try:
+                    species[name] = max(0, int(raw_species[name]))
+                except (TypeError, ValueError):
+                    species[name] = base["species"][name]
+            else:
+                species[name] = base["species"][name]
+        try:
+            fow = max(0, int(stored.get("fish_of_week_bonus", base["fish_of_week_bonus"])))
+        except (TypeError, ValueError):
+            fow = base["fish_of_week_bonus"]
+        return {
+            "species": species,
+            "fish_of_week_bonus": fow,
+            "defaults": base["defaults"],
+        }
+
+    def _normalize_reward_payload(
+        self,
+        species: Optional[dict],
+        fish_of_week_bonus: Optional[int],
+    ) -> tuple[dict[str, int], int]:
+        base = self._default_reward_config()
+        out_species = dict(base["species"])
+        if isinstance(species, dict):
+            for name in FISH_SPECIES:
+                if name not in species:
+                    continue
+                try:
+                    out_species[name] = max(0, int(species[name]))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"bad_reward:{name}") from exc
+        fow = base["fish_of_week_bonus"]
+        if fish_of_week_bonus is not None:
+            try:
+                fow = max(0, int(fish_of_week_bonus))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("bad_fow_bonus") from exc
+        return out_species, fow
+
+    async def admin_set_week_rewards(
+        self,
+        *,
+        species: Optional[dict] = None,
+        fish_of_week_bonus: Optional[int] = None,
+    ) -> dict:
+        out_species, fow = self._normalize_reward_payload(species, fish_of_week_bonus)
+        await fishing_db.set_week_rewards_override(
+            self._db,
+            species=out_species,
+            fish_of_week_bonus=fow,
+        )
+        status = await self.get_status()
+        return status
 
     async def admin_restore_energy(self, *, announce: bool = True) -> dict:
         n = await self.store.restore_all_energy()
@@ -91,12 +180,34 @@ class FishingHandler:
         status["restored"] = n
         return status
 
-    async def admin_pay_week_rewards(self, *, announce: bool = True) -> dict:
+    async def admin_pay_week_rewards(
+        self,
+        *,
+        announce: bool = True,
+        species: Optional[dict] = None,
+        fish_of_week_bonus: Optional[int] = None,
+        persist: bool = True,
+    ) -> dict:
         points = self._require_points()
         await self.store.ensure_calendar()
         pending = await self.store.pending_week_id()
         if not pending:
             raise RuntimeError("nothing_to_pay")
+
+        if species is not None or fish_of_week_bonus is not None:
+            reward_species, fow_bonus_cfg = self._normalize_reward_payload(
+                species, fish_of_week_bonus
+            )
+            if persist:
+                await fishing_db.set_week_rewards_override(
+                    self._db,
+                    species=reward_species,
+                    fish_of_week_bonus=fow_bonus_cfg,
+                )
+        else:
+            cfg = await self.get_reward_config()
+            reward_species = cfg["species"]
+            fow_bonus_cfg = cfg["fish_of_week_bonus"]
 
         leaders = await self.store.week_leaders(pending)
         fow = await self.store.week_fish_of_week(pending)
@@ -107,7 +218,7 @@ class FishingHandler:
         payouts: dict[str, int] = {}
         details: list[dict] = []
         for row in leaders:
-            reward = WEEK_REWARDS.get(row["species"], 0)
+            reward = int(reward_species.get(row["species"], 0))
             if reward <= 0:
                 continue
             uid = row["user_id"]
@@ -123,8 +234,8 @@ class FishingHandler:
             )
 
         fow_bonus = 0
-        if fow is not None:
-            fow_bonus = FISH_OF_WEEK_BONUS
+        if fow is not None and fow_bonus_cfg > 0:
+            fow_bonus = fow_bonus_cfg
             uid = fow["user_id"]
             payouts[uid] = payouts.get(uid, 0) + fow_bonus
 
@@ -150,7 +261,7 @@ class FishingHandler:
             {"user_id": uid, "amount": amount} for uid, amount in payouts.items()
         ]
         status["details"] = details
-        status["fish_of_week_bonus"] = fow_bonus
+        status["fish_of_week_bonus_paid"] = fow_bonus
         status["fish_of_week"] = fow
         return status
 
@@ -181,7 +292,10 @@ class FishingHandler:
             await self._cmd_rod(msg, prefix_note)
             return True
         if sub == "помощь":
-            await self._say(f"{msg.user_name}, {texts.pick(texts.HELP)}")
+            await self._say(
+                f"{msg.user_name}, "
+                f"{texts.pick(texts.HELP).format(N=FIRST_FISH_BONUS, C=MAGGOT_COST)}"
+            )
             return True
         if sub == "энергия":
             await self._cmd_energy(msg)
@@ -194,7 +308,8 @@ class FishingHandler:
             return True
 
         await self._say(
-            f"{msg.user_name}, неизвестная подкоманда. {texts.pick(texts.HELP)}"
+            f"{msg.user_name}, неизвестная подкоманда. "
+            f"{texts.pick(texts.HELP).format(N=FIRST_FISH_BONUS, C=MAGGOT_COST)}"
         )
         return True
 
@@ -228,7 +343,9 @@ class FishingHandler:
             if await self.store.claim_first_fish():
                 result.first_fish = True
                 delta += FIRST_FISH_BONUS
-                result.message += " " + texts.pick(texts.FIRST_FISH)
+                result.message += " " + texts.pick(texts.FIRST_FISH).format(
+                    N=FIRST_FISH_BONUS
+                )
             await self.store.update_records(
                 user_id=msg.user_id,
                 user_name=msg.user_name,
@@ -270,7 +387,8 @@ class FishingHandler:
         balance = await points.get_balance(msg.user_id)
         if balance < MAGGOT_COST:
             await self._say(
-                f"{msg.user_name}, {prefix_note}{texts.pick(texts.MAGGOT_NO_POINTS)}"
+                f"{msg.user_name}, {prefix_note}"
+                f"{texts.pick(texts.MAGGOT_NO_POINTS).format(C=MAGGOT_COST)}"
             )
             return
         await points.add(msg.user_id, -MAGGOT_COST)
@@ -281,7 +399,8 @@ class FishingHandler:
             player["energy"], player["worms"], player["maggots"], player["rod_state"]
         )
         await self._say(
-            f"{msg.user_name}, {prefix_note}{texts.pick(texts.MAGGOT_OK)}\n{res}"
+            f"{msg.user_name}, {prefix_note}"
+            f"{texts.pick(texts.MAGGOT_OK).format(C=MAGGOT_COST, G=MAGGOT_GAIN)}\n{res}"
         )
 
     async def _cmd_rod(self, msg: ChatMessage, prefix_note: str) -> None:

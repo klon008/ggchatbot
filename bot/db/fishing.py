@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Optional
 
 from bot.db.connection import Database
@@ -11,18 +12,30 @@ ROD_OK = "ok"
 ROD_BROKEN = "broken"
 
 
+async def _ensure_week_rewards_column(db: Database) -> None:
+    """На случай если m019 ещё не успела / version уже 19 без колонки."""
+    rows = await db.fetchall("PRAGMA table_info(fishing_meta)")
+    cols = {str(r[1]) for r in rows}
+    if "week_rewards_json" not in cols:
+        await db.execute(
+            "ALTER TABLE fishing_meta ADD COLUMN week_rewards_json TEXT NOT NULL DEFAULT ''"
+        )
+
+
 async def ensure_meta(db: Database) -> None:
     await db.execute(
         "INSERT OR IGNORE INTO fishing_meta "
         "(id, day_key, first_fish_claimed, current_week_id, pending_rewards_week_id) "
         "VALUES (1, '', 0, '', '')"
     )
+    await _ensure_week_rewards_column(db)
 
 
 async def get_meta(db: Database) -> dict[str, Any]:
     await ensure_meta(db)
     row = await db.fetchone(
-        "SELECT day_key, first_fish_claimed, current_week_id, pending_rewards_week_id "
+        "SELECT day_key, first_fish_claimed, current_week_id, pending_rewards_week_id, "
+        "week_rewards_json "
         "FROM fishing_meta WHERE id = 1"
     )
     assert row is not None
@@ -31,6 +44,7 @@ async def get_meta(db: Database) -> dict[str, Any]:
         "first_fish_claimed": bool(row[1]),
         "current_week_id": str(row[2] or ""),
         "pending_rewards_week_id": str(row[3] or ""),
+        "week_rewards_json": str(row[4] or ""),
     }
 
 
@@ -41,6 +55,7 @@ async def set_meta(
     first_fish_claimed: Optional[bool] = None,
     current_week_id: Optional[str] = None,
     pending_rewards_week_id: Optional[str] = None,
+    week_rewards_json: Optional[str] = None,
 ) -> None:
     await ensure_meta(db)
     meta = await get_meta(db)
@@ -52,16 +67,52 @@ async def set_meta(
         meta["current_week_id"] = current_week_id
     if pending_rewards_week_id is not None:
         meta["pending_rewards_week_id"] = pending_rewards_week_id
+    if week_rewards_json is not None:
+        meta["week_rewards_json"] = week_rewards_json
     await db.execute(
         "UPDATE fishing_meta SET day_key = ?, first_fish_claimed = ?, "
-        "current_week_id = ?, pending_rewards_week_id = ? WHERE id = 1",
+        "current_week_id = ?, pending_rewards_week_id = ?, week_rewards_json = ? "
+        "WHERE id = 1",
         (
             meta["day_key"],
             1 if meta["first_fish_claimed"] else 0,
             meta["current_week_id"],
             meta["pending_rewards_week_id"],
+            meta["week_rewards_json"],
         ),
     )
+
+
+def parse_week_rewards_json(raw: str) -> Optional[dict[str, Any]]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+async def get_week_rewards_override(db: Database) -> Optional[dict[str, Any]]:
+    meta = await get_meta(db)
+    return parse_week_rewards_json(meta.get("week_rewards_json", ""))
+
+
+async def set_week_rewards_override(
+    db: Database,
+    *,
+    species: dict[str, int],
+    fish_of_week_bonus: int,
+) -> None:
+    payload = {
+        "species": {str(k): int(v) for k, v in species.items()},
+        "fish_of_week_bonus": int(fish_of_week_bonus),
+    }
+    await set_meta(db, week_rewards_json=json.dumps(payload, ensure_ascii=False))
+
 
 
 async def get_player(db: Database, user_id: str) -> Optional[dict[str, Any]]:

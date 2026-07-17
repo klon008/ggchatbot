@@ -525,6 +525,24 @@
       </div>
 
       <div class="card">
+        <h3>Награды недели (принцессы)</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          Можно подкрутить перед выдачей. Сохраняется в БД; пустой сброс — значения из
+          <code>settings.py</code>.
+        </p>
+        <div id="fishingRewardsFields" class="toolbar" style="flex-wrap: wrap; gap: 8px 12px"></div>
+        <p style="margin: 10px 0 0">
+          Рыба недели (бонус поверх вида):
+          <input type="number" id="fishingFowBonus" min="0" step="1" style="width: 100px" />
+        </p>
+        <p id="fishingRewardsPreview" class="empty" style="margin: 8px 0 0; font-size: 13px">—</p>
+        <div class="toolbar" style="margin-top: 10px">
+          <button type="button" id="fishingSaveRewards" class="primary">Сохранить награды</button>
+          <button type="button" id="fishingResetRewards">Сбросить к defaults</button>
+        </div>
+      </div>
+
+      <div class="card">
         <h3>Топ текущей недели</h3>
         <table>
           <thead>
@@ -532,10 +550,11 @@
               <th>вид</th>
               <th>ник</th>
               <th>вес (кг)</th>
+              <th>награда</th>
             </tr>
           </thead>
           <tbody id="fishingLeadersBody">
-            <tr><td colspan="3" class="empty">—</td></tr>
+            <tr><td colspan="4" class="empty">—</td></tr>
           </tbody>
         </table>
         <p id="fishingFowLine" style="margin-top: 10px">Рыба недели: —</p>
