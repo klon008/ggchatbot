@@ -1,4 +1,4 @@
-"""Алгоритм заброса: негатив / мусор / рыба."""
+"""Алгоритм заброса: негатив / сход / мусор / рыба."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from .economy import sell_price
 from .settings import (
     FISH_SPECIES,
     MERMAID_PENALTY,
+    MISS_CHANCE,
     NEG_EVENT_CHANCES,
     SEAGULL_BAIT_MAX,
     SILT_ENERGY_LOSS,
@@ -21,7 +22,7 @@ from . import texts
 
 @dataclass
 class CastResult:
-    kind: str  # fish | trash | mermaid | pike_break | seagull | silt | reeds
+    kind: str  # fish | miss | trash | mermaid | pike_break | seagull | silt | reeds
     message: str
     sale: int = 0
     first_fish: bool = False
@@ -106,7 +107,12 @@ def apply_cast_roll(
         msg = prefix + texts.pick(texts.NEG_REEDS)
         return CastResult(kind="reeds", message=msg), 0
 
-    if random.random() < TRASH_CHANCE:
+    category = random.random()
+    if category < MISS_CHANCE:
+        msg = prefix + texts.pick(texts.MISS)
+        return CastResult(kind="miss", message=msg), 0
+
+    if category < MISS_CHANCE + TRASH_CHANCE:
         trash_key = random.choice(TRASH_TYPES)
         msg = prefix + texts.pick(texts.TRASH[trash_key])
         return CastResult(kind="trash", message=msg), 0
