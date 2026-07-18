@@ -17,3 +17,14 @@ RARITY_LABELS: dict[str, str] = {
     "mythic": "Mythic",
     "secretRare": "Secret Rare",
 }
+
+# Доля от стоимости 1 карты в наборе при возврате за дубликат.
+DUPLICATE_REFUND_RATES: dict[str, float] = {
+    "common": 0.25,
+    "uncommon": 0.50,
+    "rare": 0.70,
+    "epic": 1.00,
+    "legendary": 1.50,
+    "mythic": 2.00,
+    "secretRare": 5.00,
+}

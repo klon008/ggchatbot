@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from bot.db import Database
 from bot.db import cards as cards_db
 
-from .constants import RARITY_LABELS
+from .constants import DUPLICATE_REFUND_RATES, RARITY_LABELS
 
 if TYPE_CHECKING:
     from bot.economy.points import PointsStore
@@ -41,9 +41,10 @@ class OpenResult:
     cards_per_open: int = 0
 
 
-def duplicate_refund(cost_points: int, cards_per_open: int) -> int:
+def duplicate_refund(cost_points: int, cards_per_open: int, rarity: str) -> int:
     per_card = cost_points / cards_per_open
-    return math.floor(per_card * 0.25)
+    rate = DUPLICATE_REFUND_RATES.get(rarity, DUPLICATE_REFUND_RATES["common"])
+    return math.floor(per_card * rate)
 
 
 def _pick_rarity(weights: dict[str, float]) -> str:
@@ -110,7 +111,6 @@ async def open_booster(
             f"Недостаточно баллов. Нужно {draw.cost_points}, у тебя {balance}."
         )
 
-    refund_per_dup = duplicate_refund(draw.cost_points, draw.cards_per_open)
     rolls: list[RollResult] = []
     total_refund = 0
     cards_rolled: list[dict[str, Any]] = []
@@ -129,7 +129,9 @@ async def open_booster(
         card = random.choice(pool)
         owned = await cards_db.user_owns_card(db, user_id, card.id)
         if owned:
-            refund = refund_per_dup
+            refund = duplicate_refund(
+                draw.cost_points, draw.cards_per_open, card.rarity
+            )
             total_refund += refund
             await points.add(user_id, refund)
             roll = _make_roll(card, is_duplicate=True, refund=refund)
