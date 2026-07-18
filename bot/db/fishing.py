@@ -83,6 +83,16 @@ async def set_meta(
     )
 
 
+async def claim_first_fish(db: Database) -> bool:
+    """Атомарно забрать первую рыбу суток. True — бонус наш (только один победитель)."""
+    await ensure_meta(db)
+    cursor = await db.execute(
+        "UPDATE fishing_meta SET first_fish_claimed = 1 "
+        "WHERE id = 1 AND first_fish_claimed = 0"
+    )
+    return int(cursor.rowcount or 0) > 0
+
+
 def parse_week_rewards_json(raw: str) -> Optional[dict[str, Any]]:
     text = (raw or "").strip()
     if not text:
@@ -299,6 +309,18 @@ async def week_leaders(db: Database, week_id: str) -> list[dict[str, Any]]:
             "achieved_at": float(row[4]),
         }
     return list(best.values())
+
+
+async def get_week_species_leader(
+    db: Database,
+    week_id: str,
+    species: str,
+) -> Optional[dict[str, Any]]:
+    """Текущий топ-1 недели по одному виду (или None)."""
+    for row in await week_leaders(db, week_id):
+        if row["species"] == species:
+            return row
+    return None
 
 
 async def week_fish_of_week(db: Database, week_id: str) -> Optional[dict[str, Any]]:

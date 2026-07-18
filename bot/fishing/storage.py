@@ -98,11 +98,7 @@ class FishingStorage:
 
     async def claim_first_fish(self) -> bool:
         """Атомарно забрать «первую рыбу дня». True если бонус наш."""
-        meta = await fishing_db.get_meta(self._db)
-        if meta["first_fish_claimed"]:
-            return False
-        await fishing_db.set_meta(self._db, first_fish_claimed=True)
-        return True
+        return await fishing_db.claim_first_fish(self._db)
 
     async def update_records(
         self,
@@ -111,10 +107,17 @@ class FishingStorage:
         user_name: str,
         species: str,
         weight: float,
-    ) -> None:
-        await fishing_db.set_record_if_better(self._db, user_id, species, weight)
+    ) -> dict[str, bool]:
+        """Обновить личные и недельные рекорды. Возвращает флаги для чата."""
+        personal_best = await fishing_db.set_record_if_better(
+            self._db, user_id, species, weight
+        )
         meta = await fishing_db.get_meta(self._db)
         week = meta["current_week_id"] or week_id()
+        prev_leader = await fishing_db.get_week_species_leader(self._db, week, species)
+        week_species_record = prev_leader is None or float(weight) > float(
+            prev_leader["weight"]
+        )
         await fishing_db.set_week_weight_if_better(
             self._db,
             week_id=week,
@@ -124,6 +127,18 @@ class FishingStorage:
             weight=weight,
             achieved_at=time.time(),
         )
+        fow = await fishing_db.week_fish_of_week(self._db, week)
+        fish_of_week = bool(
+            fow
+            and str(fow["user_id"]) == str(user_id)
+            and fow["species"] == species
+            and abs(float(fow["weight"]) - float(weight)) < 1e-9
+        )
+        return {
+            "personal_best": personal_best,
+            "week_species_record": week_species_record,
+            "fish_of_week": fish_of_week,
+        }
 
     async def list_records(self, user_id: str) -> list[tuple[str, float]]:
         return await fishing_db.list_records(self._db, user_id)

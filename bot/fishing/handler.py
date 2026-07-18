@@ -346,12 +346,24 @@ class FishingHandler:
                 result.message += " " + texts.pick(texts.FIRST_FISH).format(
                     N=FIRST_FISH_BONUS
                 )
-            await self.store.update_records(
+            flags = await self.store.update_records(
                 user_id=msg.user_id,
                 user_name=msg.user_name,
                 species=result.species,
                 weight=result.weight,
             )
+            weight_s = f"{result.weight:.2f}"
+            if flags.get("week_species_record"):
+                result.message += " " + texts.pick(texts.WEEK_SPECIES_RECORD).format(
+                    species=result.species,
+                    species_lower=result.species.lower(),
+                    weight=weight_s,
+                )
+            if flags.get("fish_of_week"):
+                result.message += " " + texts.pick(texts.WEEK_FISH_OF_WEEK).format(
+                    species=result.species,
+                    weight=weight_s,
+                )
 
         if delta != 0:
             await points.add(msg.user_id, delta)
