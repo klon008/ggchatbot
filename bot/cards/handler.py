@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
+from urllib.parse import parse_qs, urlparse
 
 from bot.db import cards as cards_db
 from bot.goodgame import ChatMessage
@@ -33,6 +35,15 @@ ReplyFn = Callable[[str], Awaitable[None]]
 _CARD_ANIM_SEC = 4.2
 _ANIM_BASE_SEC = 5.0
 _NO_CLIENTS_DELAY_SEC = 0.05
+
+# NBSP / узкие пробелы — str.split их не режет
+_UNICODE_SPACES_RE = re.compile(
+    r"[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]+"
+)
+
+
+def _normalize_cmd_text(text: str) -> str:
+    return _UNICODE_SPACES_RE.sub(" ", text.strip())
 
 
 class CardsHandler:
@@ -78,7 +89,7 @@ class CardsHandler:
             fut.set_result(True)
 
     async def handle_message(self, msg: ChatMessage) -> bool:
-        text = msg.text.strip()
+        text = _normalize_cmd_text(msg.text)
         if not text.startswith("!"):
             return False
         parts = text.split(maxsplit=1)
@@ -103,7 +114,13 @@ class CardsHandler:
                     f"{msg.user_name}, команды: !бустер · !бустер инфо"
                 )
             return True
-        await self._cmd_album(msg, arg)
+        try:
+            await self._cmd_album(msg, arg)
+        except Exception:  # noqa: BLE001
+            log.exception("Ошибка !альбом от %s", msg.user_name)
+            await self._say(
+                f"{msg.user_name}, не удалось открыть альбом. Попробуй ещё раз."
+            )
         return True
 
     async def _cmd_booster_buy(self, msg: ChatMessage) -> None:
@@ -202,10 +219,13 @@ class CardsHandler:
     async def _cmd_album(self, msg: ChatMessage, arg: str = "") -> None:
         nick = arg.lstrip("@").strip()
         if not nick:
+            canonical = await cards_db.get_user_name(self._db, msg.user_id)
+            target_nick = canonical or msg.user_name
             await self._reply_album_link(
                 requester=msg.user_name,
                 target_user_id=msg.user_id,
-                target_nick=msg.user_name,
+                target_nick=target_nick,
+                label_target=False,
             )
             return
 
@@ -213,11 +233,14 @@ class CardsHandler:
         if target_id is None:
             await self._say(f"{msg.user_name}, игрок «{nick}» не найден.")
             return
+
         display = await cards_db.get_user_name(self._db, target_id)
+        target_nick = display or nick
+
         await self._reply_album_link(
             requester=msg.user_name,
             target_user_id=target_id,
-            target_nick=display or nick,
+            target_nick=target_nick,
             label_target=True,
         )
 
@@ -260,6 +283,21 @@ class CardsHandler:
             nick=target_nick,
             api_base_url=api_url,
         )
+        # Защита: u= в ссылке должен совпадать с целевым ником (не requester)
+        u_param = (parse_qs(urlparse(url).query).get("u") or [""])[0]
+        expected_u = target_nick.strip().lower()
+        if u_param != expected_u:
+            log.error(
+                "Album URL nick mismatch: expected u=%s got u=%s target_id=%s",
+                expected_u,
+                u_param,
+                target_user_id,
+            )
+            await self._say(
+                f"{requester}, ошибка формирования ссылки альбома. Попробуй ещё раз."
+            )
+            return
+
         if label_target:
             head = f"{requester}, альбом {target_nick} · {progress}"
         else:

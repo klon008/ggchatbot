@@ -171,6 +171,62 @@ async def main() -> int:
             assert r.status == 401
             print("[OK] GET /api/v1/album invalid token")
 
+        from bot.cards.handler import _normalize_cmd_text
+        from bot.goodgame import ChatMessage
+
+        assert _normalize_cmd_text("!альбом\u00a0Karen_kaurio").split(maxsplit=1) == [
+            "!альбом",
+            "Karen_kaurio",
+        ]
+        print("[OK] !альбом NBSP normalize")
+
+        await bot.princess.points.touch_name("requester-1", "RequesterNick")
+        await bot.princess.points.touch_name("karen-1", "Karen_kaurio")
+        album_replies: list[str] = []
+
+        async def capture_album_reply(text: str) -> None:
+            album_replies.append(text)
+
+        bot.cards.bind_reply(capture_album_reply)
+        album_replies.clear()
+        await bot.cards.handle_message(
+            ChatMessage(
+                channel_id="0",
+                user_id="requester-1",
+                user_name="RequesterNick",
+                user_rights=0,
+                text="!альбом Karen_kaurio",
+            )
+        )
+        assert album_replies, "нет ответа на !альбом Karen_kaurio"
+        reply = album_replies[-1]
+        assert "Karen_kaurio" in reply, reply
+        assert "http" in reply.lower() or "https" in reply.lower() or "?" in reply, reply
+        qs_other = parse_qs(urlparse(reply.splitlines()[-1]).query)
+        assert qs_other.get("u", [""])[0] == "karen_kaurio", qs_other
+        assert qs_other.get("u", [""])[0] != "requesternick", qs_other
+        print("[OK] !альбом <ник> → u= целевого игрока")
+
+        album_replies.clear()
+        await bot.cards.handle_message(
+            ChatMessage(
+                channel_id="0",
+                user_id="requester-1",
+                user_name="RequesterNick",
+                user_rights=0,
+                text="!альбом Nobody_xyz",
+            )
+        )
+        assert album_replies and "не найден" in album_replies[-1].lower(), album_replies
+        print("[OK] !альбом неизвестный ник")
+
+        await bot.princess.points.touch_name("smoke-rename", "OldNick")
+        await bot.princess.points.touch_name("smoke-rename", "NewNick")
+        from bot.db import users as users_db
+
+        assert await users_db.get_user_name(bot.db, "smoke-rename") == "NewNick"
+        print("[OK] touch_name upsert на каждое сообщение")
+
         async with s.get(f"{base}/api/cards/catalog") as r:
             assert r.status == 200, await r.text()
             catalog = await r.json()

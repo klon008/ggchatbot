@@ -167,7 +167,7 @@ async def open_booster(
         total_refund=total_refund,
     )
     await points.flush_pending()
-    await points.touch_name_if_new(user_id, user_name)
+    await points.touch_name(user_id, user_name)
 
     new_count = sum(1 for r in rolls if not r.is_duplicate)
     album_count = await cards_db.count_user_cards(db, user_id)

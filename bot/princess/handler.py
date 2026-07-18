@@ -112,11 +112,13 @@ class PrincessHandler:
 
         cmd = text.split(maxsplit=1)[0].lower() if text.startswith("!") else ""
 
-        await self.points.touch_name_if_new(user_id, user_name)
+        await self.points.touch_name(user_id, user_name)
 
         if await self.prison.is_in_prison(user_id):
             if cmd == "!срок":
                 await cmd_srok(self, msg)
+            elif cmd.startswith("!"):
+                await self._say(user_name, "ты в тюрьме. Доступна команда !срок")
             return True
 
         if not text.startswith("!"):

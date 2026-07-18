@@ -81,6 +81,15 @@ class PointsStore:
     def mark_known(self, user_id: str) -> None:
         self._known_ids.add(str(user_id))
 
+    async def touch_name(self, user_id: str, user_name: str) -> None:
+        """Upsert ника в user_names на каждое сообщение (актуальный lookup !альбом)."""
+        uid = str(user_id)
+        name = str(user_name).strip()
+        if not name:
+            return
+        await users_db.touch_user_name(self._db, uid, name)
+        self._known_ids.add(uid)
+
     async def touch_name_if_new(self, user_id: str, user_name: str) -> bool:
         """Записать ник в БД только при первом сообщении пользователя (нет в кэше)."""
         uid = str(user_id)

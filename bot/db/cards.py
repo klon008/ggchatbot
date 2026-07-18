@@ -271,7 +271,9 @@ async def get_user_name(db: Database, user_id: str) -> str:
             (user_id,),
         )
         row = await cur.fetchone()
-    return str(row[0]) if row and row[0] else user_id
+    if not row or not row[0]:
+        return ""
+    return str(row[0])
 
 
 async def increment_daily_opens(db: Database, user_id: str) -> int:
