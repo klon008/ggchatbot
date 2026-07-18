@@ -103,7 +103,7 @@ class CardsHandler:
                     f"{msg.user_name}, команды: !бустер · !бустер инфо"
                 )
             return True
-        await self._cmd_album(msg)
+        await self._cmd_album(msg, arg)
         return True
 
     async def _cmd_booster_buy(self, msg: ChatMessage) -> None:
@@ -199,20 +199,51 @@ class CardsHandler:
             text = f"{text} {promo}"
         await self._say(text)
 
-    async def _cmd_album(self, msg: ChatMessage) -> None:
+    async def _cmd_album(self, msg: ChatMessage, arg: str = "") -> None:
+        nick = arg.lstrip("@").strip()
+        if not nick:
+            await self._reply_album_link(
+                requester=msg.user_name,
+                target_user_id=msg.user_id,
+                target_nick=msg.user_name,
+            )
+            return
+
+        target_id = await cards_db.get_user_id_by_nick(self._db, nick)
+        if target_id is None:
+            await self._say(f"{msg.user_name}, игрок «{nick}» не найден.")
+            return
+        display = await cards_db.get_user_name(self._db, target_id)
+        await self._reply_album_link(
+            requester=msg.user_name,
+            target_user_id=target_id,
+            target_nick=display or nick,
+            label_target=True,
+        )
+
+    async def _reply_album_link(
+        self,
+        *,
+        requester: str,
+        target_user_id: str,
+        target_nick: str,
+        label_target: bool = False,
+    ) -> None:
         if not self._link_secret:
-            await self._say(f"{msg.user_name}, альбом пока не настроен (нет ALBUM_LINK_SECRET).")
+            await self._say(
+                f"{requester}, альбом пока не настроен (нет ALBUM_LINK_SECRET)."
+            )
             return
 
         api_url = self._clo.public_url
         if not api_url:
             await self._say(
-                f"{msg.user_name}, альбом доступен на стриме (туннель не поднят)."
+                f"{requester}, альбом доступен на стриме (туннель не поднят)."
             )
             return
 
-        series = await cards_db.count_series_progress(self._db, msg.user_id)
-        collection = await cards_db.count_collection(self._db, msg.user_id)
+        series = await cards_db.count_series_progress(self._db, target_user_id)
+        collection = await cards_db.count_collection(self._db, target_user_id)
 
         progress_parts = []
         if series:
@@ -226,10 +257,14 @@ class CardsHandler:
         url = build_album_url(
             site_base_url=self._site_base_url,
             link_secret=self._link_secret,
-            nick=msg.user_name,
+            nick=target_nick,
             api_base_url=api_url,
         )
-        await self._say(f"{msg.user_name}, альбом · {progress}\n{url}")
+        if label_target:
+            head = f"{requester}, альбом {target_nick} · {progress}"
+        else:
+            head = f"{requester}, альбом · {progress}"
+        await self._say(f"{head}\n{url}")
 
     async def _say(self, text: str) -> None:
         if self._reply is None:
