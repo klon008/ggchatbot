@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OBS Fishing Record</title>
+  <style>
+    :root {
+      --enter-ms: 650ms;
+      --exit-ms: 480ms;
+      --banner-w: min(92vw, 1100px);
+      --gold-top: #ffe566;
+      --gold-bot: #e8a020;
+      --stroke: #1a1208;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+    body.debug-mode {
+      background: radial-gradient(circle at center, #1a1a28 0%, #0d0d14 70%);
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0 2vw 4vh;
+      box-sizing: border-box;
+      pointer-events: none;
+      visibility: hidden;
+    }
+    #stage.is-visible {
+      visibility: visible;
+    }
+
+    #banner {
+      position: relative;
+      width: var(--banner-w);
+      aspect-ratio: 1573 / 544;
+      opacity: 0;
+      transform: translateY(28px) scale(0.94);
+      transition:
+        opacity var(--enter-ms) ease,
+        transform var(--enter-ms) cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #stage.is-visible #banner {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    #stage.is-leaving #banner {
+      opacity: 0;
+      transform: translateY(18px) scale(0.97);
+      transition:
+        opacity var(--exit-ms) ease,
+        transform var(--exit-ms) ease;
+    }
+
+    #fishArt {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      user-select: none;
+      /* shadow только на картинке — иначе filter убивает FPS при анимации лучей */
+      filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.55));
+    }
+
+    /* Зона текста: свечение + подпись */
+    #textArea {
+      position: absolute;
+      left: 50%;
+      right: 6%;
+      top: 6%;
+      bottom: 8%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border-radius: 4%;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.45s ease 0.2s, transform 0.45s ease 0.2s;
+    }
+    #stage.is-visible #textArea {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #stage.is-leaving #textArea {
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    #sunGlow {
+      position: absolute;
+      left: 50%;
+      top: 48%;
+      width: 140%;
+      height: 160%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .sun-rays {
+      position: absolute;
+      inset: 0;
+      background: repeating-conic-gradient(
+        from 0deg,
+        rgba(255, 210, 90, 0.00) 0deg,
+        rgba(255, 210, 90, 0.00) 8deg,
+        rgba(255, 220, 120, 0.22) 10deg,
+        rgba(255, 210, 90, 0.00) 14deg,
+        rgba(255, 210, 90, 0.00) 22deg
+      );
+      -webkit-mask-image: radial-gradient(
+        circle at center,
+        rgba(0, 0, 0, 0.95) 0%,
+        rgba(0, 0, 0, 0.45) 42%,
+        transparent 68%
+      );
+      mask-image: radial-gradient(
+        circle at center,
+        rgba(0, 0, 0, 0.95) 0%,
+        rgba(0, 0, 0, 0.45) 42%,
+        transparent 68%
+      );
+      animation: sun-spin 18s linear infinite;
+      will-change: transform;
+    }
+    .sun-core {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 55%;
+      height: 55%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(
+        circle,
+        rgba(255, 230, 140, 0.38) 0%,
+        rgba(255, 190, 60, 0.16) 35%,
+        transparent 70%
+      );
+      animation: sun-pulse 2.8s ease-in-out infinite;
+      will-change: opacity, transform;
+    }
+    .sun-spark {
+      position: absolute;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(255, 240, 180, 0.9);
+      box-shadow: 0 0 8px 2px rgba(255, 210, 100, 0.65);
+      animation: sun-spark 3.2s ease-in-out infinite;
+    }
+    .sun-spark:nth-child(3) { left: 22%; top: 28%; animation-delay: 0s; }
+    .sun-spark:nth-child(4) { left: 68%; top: 22%; animation-delay: 0.7s; width: 4px; height: 4px; }
+    .sun-spark:nth-child(5) { left: 78%; top: 58%; animation-delay: 1.4s; }
+    .sun-spark:nth-child(6) { left: 30%; top: 70%; animation-delay: 2.1s; width: 3px; height: 3px; }
+
+    @keyframes sun-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes sun-pulse {
+      0%, 100% { opacity: 0.75; transform: translate(-50%, -50%) scale(0.92); }
+      50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+    }
+    @keyframes sun-spark {
+      0%, 100% { opacity: 0.15; transform: scale(0.6); }
+      50% { opacity: 1; transform: scale(1.15); }
+    }
+
+    #caption {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 0.12em;
+      box-sizing: border-box;
+      font-family: "Segoe UI Black", "Arial Black", "Impact", "Segoe UI", system-ui, sans-serif;
+      font-weight: 900;
+      letter-spacing: 0.01em;
+    }
+
+    .cap-nick {
+      font-size: clamp(22px, 4.4vw, 48px);
+      line-height: 1.05;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #f2c43a;
+      -webkit-text-stroke: 1.5px var(--stroke);
+      paint-order: stroke fill;
+      text-shadow:
+        0 1px 0 #7a4a08,
+        0 3px 8px rgba(0, 0, 0, 0.8);
+    }
+
+    .cap-verb-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.55em;
+      width: 100%;
+      margin: 0.05em 0 0.1em;
+    }
+    .cap-verb-row::before,
+    .cap-verb-row::after {
+      content: "";
+      flex: 1;
+      max-width: 4.5em;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+    }
+    .cap-verb {
+      font-size: clamp(12px, 1.9vw, 20px);
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #f5f5f5;
+      text-shadow: 0 1px 0 #000, 0 2px 6px rgba(0, 0, 0, 0.85);
+      white-space: nowrap;
+    }
+
+    .cap-catch {
+      font-size: clamp(18px, 3.5vw, 38px);
+      line-height: 1.1;
+      white-space: nowrap;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cap-weight,
+    .cap-unit {
+      color: #f2c43a;
+      -webkit-text-stroke: 1.5px var(--stroke);
+      paint-order: stroke fill;
+      text-shadow:
+        0 1px 0 #7a4a08,
+        0 3px 8px rgba(0, 0, 0, 0.8);
+    }
+    .cap-unit {
+      font-size: 0.62em;
+      margin-left: 0.12em;
+      -webkit-text-stroke-width: 1px;
+    }
+    .cap-fish {
+      margin-left: 0.28em;
+      color: #f2f2f2;
+      -webkit-text-stroke: 1.5px var(--stroke);
+      paint-order: stroke fill;
+      text-shadow: 0 3px 8px rgba(0, 0, 0, 0.8);
+    }
+
+    .cap-record {
+      margin-top: 0.35em;
+      padding: 0.28em 1.1em 0.32em;
+      font-size: clamp(11px, 1.7vw, 18px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #1a1208;
+      background: linear-gradient(180deg, #f6d24a 0%, #e0a018 55%, #c88810 100%);
+      border-radius: 999px;
+      box-shadow:
+        0 2px 0 #8a5a08,
+        0 4px 10px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 220, 0.55);
+      white-space: nowrap;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cap-record::before,
+    .cap-record::after {
+      content: "★";
+      margin: 0 0.35em;
+      font-size: 0.85em;
+      opacity: 0.9;
+    }
+
+    aside#debugPanel {
+      display: none;
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      max-width: 420px;
+      max-height: 40vh;
+      overflow: auto;
+      padding: 10px 12px;
+      background: rgba(10, 10, 18, 0.92);
+      border: 1px solid #3d3d5c;
+      border-radius: 8px;
+      color: #d8d8ec;
+      font: 12px/1.45 Consolas, monospace;
+      z-index: 20;
+      pointer-events: none;
+    }
+    body.debug-mode aside#debugPanel {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage" aria-hidden="true">
+    <div id="banner">
+      <img id="fishArt" alt="" draggable="false" />
+      <div id="textArea">
+        <div id="sunGlow" aria-hidden="true">
+          <div class="sun-rays"></div>
+          <div class="sun-core"></div>
+          <span class="sun-spark"></span>
+          <span class="sun-spark"></span>
+          <span class="sun-spark"></span>
+          <span class="sun-spark"></span>
+        </div>
+        <div id="caption"></div>
+      </div>
+    </div>
+  </div>
+
+  <aside id="debugPanel">
+    <strong style="color:#9ecbff;font-family:'Segoe UI',system-ui,sans-serif;">Debug — Fishing Record</strong>
+    <div id="debugLog" style="margin-top:8px;"></div>
+  </aside>
+
+  <script src="fishing-record.js"></script>
+</body>
+</html>

@@ -1109,10 +1109,14 @@
         `Ожидающие награды: неделя ${data.pending_rewards_week_id}`;
       fishingPendingLine.style.color = "#c62828";
       fishingPayRewards.disabled = false;
+      fishingPayRewards.title = "Выдать награды закрытой недели";
     } else {
       fishingPendingLine.textContent = "Ожидающие награды: нет";
       fishingPendingLine.style.color = "";
-      fishingPayRewards.disabled = true;
+      // Кнопка кликабельна — покажем alert, почему нельзя
+      fishingPayRewards.disabled = false;
+      fishingPayRewards.title =
+        "Сейчас нечего выдавать: нет закрытой недели с ожидающими наградами";
     }
 
     fishingFillRewardInputs(data.week_rewards || {}, data.fish_of_week_bonus ?? 0);
@@ -1199,14 +1203,41 @@
   });
 
   fishingPayRewards.addEventListener("click", async () => {
+    if (!fishingLastData || !fishingLastData.has_pending_rewards) {
+      const msg =
+        "Сейчас нет закрытой недели с ожидающими наградами.\n\n" +
+        "Выдача появится после смены недели (понедельник по МСК), " +
+        "когда бот закроет прошлую неделю.";
+      alert(msg);
+      setStatus("Нет ожидающих наград недели", "err");
+      return;
+    }
     const body = fishingReadRewardsFromForm();
     if (!confirm("Выдать награды закрытой недели победителям по суммам из формы?")) return;
     setStatus("Выдача наград…");
     try {
       const data = await api("POST", "/api/fishing/pay-rewards", body);
       renderFishing(data);
-      setStatus(`Награды выданы (неделя ${data.paid_week || ""})`, "ok");
+      const details = data.details || [];
+      const fowBonus = data.fish_of_week_bonus_paid || 0;
+      const fow = data.fish_of_week;
+      const bits = details.map(
+        (row) => `${row.user_name || row.user_id}: ${row.species} +${row.reward}`
+      );
+      if (fow && fowBonus > 0) {
+        bits.push(
+          `рыба недели ${fow.user_name || fow.user_id} +${fowBonus}`
+        );
+      }
+      const summary = bits.length
+        ? bits.join("; ")
+        : "выплат не было (суммы 0)";
+      setStatus(
+        `Награды выданы (неделя ${data.paid_week || ""}): ${summary}`,
+        "ok"
+      );
     } catch (e) {
+      alert(e.message);
       setStatus(e.message, "err");
     }
   });

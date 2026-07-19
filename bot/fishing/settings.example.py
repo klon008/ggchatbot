@@ -61,6 +61,17 @@ FISH_SPECIES: dict[str, tuple[int, float, float, int]] = {
     "Осётр": (4, 2.00, 12.00, 125),  # Редкий, дорогой
 }
 
+# PNG в obs/assets/fishing/{slug}.png — плашка недельного рекорда (OBS overlay)
+FISH_RECORD_ASSETS: dict[str, str] = {
+    "Карась": "karas",
+    "Плотва": "plotva",
+    "Окунь": "okun",
+    "Лещ": "lesh",
+    "Щука": "shuka",
+    "Сом": "som",
+    "Осётр": "osetr",
+}
+
 # --- Размер улова (доля t веса в диапазоне вида → множитель цены) ---
 
 SIZE_SMALL_MULT = 0.5  # Множитель цены для мелкой рыбы

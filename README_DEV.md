@@ -397,6 +397,8 @@ class Track:
 | `/player.js` | `obs/player.js` |
 | `/booster.html` | `obs/booster.html` — анимация открытия бустера (~384×560) |
 | `/booster.js` | `obs/booster.js` |
+| `/fishing-record.html` | `obs/fishing-record.html` — плашка недельного рекорда рыбалки (~1200×450) |
+| `/fishing-record.js` | `obs/fishing-record.js` |
 | `/commands.html` | `obs/commands.html` (через `DocsRoutes`) |
 | `/admin.html` | `obs/admin.html` (через `AdminRoutes`) |
 | `/cards-admin.html` | `obs/cards-admin.html` — админка карт (серии, бустеры, тиражи) |
@@ -425,6 +427,14 @@ class Track:
 ```
 
 `booster_open` обрабатывает только `booster.html` (плеер игнорирует). Ответ overlay: `{status:"ready", overlay:"booster"}` и `{status:"booster_done", openingId}`.
+
+Недельный рекорд рыбалки (`!рыбалка` → `week_species_record`):
+
+```json
+{"action": "fishing_record", "userName": "Nick", "species": "Щука", "weight": 3.42, "imageUrl": "/assets/fishing/shuka.png"}
+```
+
+Обрабатывает только `fishing-record.html`. Готовность: `{status:"ready", overlay:"fishing_record"}`. Арты: `obs/assets/fishing/{slug}.png`. Превью в браузере: `?preview=1` или `?preview=shuka`.
 ---
 
 ### 6.4. `youtube.py`

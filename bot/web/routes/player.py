@@ -1,4 +1,4 @@
-"""OBS Browser Source: player.html/js, booster.html/js и WebSocket /ws."""
+"""OBS Browser Source: player, booster, fishing-record и WebSocket /ws."""
 from __future__ import annotations
 
 import json
@@ -20,6 +20,7 @@ class PlayerRoutes:
         self._extra_handlers: list[StatusHandler] = []
         self._clients: set[web.WebSocketResponse] = set()
         self._booster_clients: set[web.WebSocketResponse] = set()
+        self._fishing_record_clients: set[web.WebSocketResponse] = set()
 
     def add_status_handler(self, handler: StatusHandler) -> None:
         self._extra_handlers.append(handler)
@@ -32,6 +33,8 @@ class PlayerRoutes:
                 web.get("/player.js", self._handle_player_js),
                 web.get("/booster.html", self._handle_booster_html),
                 web.get("/booster.js", self._handle_booster_js),
+                web.get("/fishing-record.html", self._handle_fishing_record_html),
+                web.get("/fishing-record.js", self._handle_fishing_record_js),
                 web.get("/ws", self._handle_ws),
             ]
         )
@@ -52,6 +55,18 @@ class PlayerRoutes:
     async def _handle_booster_js(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("booster.js", "application/javascript; charset=utf-8")
 
+    async def _handle_fishing_record_html(
+        self, request: web.Request
+    ) -> web.StreamResponse:
+        return await serve_obs_file("fishing-record.html", "text/html; charset=utf-8")
+
+    async def _handle_fishing_record_js(
+        self, request: web.Request
+    ) -> web.StreamResponse:
+        return await serve_obs_file(
+            "fishing-record.js", "application/javascript; charset=utf-8"
+        )
+
     @property
     def has_clients(self) -> bool:
         return len(self._clients) > 0
@@ -59,6 +74,10 @@ class PlayerRoutes:
     @property
     def has_booster_clients(self) -> bool:
         return len(self._booster_clients) > 0
+
+    @property
+    def has_fishing_record_clients(self) -> bool:
+        return len(self._fishing_record_clients) > 0
 
     async def _handle_ws(self, request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse(heartbeat=30)
@@ -74,6 +93,7 @@ class PlayerRoutes:
         finally:
             self._clients.discard(ws)
             self._booster_clients.discard(ws)
+            self._fishing_record_clients.discard(ws)
             log.info("Плеер отключился (клиентов: %d)", len(self._clients))
         return ws
 
@@ -85,8 +105,12 @@ class PlayerRoutes:
             return
         if not isinstance(data, dict):
             return
-        if data.get("status") == "ready" and data.get("overlay") == "booster":
-            self._booster_clients.add(ws)
+        if data.get("status") == "ready":
+            overlay = data.get("overlay")
+            if overlay == "booster":
+                self._booster_clients.add(ws)
+            elif overlay == "fishing_record":
+                self._fishing_record_clients.add(ws)
         await self._on_status(data)
         for handler in self._extra_handlers:
             await handler(data)
@@ -103,6 +127,22 @@ class PlayerRoutes:
             except ConnectionError:
                 dead.append(ws)
         for ws in dead:
+            self._clients.discard(ws)
+
+    async def broadcast_fishing_record(self, payload: dict) -> None:
+        """Только клиентам fishing-record overlay (не шумим в плеер/бустер)."""
+        if not self._fishing_record_clients:
+            log.debug("Нет fishing-record overlay, событие пропущено")
+            return
+        msg = json.dumps(payload, ensure_ascii=False)
+        dead: list[web.WebSocketResponse] = []
+        for ws in list(self._fishing_record_clients):
+            try:
+                await ws.send_str(msg)
+            except ConnectionError:
+                dead.append(ws)
+        for ws in dead:
+            self._fishing_record_clients.discard(ws)
             self._clients.discard(ws)
 
     async def send_play(

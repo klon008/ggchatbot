@@ -185,9 +185,45 @@ ADMIN_ENERGY_CHAT = (
 )
 
 ADMIN_REWARDS_CHAT = (
-    "Итоги рыбалки недели! Топ по видам награждён принцессами. Рыбак недели — {name} ({species}, {weight} кг)!",
-    "Неделя закрыта: награды вручены. Кто в новом топе — решение за клёвом!",
+    "Итоги рыбалки недели! {payouts}. Всего выдано: {total} принцесс.",
 )
+
+ADMIN_REWARDS_CHAT_EMPTY = (
+    "Неделя рыбалки закрыта, но выплат не было (топ пуст или награды = 0).",
+)
+
+
+def format_week_rewards_announce(
+    *,
+    details: list[dict],
+    fow: dict | None,
+    fow_bonus: int,
+    payouts: dict[str, int],
+) -> str:
+    """Текст в чат после ручной выдачи недельных наград."""
+    total = sum(int(v) for v in payouts.values())
+    if total <= 0:
+        return pick(ADMIN_REWARDS_CHAT_EMPTY)
+
+    parts: list[str] = []
+    for row in details:
+        name = row.get("user_name") or row.get("user_id") or "?"
+        species = row.get("species") or "?"
+        reward = int(row.get("reward") or 0)
+        if reward <= 0:
+            continue
+        parts.append(f"{species}: {name} (+{reward})")
+
+    if fow is not None and fow_bonus > 0:
+        name = fow.get("user_name") or fow.get("user_id") or "?"
+        species = fow.get("species") or "?"
+        weight = float(fow.get("weight") or 0)
+        parts.append(
+            f"рыба недели: {name} — {species} {weight:.2f} кг (+{fow_bonus})"
+        )
+
+    payouts_str = "; ".join(parts) if parts else "—"
+    return pick(ADMIN_REWARDS_CHAT).format(payouts=payouts_str, total=total)
 
 
 def pick(pool: Sequence[str]) -> str:

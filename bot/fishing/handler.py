@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 from bot.db import Database
 from bot.db import fishing as fishing_db
@@ -18,6 +18,7 @@ from .settings import (
     CAST_ENERGY_COST,
     FIRST_FISH_BONUS,
     FISH_OF_WEEK_BONUS,
+    FISH_RECORD_ASSETS,
     FISH_SPECIES,
     FISHING_CMD,
     MAGGOT_COST,
@@ -28,6 +29,9 @@ from .settings import (
     WORMS_GAIN,
 )
 from .storage import FishingStorage
+
+if TYPE_CHECKING:
+    from bot.web.routes.player import PlayerRoutes
 
 log = logging.getLogger("fishing")
 
@@ -40,6 +44,7 @@ class FishingHandler:
         self.store = FishingStorage(db)
         self._reply: Optional[ReplyFn] = None
         self._points: Optional[PointsStore] = None
+        self._player: Optional["PlayerRoutes"] = None
 
     async def start(self) -> None:
         await fishing_db.ensure_meta(self._db)
@@ -62,11 +67,32 @@ class FishingHandler:
     def bind_points(self, store: PointsStore) -> None:
         self._points = store
 
+    def bind_obs(self, player: "PlayerRoutes") -> None:
+        self._player = player
+
     def _require_points(self) -> PointsStore:
         if self._points is None:
             raise RuntimeError("PointsStore not bound")
         return self._points
 
+    async def _push_week_record_overlay(
+        self, *, user_name: str, species: str, weight: float
+    ) -> None:
+        if self._player is None:
+            return
+        slug = FISH_RECORD_ASSETS.get(species)
+        if not slug:
+            log.warning("Нет ассета плашки для вида %r", species)
+            return
+        await self._player.broadcast_fishing_record(
+            {
+                "action": "fishing_record",
+                "userName": user_name,
+                "species": species,
+                "weight": round(float(weight), 2),
+                "imageUrl": f"/assets/fishing/{slug}.png",
+            }
+        )
     async def get_status(self) -> dict:
         await self.store.ensure_calendar()
         meta = await self.store.meta()
@@ -245,14 +271,12 @@ class FishingHandler:
         await self.store.clear_pending_rewards()
 
         if announce:
-            if fow is not None:
-                msg = texts.pick(texts.ADMIN_REWARDS_CHAT).format(
-                    name=fow["user_name"] or fow["user_id"],
-                    species=fow["species"],
-                    weight=f"{fow['weight']:.2f}",
-                )
-            else:
-                msg = "Неделя закрыта: награды вручены. Кто в новом топе — решение за клёвом!"
+            msg = texts.format_week_rewards_announce(
+                details=details,
+                fow=fow,
+                fow_bonus=fow_bonus,
+                payouts=payouts,
+            )
             await self._say(msg)
 
         status = await self.get_status()
@@ -358,6 +382,11 @@ class FishingHandler:
                     species=result.species,
                     species_lower=result.species.lower(),
                     weight=weight_s,
+                )
+                await self._push_week_record_overlay(
+                    user_name=msg.user_name,
+                    species=result.species,
+                    weight=float(result.weight),
                 )
             if flags.get("fish_of_week"):
                 result.message += " " + texts.pick(texts.WEEK_FISH_OF_WEEK).format(
