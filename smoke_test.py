@@ -685,9 +685,9 @@ async def main() -> int:
             assert "raceWrap" in body
             print("[OK] GET /races.html")
 
-        async with s.get(f"{base}/assets/princesses/elza.svg") as r:
+        async with s.get(f"{base}/assets/princesses/elza.webp") as r:
             assert r.status == 200, await r.text()
-            print("[OK] GET /assets/princesses/elza.svg")
+            print("[OK] GET /assets/princesses/elza.webp")
 
         race_user = "smoke-races-user"
         await bot.princess.points.set_balance(race_user, 10_000)

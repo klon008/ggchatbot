@@ -23,9 +23,12 @@ from .settings import (
     RACES_COOLDOWN_SEC,
     RACES_RACE_DELAY_SEC,
     FINISH_LINE,
-    RACE_TICK_SEC,
     RUNNERS_COUNT,
 )
+from . import settings as races_settings
+
+# Новые ключи появляются в settings.example.py; старый settings.py при update не мержится.
+RACE_DISPLAY_SEC = float(getattr(races_settings, "RACE_DISPLAY_SEC", 60.0))
 
 log = logging.getLogger("races")
 
@@ -53,6 +56,7 @@ class RoundManager:
         self._points: Optional[PointsStore] = None
         self._say: Optional[SayFn] = None
         self._remove: Optional[RemoveFn] = None
+        self._player = None  # Optional[PlayerRoutes] — избегаем цикличного импорта
         self._live_msg_id: Optional[str] = None
         self._timer_task: Optional[asyncio.Task] = None
         self._watchdog_task: Optional[asyncio.Task] = None
@@ -60,6 +64,8 @@ class RoundManager:
         self._collect_sec = RACES_COLLECT_SEC
         self._cooldown_sec = RACES_COOLDOWN_SEC
         self._race_delay_sec = RACES_RACE_DELAY_SEC
+        self._pending_race_done: Optional[asyncio.Future] = None
+        self._pending_race_round_id: Optional[int] = None
 
     def bind_points(self, store: PointsStore) -> None:
         self._points = store
@@ -69,6 +75,21 @@ class RoundManager:
 
     def bind_remove(self, remove: RemoveFn) -> None:
         self._remove = remove
+
+    def bind_obs(self, player) -> None:
+        self._player = player
+
+    def notify_race_done(self, round_id: object) -> None:
+        """OBS сообщил, что анимация закончилась (победителю не доверяем)."""
+        try:
+            rid = int(round_id)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return
+        if rid != self._pending_race_round_id:
+            return
+        fut = self._pending_race_done
+        if fut is not None and not fut.done():
+            fut.set_result(True)
 
     async def start(self) -> None:
         meta = await races_db.get_meta(self._db)
@@ -203,6 +224,24 @@ class RoundManager:
     async def get_bank(self) -> int:
         return await minigames_bank.get_bank(self._db)
 
+    async def format_odds_chat(self) -> str:
+        """Текст для !забег кэфы (одна строка)."""
+        meta = await races_db.get_meta(self._db)
+        if meta.state not in _ACTIVE_ROUND_STATES or not meta.round_id:
+            return f"Нет активного забега. Сначала откройте: {RACE_CMD}."
+
+        entries = await races_db.get_lineup(self._db, meta.round_id)
+        if not entries:
+            return f"Нет активного забега. Сначала откройте: {RACE_CMD}."
+
+        if meta.fixed_odds:
+            odds_map = {int(k): float(v) for k, v in meta.fixed_odds.items()}
+        else:
+            bet_list = await races_db.list_bets(self._db, meta.round_id)
+            odds_map = await odds.compute_odds(self._db, entries, bet_list)
+
+        return odds.format_odds_line(entries, odds_map)
+
     async def top_up_bank(self, amount: int) -> int:
         if amount <= 0:
             raise ValueError("amount must be positive")
@@ -251,7 +290,8 @@ class RoundManager:
         entries = await races_db.get_lineup(self._db, (await races_db.get_meta(self._db)).round_id)
         await self._chat(
             f"{user_name} открыл забег! {self._collect_sec} сек — ставки для чата. "
-            f"Состав: {lineup.format_lineup_short(entries)}"
+            f"Состав: {lineup.format_lineup_short(entries)} "
+            f"Узнай кэфы: !забег кэфы"
         )
         return None
 
@@ -437,43 +477,72 @@ class RoundManager:
         meta = await races_db.get_meta(self._db)
         if meta.state not in (STATE_OPEN, STATE_RACE_WAIT):
             return
-        await races_db.update_meta(self._db, state=STATE_RACE, race_progress={"tick": 0, "positions": {}})
 
-        entries = await races_db.get_lineup(self._db, meta.round_id)
-        bet_list = await races_db.list_bets(self._db, meta.round_id)
+        round_id = meta.round_id
+        await races_db.update_meta(
+            self._db,
+            state=STATE_RACE,
+            race_progress={"playing": True, "round_id": round_id},
+        )
+
+        entries = await races_db.get_lineup(self._db, round_id)
+        bet_list = await races_db.list_bets(self._db, round_id)
         odds_map_raw = meta.fixed_odds
         if not odds_map_raw:
             odds_map_raw = await odds.compute_odds(self._db, entries, bet_list)
             odds_map_raw = {str(k): round(v, 2) for k, v in odds_map_raw.items()}
         odds_map = {int(k): float(v) for k, v in odds_map_raw.items()}
 
-        win_rates: dict[int, float] = {}
-        for entry in entries:
-            stats = await races_db.get_princess_stats(self._db, entry.princess_name)
-            win_rates[entry.horse_number] = stats.wins_count / max(1, stats.races_count)
-
-        result = simulate.simulate_race(entries, win_rates=win_rates)
+        result = simulate.simulate_race(entries)
         name_by_horse = {e.horse_number: e.princess_name for e in entries}
-        race_commentator = commentary.RaceCommentator(name_by_horse, finish_line=FINISH_LINE)
+
+        display_sec = float(RACE_DISPLAY_SEC)
+
+        script = simulate.build_obs_script(
+            result,
+            entries,
+            display_sec=display_sec,
+            finish_line=FINISH_LINE,
+        )
+        display_sec = float(script["durationSec"])
+        script["roundId"] = round_id
+        script["lineup"] = [
+            {
+                "horse_number": e.horse_number,
+                "princess_name": e.princess_name,
+                "icon_slug": princess_icon_slug(e.princess_name),
+                "icon_url": princess_icon_path(e.princess_name),
+            }
+            for e in entries
+        ]
 
         await self._chat("Старт! Погнали!")
 
-        for tick in result.ticks:
-            progress = {
-                "tick": tick.tick,
-                "positions": {str(k): round(v, 1) for k, v in tick.positions.items()},
-            }
-            if tick.last_event:
-                progress["last_event"] = {
-                    "horse_number": tick.last_event.horse_number,
-                    "princess_name": tick.last_event.princess_name,
-                    "kind": tick.last_event.kind,
-                    "message": tick.last_event.message,
-                }
-            await races_db.update_meta(self._db, race_progress=progress)
-            for msg in race_commentator.on_tick(tick):
-                await self._chat_live(msg)
-            await asyncio.sleep(RACE_TICK_SEC)
+        loop = asyncio.get_running_loop()
+        self._pending_race_round_id = round_id
+        self._pending_race_done = loop.create_future()
+
+        has_obs = bool(self._player and self._player.has_races_clients)
+        if has_obs:
+            await self._player.broadcast_races({"action": "race_start", **script})
+            timeout = max(1.0, display_sec + 16.0)  # +countdown 10..1-Старт! и запас
+
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(self._pending_race_done), timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                log.info("Races: таймаут анимации (%.1fs), продолжаем выплаты", timeout)
+        else:
+            log.warning(
+                "Races OBS не подключён — пауза %.0fs без анимации (round=%s)",
+                display_sec,
+                round_id,
+            )
+            await asyncio.sleep(display_sec)
+
+        self._pending_race_done = None
+        self._pending_race_round_id = None
 
         bank_balance = await minigames_bank.get_bank(self._db)
         payout = payouts.calculate_payouts(

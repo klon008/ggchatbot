@@ -18,12 +18,9 @@
     }
     #raceWrap {
       position: fixed;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 800px;
-      max-width: 100vw;
-      height: 140px;
+      inset: 0;
+      width: 100%;
+      height: 100%;
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
@@ -37,15 +34,14 @@
     #raceStage {
       width: 100%;
       height: 100%;
-      padding: 12px 16px 14px;
+      padding: 8px 12px;
       box-sizing: border-box;
       background: rgba(0, 0, 0, 0.35);
-      border-top: 2px solid rgba(255, 217, 102, 0.35);
     }
     #track {
       position: relative;
       height: 100%;
-      overflow: visible;
+      overflow: hidden;
     }
     .track-line {
       position: absolute;
@@ -56,12 +52,13 @@
       transform: translateY(-50%);
       background: rgba(255, 255, 255, 0.25);
       border-radius: 2px;
+      z-index: 0;
     }
     #finishLine {
       position: absolute;
       right: 8px;
-      top: 8px;
-      bottom: 8px;
+      top: 4px;
+      bottom: 4px;
       width: 4px;
       background: repeating-linear-gradient(
         0deg,
@@ -74,16 +71,15 @@
       position: absolute;
       left: 8px;
       right: 40px;
-      top: 0;
-      bottom: 0;
+      top: 4px;
+      bottom: 10px;
       z-index: 2;
     }
     .runner {
       position: absolute;
-      bottom: 50%;
+      top: 0;
       left: 0;
-      transform: translateY(0);
-      transition: left 0.35s linear, transform 0.35s linear;
+      will-change: transform;
     }
     .runner-icon {
       width: 40px;
@@ -91,21 +87,191 @@
       border-radius: 50%;
       object-fit: cover;
       border: 2px solid #fff;
+      box-sizing: border-box;
       background: #5a5a8a;
+      display: block;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+      transition: border-color 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+    }
+    .runner-icon.is-boost {
+      border-color: #3ddc84;
+      box-shadow: 0 2px 10px rgba(61, 220, 132, 0.55);
+    }
+    .runner-icon.is-slow {
+      border-color: #8b1e3f;
+      box-shadow: 0 2px 10px rgba(139, 30, 63, 0.55);
+    }
+    .runner-icon.is-stun {
+      border-color: #9a9a9a;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+      filter: grayscale(0.4);
+    }
+    .runner-num {
+      position: absolute;
+      right: -4px;
+      bottom: -4px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: #111;
+      border: 1.5px solid #ffd966;
+      color: #ffd966;
+      font: 700 10px/16px "Segoe UI", system-ui, sans-serif;
+      text-align: center;
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .runner.is-winner .runner-icon {
+      border-color: #ffd966;
+      box-shadow: 0 0 14px rgba(255, 217, 102, 0.75);
+    }
+    .runner-fx {
+      position: absolute;
+      z-index: 6;
+      pointer-events: none;
+      font: 800 15px/1 "Segoe UI", system-ui, sans-serif;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+      will-change: transform, opacity;
+    }
+    .runner-fx.is-boost {
+      left: calc(100% + 2px);
+      top: 8%;
+      color: #3ddc84;
+      animation: runner-fx-float 0.85s ease-out forwards;
+    }
+    .runner-fx.is-slow {
+      left: calc(100% + 2px);
+      top: -4%;
+      color: #ff4d6a;
+      animation: runner-fx-fall 0.9s ease-in forwards;
+    }
+    .runner-fx.is-stun {
+      right: -2px;
+      top: -6px;
+      left: auto;
+      color: #d0d0d0;
+      font-size: 12px;
+      letter-spacing: -0.04em;
+      animation: runner-fx-blink 0.7s ease-in-out forwards;
+    }
+    @keyframes runner-fx-float {
+      0% {
+        opacity: 1;
+        transform: translateY(0) scale(0.85);
+      }
+      18% {
+        opacity: 1;
+        transform: translateY(-6px) scale(1.1);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-24px) scale(1);
+      }
+    }
+    @keyframes runner-fx-fall {
+      0% {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.9);
+      }
+      18% {
+        opacity: 1;
+        transform: translateY(0) scale(1.1);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(22px) scale(1);
+      }
+    }
+    @keyframes runner-fx-blink {
+      0%, 100% { opacity: 0; }
+      15%, 45% { opacity: 1; }
+      30%, 60% { opacity: 0.15; }
+      75% { opacity: 1; }
+    }
+    .runner-trail {
+      position: absolute;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 3;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
+      animation: runner-trail-fade 3.7s linear forwards;
+      will-change: opacity;
+    }
+    .runner-trail.is-boost {
+      background: rgba(61, 220, 132, 0.95);
+      box-shadow: 0 0 5px rgba(61, 220, 132, 0.4);
+    }
+    .runner-trail.is-slow {
+      background: rgba(255, 77, 106, 0.9);
+      box-shadow: 0 0 4px rgba(255, 77, 106, 0.35);
+    }
+    @keyframes runner-trail-fade {
+      0% { opacity: 0.95; }
+      70% { opacity: 0.55; }
+      100% { opacity: 0; }
+    }
+    #countdown {
+      position: absolute;
+      inset: 0;
+      z-index: 12;
       display: flex;
       align-items: center;
       justify-content: center;
+      pointer-events: none;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-weight: 800;
+      font-size: clamp(52px, 42vh, 140px);
+      line-height: 1;
       color: #fff;
-      font: 700 14px "Segoe UI", system-ui, sans-serif;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+      letter-spacing: 0.02em;
+      text-shadow:
+        0 2px 0 rgba(0, 0, 0, 0.35),
+        0 8px 28px rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      transform: scale(0.5);
+      visibility: hidden;
+    }
+    #countdown.is-visible {
+      visibility: visible;
+    }
+    #countdown.is-go {
+      color: #ffd966;
+      font-size: clamp(40px, 28vh, 96px);
+      letter-spacing: 0.06em;
+    }
+    #countdown.is-anim {
+      animation: countdownPop 0.9s cubic-bezier(0.22, 1.15, 0.36, 1) forwards;
+    }
+    @keyframes countdownPop {
+      0% {
+        opacity: 0;
+        transform: scale(0.45);
+      }
+      18% {
+        opacity: 1;
+        transform: scale(1.18);
+      }
+      42% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(1.4);
+      }
     }
     aside#debugPanel {
       display: none;
       position: fixed;
       left: 12px;
       right: 12px;
-      bottom: 152px;
-      max-height: 38vh;
+      top: 8px;
+      max-height: 42vh;
       overflow: auto;
       padding: 10px 12px;
       background: rgba(10, 10, 18, 0.92);
@@ -113,6 +279,7 @@
       border-radius: 8px;
       color: #d8d8ec;
       font: 12px/1.45 Consolas, monospace;
+      z-index: 20;
     }
   </style>
 </head>
@@ -123,6 +290,7 @@
         <div class="track-line"></div>
         <div id="finishLine"></div>
         <div id="runners"></div>
+        <div id="countdown" aria-hidden="true"></div>
       </div>
     </div>
   </div>

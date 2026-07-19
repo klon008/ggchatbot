@@ -128,12 +128,14 @@ class StreamBot:
         self.cards.bind_reply(self._reply)
         self.cards.bind_obs(self.sr.player)
         self.fishing.bind_obs(self.sr.player)
+        self.races.bind_obs(self.sr.player)
         log.info("Бустер OBS: http://%s:%d/booster.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info(
             "Рыбалка-рекорд OBS: http://%s:%d/fishing-record.html",
             self.cfg.obs_host,
             self.cfg.obs_port,
         )
+        log.info("Забег OBS: http://%s:%d/races.html", self.cfg.obs_host, self.cfg.obs_port)
         await self.gg.run()
 
     async def close(self) -> None:

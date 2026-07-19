@@ -57,3 +57,7 @@ env/
 
 Thumbs.db
 
+# Source princess icons (heavy); production copies live in obs/assets/princesses/*.webp
+obs/assets/zabeg/
+obs/assets/zabeg.rar
+

@@ -57,4 +57,4 @@ def princess_icon_slug(name: str) -> str:
 
 def princess_icon_path(name: str) -> str:
     slug = princess_icon_slug(name)
-    return f"/assets/princesses/{slug}.svg"
+    return f"/assets/princesses/{slug}.webp"

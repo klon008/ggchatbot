@@ -32,13 +32,14 @@ class PayoutResult:
     new_bank: int
 
 
-def _ideal_for_place(full_win: int, place: int) -> int:
+def _ideal_for_place(full_win: int, stake: int, place: int) -> int:
+    """1-е: полный выигрыш; 2–3: доля от полного, но не меньше возврата ставки."""
     if place == 1:
         return full_win
     if place == 2:
-        return int(full_win * PLACE2_PAYOUT_RATIO)
+        return max(stake, int(full_win * PLACE2_PAYOUT_RATIO))
     if place == 3:
-        return int(full_win * PLACE3_PAYOUT_RATIO)
+        return max(stake, int(full_win * PLACE3_PAYOUT_RATIO))
     return 0
 
 
@@ -58,7 +59,7 @@ def calculate_payouts(
             continue
         coeff = odds.get(bet.horse_number, 1.0)
         full_win = int(bet.amount * coeff)
-        ideal = _ideal_for_place(full_win, place)
+        ideal = _ideal_for_place(full_win, bet.amount, place)
         if ideal <= 0:
             continue
         winners.append(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 from bot.db import Database
 from bot.economy.points import PointsStore
@@ -15,9 +15,13 @@ from .bets import (
     RACE_ADMIN_RESET_CMD,
     RACE_ADMIN_TOPUP_CMD,
     RACE_CMD,
+    RACE_ODDS_CMD,
     RACE_RULES_CMD,
 )
 from .round import RoundManager
+
+if TYPE_CHECKING:
+    from bot.web.routes.player import PlayerRoutes
 
 log = logging.getLogger("races")
 
@@ -31,6 +35,7 @@ class RacesHandler:
         self.admin_user_id = str(admin_user_id)
         self.rounds = RoundManager(db)
         self._reply: Optional[ReplyFn] = None
+        self._player: Optional["PlayerRoutes"] = None
 
     async def start(self) -> None:
         await self.rounds.start()
@@ -48,6 +53,16 @@ class RacesHandler:
 
     def bind_points(self, store: PointsStore) -> None:
         self.rounds.bind_points(store)
+
+    def bind_obs(self, player: "PlayerRoutes") -> None:
+        self._player = player
+        self.rounds.bind_obs(player)
+        player.add_status_handler(self._on_obs_status)
+
+    async def _on_obs_status(self, data: dict[str, Any]) -> None:
+        if data.get("status") != "race_done":
+            return
+        self.rounds.notify_race_done(data.get("roundId"))
 
     async def get_status(self) -> dict:
         return await self.rounds.status_snapshot()
@@ -84,6 +99,10 @@ class RacesHandler:
 
         if lower == RACE_RULES_CMD:
             await self._say(bets.RULES_TEXT)
+            return True
+
+        if lower == RACE_ODDS_CMD:
+            await self._say(await self.rounds.format_odds_chat())
             return True
 
         cmd = lower.split(maxsplit=1)[0] if lower.startswith("!") else ""
