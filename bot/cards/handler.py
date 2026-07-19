@@ -34,7 +34,6 @@ ReplyFn = Callable[[str], Awaitable[None]]
 # Таймаут ожидания OBS: N * 4.2s + 5s
 _CARD_ANIM_SEC = 4.2
 _ANIM_BASE_SEC = 5.0
-_NO_CLIENTS_DELAY_SEC = 0.05
 
 # NBSP / узкие пробелы — str.split их не режет
 _UNICODE_SPACES_RE = re.compile(
@@ -167,6 +166,9 @@ class CardsHandler:
         elif speed > cards_db.ANIM_SPEED_MAX:
             speed = cards_db.ANIM_SPEED_MAX
 
+        timeout = (len(result.rolls) * _CARD_ANIM_SEC + _ANIM_BASE_SEC) / speed
+        timeout = max(3.0, timeout)
+
         has_clients = bool(self._player and self._player.has_booster_clients)
         fut: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
         self._pending_opens[opening_id] = fut
@@ -177,10 +179,6 @@ class CardsHandler:
                         opening_id, user_name, result, anim_speed=speed
                     )
                 )
-                timeout = (
-                    len(result.rolls) * _CARD_ANIM_SEC + _ANIM_BASE_SEC
-                ) / speed
-                timeout = max(3.0, timeout)
                 try:
                     await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
                 except asyncio.TimeoutError:
@@ -191,7 +189,14 @@ class CardsHandler:
                         speed,
                     )
             else:
-                await asyncio.sleep(_NO_CLIENTS_DELAY_SEC)
+                # Нет booster.html на /ws — имитируем длительность анимации,
+                # чтобы нельзя было отспамить !бустер, и орём в CLI админу.
+                _warn_booster_obs_disconnected(
+                    user_name=user_name,
+                    cards=len(result.rolls),
+                    wait_sec=timeout,
+                )
+                await asyncio.sleep(timeout)
         finally:
             self._pending_opens.pop(opening_id, None)
 
@@ -309,3 +314,26 @@ class CardsHandler:
             log.debug("Cards (no reply): %s", text)
             return
         await self._reply(text)
+
+
+def _warn_booster_obs_disconnected(
+    *, user_name: str, cards: int, wait_sec: float
+) -> None:
+    """Красное предупреждение в CLI: booster.html не на WebSocket."""
+    red = "\033[91m"
+    bold = "\033[1m"
+    reset = "\033[0m"
+    msg = (
+        f"{bold}{red}⚠ Бустер: WebSocket не подключён к OBS (booster.html)!\n"
+        f"   Открытие «{user_name}» ({cards} карт) — анимация пропущена, "
+        f"ждём ~{wait_sec:.0f} с как при анимации.\n"
+        f"   В OBS: ПКМ по источнику booster → Обновить "
+        f"(URL: …/booster.html).{reset}"
+    )
+    print(msg, flush=True)
+    log.error(
+        "Booster OBS disconnected: user=%s cards=%d wait=%.1fs — refresh booster.html",
+        user_name,
+        cards,
+        wait_sec,
+    )
