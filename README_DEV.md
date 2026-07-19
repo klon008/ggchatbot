@@ -152,9 +152,11 @@ botmsc/
 │   ├── commands.html
 │   └── mermaid.min.js
 │
-└── data/                        # runtime data (.gitignore)
-    ├── bot.db                   # единая SQLite БД
-    └── *.json.bak               # архив после миграции
+├── data/                        # runtime data (.gitignore)
+│   ├── bot.db                   # единая SQLite БД
+│   └── *.json.bak               # архив после миграции
+│
+└── logs/                        # bot.log + ротация (.gitignore)
 ```
 
 ---
@@ -163,7 +165,7 @@ botmsc/
 
 ### `main.py`
 
-1. Настраивает `logging` (уровень INFO, формат с именем логгера).
+1. Настраивает `logging`: консоль + `logs/bot.log` (RotatingFileHandler, ~5 МБ × 5).
 2. Загружает `Config.load()`.
 3. Создаёт `StreamBot(cfg)` и вызывает `await bot.run()`.
 4. При завершении (Ctrl+C) — `await bot.close()`.
@@ -266,7 +268,10 @@ Dataclass входящего сообщения:
 1. `{type: "auth", data: {user_id, token}}` (если есть токен)
 2. `{type: "join", data: {channel_id, hidden: 0}}`
 
-**Reconnect:** exponential backoff 1→2→4→…→30 сек, перед каждым переподключением — повторный `chatlogin`.
+**Reconnect:** exponential backoff 1→2→4→…→30 сек; перед каждым переподключением —
+повторный `chatlogin` (до 3 попыток). Старый `token` при ошибке HTTP не затирается.
+После `auth` ждём `success_auth` (таймаут ~8с); иначе join в readonly и красный WARN в CLI.
+`send_message` без auth не шлёт (ERROR в лог), чтобы не казалось, что «бот молчит без причины».
 
 **Фильтрация:** собственные сообщения бота (`msg.user_id == self.user_id`) не передаются в `on_message` — иначе петля ответов. Echo своих сообщений используется для возврата `message_id` из `send_message`.
 

@@ -17,6 +17,10 @@ bot/fishing/settings.py
 
 data/
 
+# Runtime logs (rotating bot.log)
+
+logs/
+
 oldbot/
 
 
