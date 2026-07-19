@@ -44,6 +44,7 @@ class Config:
     clo_exe_path: str
     clo_token: str
     clo_public_url: str
+    frontend_root: str
 
     @classmethod
     def load(cls) -> "Config":
@@ -71,4 +72,5 @@ class Config:
             clo_exe_path=os.getenv("CLO_EXE_PATH", default_clo).strip() or default_clo,
             clo_token=os.getenv("CLO_TOKEN", "").strip(),
             clo_public_url=os.getenv("CLO_PUBLIC_URL", "").strip(),
+            frontend_root=os.getenv("FRONTEND_ROOT", "").strip(),
         )

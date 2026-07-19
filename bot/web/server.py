@@ -6,6 +6,8 @@ from typing import Optional
 
 from aiohttp import web
 
+from bot.cards.series_pack.models import MAX_UPLOAD_BYTES
+
 log = logging.getLogger("web")
 
 
@@ -13,7 +15,8 @@ class LocalWebServer:
     def __init__(self, host: str, port: int) -> None:
         self.host = host
         self.port = port
-        self._app = web.Application()
+        # default aiohttp = 1 MiB → 413 на multipart series-pack
+        self._app = web.Application(client_max_size=MAX_UPLOAD_BYTES)
         self._runner: Optional[web.AppRunner] = None
 
     @property

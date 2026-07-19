@@ -4,13 +4,30 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 from aiohttp import web
 
 from bot.cards.card_stories import STORIES_SOURCE_REL, load_card_stories
+from bot.cards.series_pack.conflicts import check_step_conflicts
+from bot.cards.series_pack.models import (
+    DEFAULT_CARD_BACK_ID,
+    MAX_UPLOAD_BYTES,
+    RARITIES,
+    RARITY_COLORS,
+)
+from bot.cards.series_pack.service import (
+    ImportBusyError,
+    build_pack_zip,
+    draft_from_meta,
+    import_pack_zip,
+)
 from bot.db import cards as cards_db
 from bot.web.api import error_response, json_response, read_json
+from config import Config
 
 if TYPE_CHECKING:
     from bot.db import Database
@@ -75,6 +92,10 @@ class CardsAdminRoutes:
                 web.post("/api/cards/draws/{draw_id}/pause", self._draws_pause),
                 web.post("/api/cards/draws/{draw_id}/close", self._draws_close),
                 web.post("/api/cards/draws/{draw_id}/copy", self._draws_copy),
+                web.get("/api/cards/series-pack/config", self._series_pack_config),
+                web.post("/api/cards/series-pack/check", self._series_pack_check),
+                web.post("/api/cards/series-pack/build", self._series_pack_build),
+                web.post("/api/cards/series-pack/import", self._series_pack_import),
             ]
         )
 
@@ -347,3 +368,175 @@ class CardsAdminRoutes:
             return error_response("Исходный тираж не найден", status=404)
         item = await cards_db.get_draw(self._db, new_id)
         return json_response(item, status=201)
+
+    async def _series_pack_config(self, request: web.Request) -> web.Response:
+        cfg = Config.load()
+        return json_response(
+            {
+                "frontend_root": cfg.frontend_root,
+                "rarities": list(RARITIES),
+                "rarity_colors": dict(RARITY_COLORS),
+                "max_upload_bytes": MAX_UPLOAD_BYTES,
+                "default_card_back_id": DEFAULT_CARD_BACK_ID,
+            }
+        )
+
+    async def _series_pack_check(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        try:
+            step = int(data.get("step", -1))
+        except (TypeError, ValueError):
+            return error_response("step должен быть 0–3")
+        if step not in (0, 1, 2, 3):
+            return error_response("step должен быть 0–3")
+        payload = data.get("payload")
+        if not isinstance(payload, dict):
+            payload = {k: v for k, v in data.items() if k != "step"}
+        errs = await check_step_conflicts(self._db, step=step, payload=payload)
+        return json_response({"ok": not errs, "errors": errs})
+
+    def _check_upload_size(self, request: web.Request) -> Optional[web.Response]:
+        cl = request.headers.get("Content-Length")
+        if cl is not None:
+            try:
+                if int(cl) > MAX_UPLOAD_BYTES:
+                    return error_response(
+                        f"Слишком большой upload (лимит {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
+                        status=413,
+                    )
+            except ValueError:
+                pass
+        return None
+
+    async def _series_pack_build(self, request: web.Request) -> web.StreamResponse:
+        oversized = self._check_upload_size(request)
+        if oversized is not None:
+            return oversized
+
+        if not request.content_type.startswith("multipart/"):
+            return error_response("Ожидается multipart/form-data")
+
+        tmp = Path(tempfile.mkdtemp(prefix="series-pack-build-"))
+        try:
+            meta: Optional[dict[str, Any]] = None
+            back_path: Optional[Path] = None
+            card_paths: dict[str, Path] = {}
+
+            reader = await request.multipart()
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                name = part.name or ""
+                if name == "meta":
+                    raw = await part.text()
+                    try:
+                        parsed = json.loads(raw)
+                    except json.JSONDecodeError:
+                        return error_response("meta: некорректный JSON")
+                    if not isinstance(parsed, dict):
+                        return error_response("meta: ожидается объект")
+                    meta = parsed
+                elif name == "back":
+                    data = await part.read(decode=False)
+                    if len(data) > MAX_UPLOAD_BYTES:
+                        return error_response("Файл рубашки слишком большой", status=413)
+                    back_path = tmp / "back.svg"
+                    back_path.write_bytes(data)
+                elif name.startswith("card_"):
+                    cid = name[5:].strip().lower()
+                    data = await part.read(decode=False)
+                    if not cid:
+                        continue
+                    # keep original suffix if any
+                    filename = part.filename or f"{cid}.png"
+                    suffix = Path(filename).suffix.lower() or ".png"
+                    dest = tmp / f"{cid}{suffix}"
+                    dest.write_bytes(data)
+                    card_paths[cid] = dest
+
+            if meta is None:
+                return error_response("Нужно поле meta (JSON)")
+
+            draft = draft_from_meta(meta, back_path=back_path, card_paths=card_paths)
+            out_dir = tmp / "out"
+            zip_path, errs = build_pack_zip(draft, out_dir)
+            if errs or zip_path is None:
+                return json_response({"ok": False, "errors": errs}, status=400)
+
+            body = zip_path.read_bytes()
+            return web.Response(
+                body=body,
+                status=200,
+                headers={
+                    "Content-Type": "application/zip",
+                    "Content-Disposition": f'attachment; filename="{zip_path.name}"',
+                },
+            )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    async def _series_pack_import(self, request: web.Request) -> web.Response:
+        oversized = self._check_upload_size(request)
+        if oversized is not None:
+            return oversized
+
+        if not request.content_type.startswith("multipart/"):
+            return error_response("Ожидается multipart/form-data")
+
+        cfg = Config.load()
+        tmp = Path(tempfile.mkdtemp(prefix="series-pack-import-"))
+        try:
+            zip_path: Optional[Path] = None
+            apply_frontend = False
+            frontend_root_raw = cfg.frontend_root
+            dry_run = False
+
+            reader = await request.multipart()
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                name = part.name or ""
+                if name == "file":
+                    data = await part.read(decode=False)
+                    if len(data) > MAX_UPLOAD_BYTES:
+                        return error_response("ZIP слишком большой", status=413)
+                    zip_path = tmp / "pack.zip"
+                    zip_path.write_bytes(data)
+                elif name == "apply_frontend":
+                    apply_frontend = (await part.text()).strip() in ("1", "true", "yes", "on")
+                elif name == "frontend_root":
+                    frontend_root_raw = (await part.text()).strip()
+                elif name == "dry_run":
+                    dry_run = (await part.text()).strip() in ("1", "true", "yes", "on")
+
+            if zip_path is None or not zip_path.is_file():
+                return error_response("Нужен файл file (.zip)")
+
+            fe_path = Path(frontend_root_raw) if frontend_root_raw else None
+            try:
+                result = await import_pack_zip(
+                    zip_path,
+                    self._db,
+                    apply_frontend_flag=apply_frontend,
+                    frontend_root=fe_path if apply_frontend else None,
+                    dry_run=dry_run,
+                )
+            except ImportBusyError as exc:
+                return json_response(
+                    {"ok": False, "errors": [str(exc)]},
+                    status=409,
+                )
+            except Exception as exc:
+                return json_response(
+                    {"ok": False, "errors": [str(exc)]},
+                    status=500,
+                )
+
+            status = 200 if result.get("ok") else 400
+            return json_response(result, status=status)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)

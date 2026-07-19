@@ -83,6 +83,8 @@ class AdminRoutes:
                 web.get("/cards-admin.js", self._handle_cards_admin_js),
                 web.get("/promo-generator.html", self._handle_promo_generator_html),
                 web.get("/promo-generator.js", self._handle_promo_generator_js),
+                web.get("/series-pack.html", self._handle_series_pack_html),
+                web.get("/series-pack.js", self._handle_series_pack_js),
                 web.get("/api/points", self._api_points_list),
                 web.get("/api/points/{user_id}", self._api_points_get),
                 web.post("/api/points", self._api_points_create),
@@ -146,6 +148,12 @@ class AdminRoutes:
         return await serve_obs_file(
             "promo-generator.js", "application/javascript; charset=utf-8"
         )
+
+    async def _handle_series_pack_html(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("series-pack.html", "text/html; charset=utf-8")
+
+    async def _handle_series_pack_js(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("series-pack.js", "application/javascript; charset=utf-8")
 
     async def _handle_roulette_html(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("roulette.html", "text/html; charset=utf-8")

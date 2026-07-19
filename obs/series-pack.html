@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Series Pack — новая серия</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d12;
+      --panel: #141820;
+      --border: #2a3344;
+      --text: #e8e4d8;
+      --muted: #9aa3b2;
+      --accent: #7eb0ff;
+      --ok: #6bcf8e;
+      --err: #e07070;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 20px 18px 48px; }
+    h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+    .subtitle { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+    .page-nav { margin: 0 0 16px; font-size: 13px; }
+    .page-nav a { color: var(--accent); text-decoration: none; }
+    .page-nav a:hover { text-decoration: underline; }
+
+    .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+    .tab {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .tab.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: #1a2438;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    label.field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    label.field.full { grid-column: 1 / -1; }
+    input[type="text"],
+    input[type="number"],
+    input[type="url"],
+    select,
+    textarea {
+      background: #0e121a;
+      color: var(--text);
+      border: 1px solid #334056;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 13px;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    .hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .memo {
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, #1a2438 0%, #141c2a 100%);
+      border: 1px solid #2e3d58;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #d2d8e4;
+    }
+    .memo strong { color: #fff; font-weight: 600; }
+    .memo ol, .memo ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+    .memo li { margin: 4px 0; }
+    .memo code {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.92em;
+      color: #b8d4ff;
+      background: #0e121a;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .memo .ex {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #2a3344;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .steps {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .step-pill {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .step-pill.on {
+      border-color: var(--accent);
+      color: var(--text);
+      background: #1a2438;
+    }
+    .step { display: none; }
+    .step.active { display: block; }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    button, .btn {
+      background: #1e2a40;
+      color: var(--text);
+      border: 1px solid #3a4a66;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button.primary {
+      background: #2a4a7a;
+      border-color: var(--accent);
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.danger { border-color: #6a3030; color: #f0b0b0; }
+
+    .drop {
+      border: 1px dashed #3a4a66;
+      border-radius: 8px;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      background: #0e121a;
+      cursor: pointer;
+    }
+    .drop.drag { border-color: var(--accent); color: var(--text); }
+
+    .file-pick {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      background: #0e121a;
+      border: 1px solid #334056;
+      border-radius: 8px;
+    }
+    .file-pick button {
+      flex: 0 0 auto;
+    }
+    .file-pick .file-name {
+      flex: 1 1 160px;
+      font-size: 13px;
+      color: var(--text);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-pick .file-name.is-empty { color: var(--muted); }
+    .file-pick .file-clear {
+      border-color: #6a3030;
+      color: #f0b0b0;
+      padding: 6px 10px;
+    }
+    .file-pick input[type="file"] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .card-row {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid #1e2633;
+    }
+    .card-row:last-child { border-bottom: none; }
+    .thumb {
+      width: 72px;
+      height: 76px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #0e121a;
+      border: 1px solid var(--border);
+    }
+    .card-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .weights {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      align-items: center;
+    }
+    .weight-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      flex: 0 0 auto;
+    }
+    .weight-row input { width: 64px; }
+    .pct { color: var(--muted); min-width: 40px; }
+
+    #statusBar {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #121820;
+      border: 1px solid var(--border);
+      font-size: 13px;
+      margin-bottom: 14px;
+      white-space: pre-wrap;
+    }
+    #statusBar.err { border-color: #6a3030; color: #f0c0c0; }
+    #statusBar.ok { border-color: #2a5a3a; color: #c0f0d0; }
+
+    .log {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+      background: #0e121a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      max-height: 280px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      margin: 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Series Pack</h1>
+    <p class="subtitle">Сборка ZIP новой серии и импорт в бот</p>
+    <p class="page-nav">
+      <a href="cards-admin.html">← Карты</a>
+      ·
+      <a href="admin.html">Админ-панель</a>
+    </p>
+
+    <div id="statusBar">Готово</div>
+
+    <div class="tabs">
+      <button type="button" class="tab active" data-mode="build">Собрать ZIP</button>
+      <button type="button" class="tab" data-mode="import">Импорт ZIP</button>
+    </div>
+
+    <section id="panel-build" class="panel active">
+      <div class="steps" id="stepPills"></div>
+
+      <div class="step active" data-step="0">
+        <div class="card">
+          <h2>1. Серия</h2>
+          <div class="memo">
+            <strong>Что это?</strong> Серия — пачка новых карт одной темы (как альбом).
+            <ol>
+              <li><strong>ID серии</strong> — технический код латиницей, без пробелов. Его видит только система.
+                Пример: <code>winter-tales</code></li>
+              <li><strong>Название</strong> — как люди увидят серию. Можно по-русски: «Зимние сказки».</li>
+              <li><strong>Рубашка</strong> — картинка «рубашки» карты (задняя сторона). Можно <em>не выбирать</em> —
+                тогда будет обычная дефолтная. Если выберете свой SVG, ID рубашки подставится сам
+                (<code>card-back-</code> + ID серии).</li>
+              <li><strong>Порядок</strong> — число для сортировки в списке (обычно оставьте <code>1</code>).</li>
+            </ol>
+            <div class="ex">Дальше → проверка, что такого ID и названия ещё нет в базе.</div>
+          </div>
+          <div class="grid">
+            <label class="field">ID серии
+              <input type="text" id="seriesId" placeholder="winter-tales" autocomplete="off" spellcheck="false" />
+              <span class="hint">латиница, без пробелов (a-z, 0-9, -, _)</span>
+            </label>
+            <label class="field">Название серии
+              <input type="text" id="seriesName" placeholder="Зимние сказки" />
+            </label>
+            <label class="field">ID рубашки
+              <input type="text" id="cardBackId" placeholder="card-back" spellcheck="false" />
+              <span class="hint">пусто = card-back (дефолт)</span>
+            </label>
+            <label class="field">Порядок
+              <input type="number" id="sortOrder" value="1" min="0" />
+            </label>
+            <label class="field full">Рубашка (.svg) — необязательно
+              <div class="file-pick" id="backPick">
+                <button type="button" id="backPickBtn">Выбрать SVG</button>
+                <span class="file-name is-empty" id="backFileName">файл не выбран — будет дефолт</span>
+                <button type="button" class="file-clear" id="backClearBtn" hidden>Сбросить</button>
+                <input type="file" id="backFile" accept=".svg,image/svg+xml" tabindex="-1" />
+              </div>
+              <span class="hint">если не выбрана — берём obs/assets/cards/card-back.svg</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="step" data-step="1">
+        <div class="card">
+          <h2>2. Карточки</h2>
+          <div class="memo">
+            <strong>Что делать?</strong> Закиньте портреты персонажей (можно пачкой).
+            <ol>
+              <li>Перетащите файлы в зону ниже <em>или</em> кликните по ней <em>или</em> вставьте из буфера (Ctrl+V).</li>
+              <li>Для каждой карты проверьте:
+                <ul>
+                  <li><strong>ID карты</strong> — латиница без пробелов (из имени файла, можно поправить).</li>
+                  <li><strong>Имя</strong> — как зовут персонажа (по-русски можно).</li>
+                  <li><strong>Редкость</strong> — common / rare / epic…</li>
+                  <li><strong>Описание</strong> — короткий лор, обязателен.</li>
+                </ul>
+              </li>
+            </ol>
+            <div class="ex">Картинки сами обрежутся до размера карты. Нужна хотя бы одна карта.</div>
+          </div>
+          <div class="drop" id="cardDrop">Перетащите изображения сюда или кликните для выбора<br />
+            <span class="hint">png / jpg / webp · Ctrl+V тоже работает</span>
+          </div>
+          <input type="file" id="cardFiles" accept="image/*" multiple hidden />
+          <div id="cardsList"></div>
+        </div>
+      </div>
+
+      <div class="step" data-step="2">
+        <div class="card">
+          <h2>3. Бустер</h2>
+          <div class="memo">
+            <strong>Что это?</strong> Бустер — «пачка», которую открывают игроки. Обычно совпадает с серией.
+            <ol>
+              <li><strong>ID бустера</strong> — чаще всего тот же, что ID серии (подставится сам).</li>
+              <li><strong>Название</strong> — как пачка называется у людей (подставится из названия серии).</li>
+              <li><strong>Promo URL</strong> — ссылка на картинку промо бустера. Можно оставить пустым
+                и сделать промо позже в Promo generator.</li>
+            </ol>
+            <div class="ex">Если не уверены — просто нажмите «Далее»: поля уже заполнены.</div>
+          </div>
+          <div class="grid">
+            <label class="field">ID бустера
+              <input type="text" id="boosterId" spellcheck="false" />
+              <span class="hint">латиница, без пробелов</span>
+            </label>
+            <label class="field">Название бустера
+              <input type="text" id="boosterName" />
+            </label>
+            <label class="field full">Promo URL (необязательно)
+              <input type="url" id="promoUrl" placeholder="https://…" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="step" data-step="3">
+        <div class="card">
+          <h2>4. Тираж</h2>
+          <div class="memo">
+            <strong>Что это?</strong> Тираж — «выпуск» бустера в продажу: цена, сколько карт выпадает, шансы редкостей.
+            <ol>
+              <li><strong>ID тиража</strong> — подставится как <code>draw-{серия}-001</code>.</li>
+              <li><strong>Название</strong> — например «Тираж № 001».</li>
+              <li><strong>Цена</strong> — сколько очков стоит одно открытие.</li>
+              <li><strong>Карт за открытие</strong> — сколько карт выпадает за раз (обычно 6).</li>
+              <li><strong>Дневной лимит</strong> — сколько раз в день можно открыть; <code>0</code> = без лимита.</li>
+              <li><strong>Веса редкостей</strong> — чем больше число, тем чаще выпадает эта редкость.
+                Для редкостей, которых нет в ваших картах, вес должен быть = 0.</li>
+            </ol>
+            <div class="ex">
+              После «Собрать и скачать ZIP» — <strong>обязательно</strong> отправьте архив сюда:
+              <a href="https://t.me/klon_008" target="_blank" rel="noopener" style="color:var(--accent)">https://t.me/klon_008</a>
+              (без этого серия не попадёт в релиз).
+            </div>
+          </div>
+          <div class="grid">
+            <label class="field">ID тиража
+              <input type="text" id="drawId" spellcheck="false" />
+              <span class="hint">латиница, без пробелов</span>
+            </label>
+            <label class="field">Название тиража
+              <input type="text" id="drawName" value="Тираж № 001" />
+            </label>
+            <label class="field">Цена (очки)
+              <input type="number" id="costPoints" value="15000" min="1" />
+            </label>
+            <label class="field">Карт за открытие
+              <input type="number" id="cardsPerOpen" value="6" min="1" />
+            </label>
+            <label class="field">Дневной лимит (0 = без)
+              <input type="number" id="dailyLimit" value="0" min="0" />
+            </label>
+          </div>
+          <h2 style="margin-top:16px">Веса редкостей</h2>
+          <div class="weights" id="weights"></div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button type="button" id="btnPrev">Назад</button>
+        <button type="button" class="primary" id="btnNext">Далее</button>
+        <button type="button" class="primary" id="btnBuild" hidden>Собрать и скачать ZIP</button>
+      </div>
+    </section>
+
+    <section id="panel-import" class="panel">
+      <div class="card">
+        <h2>Импорт ZIP</h2>
+        <div class="memo">
+          <strong>Зачем?</strong> Загрузить уже собранный ZIP в бота (картинки + база).
+          <ol>
+            <li>Выберите ZIP, который скачали во вкладке «Собрать ZIP».</li>
+            <li><strong>Dry-run</strong> — только проверка, ничего не пишет. Сначала лучше его.</li>
+            <li><strong>Импортировать</strong> — реально запишет серию. Тираж будет «в очереди»
+              → включите его в <a href="cards-admin.html" style="color:var(--accent)">Картах → Тиражи</a>.</li>
+            <li><strong>Применить frontend</strong> — только если на этой машине лежит репозиторий сайта
+              (<code>princtascdwk</code>). На стрим-ПК обычно <em>не</em> включайте.</li>
+          </ol>
+        </div>
+        <label class="field">ZIP пакет
+          <div class="file-pick" id="importPick">
+            <button type="button" id="importPickBtn">Выбрать ZIP</button>
+            <span class="file-name is-empty" id="importFileName">файл не выбран</span>
+            <button type="button" class="file-clear" id="importClearBtn" hidden>Сбросить</button>
+            <input type="file" id="importFile" accept=".zip,application/zip" tabindex="-1" />
+          </div>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="applyFrontend" />
+          Применить frontend (princtascdwk)
+        </label>
+        <label class="field" id="feRootWrap">
+          Путь к frontend
+          <input type="text" id="frontendRoot" placeholder="E:\Work\…\princtascdwk" />
+          <span class="hint">нужен только если галочка выше включена</span>
+        </label>
+        <div class="toolbar">
+          <button type="button" id="btnDryRun">Dry-run (проверка)</button>
+          <button type="button" class="primary" id="btnImport">Импортировать</button>
+        </div>
+        <h2 style="margin-top:16px">Лог</h2>
+        <div class="log" id="importLog">—</div>
+      </div>
+    </section>
+  </div>
+  <script src="series-pack.js"></script>
+</body>
+</html>
