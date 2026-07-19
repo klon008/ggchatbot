@@ -19,7 +19,12 @@ from bot.web.api import (
     parse_user_name,
     read_json,
 )
-from bot.web.static import serve_obs_asset, serve_obs_card_template, serve_obs_file
+from bot.web.static import (
+    serve_obs_asset,
+    serve_obs_card_template,
+    serve_obs_file,
+    serve_obs_test,
+)
 
 if TYPE_CHECKING:
     from bot.economy.points import PointsStore
@@ -117,6 +122,7 @@ class AdminRoutes:
                 web.post("/api/fishing/rewards", self._api_fishing_rewards),
                 web.post("/api/fishing/pay-rewards", self._api_fishing_pay_rewards),
                 web.get("/card-templates/{path:.*}", self._handle_card_templates),
+                web.get("/test/{path:.*}", self._handle_test),
                 web.get("/assets/{path:.*}", self._handle_assets),
             ]
         )
@@ -164,6 +170,9 @@ class AdminRoutes:
 
     async def _handle_card_templates(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_card_template(request.match_info["path"])
+
+    async def _handle_test(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_test(request.match_info["path"])
 
     async def _api_points_list(self, request: web.Request) -> web.Response:
         try:

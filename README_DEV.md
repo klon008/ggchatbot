@@ -439,7 +439,9 @@ class Track:
 {"action": "fishing_record", "userName": "Nick", "species": "Щука", "weight": 3.42, "imageUrl": "/assets/fishing/shuka.png"}
 ```
 
-Обрабатывает только `fishing-record.html`. Готовность: `{status:"ready", overlay:"fishing_record"}`. Арты: `obs/assets/fishing/{slug}.png`. Превью в браузере: `?preview=1` или `?preview=shuka`.
+Обрабатывает только `fishing-record.html`. Готовность: `{status:"ready", overlay:"fishing_record"}`.
+Арты: `obs/assets/fishing/{slug}.png`, маппинг вида→slug в `bot/fishing/record_assets.py` (не в settings.py).
+Превью в браузере: `?preview=1` или `?preview=shuka`.
 ---
 
 ### 6.4. `youtube.py`

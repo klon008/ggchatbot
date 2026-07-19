@@ -13,12 +13,12 @@ from bot.goodgame import ChatMessage
 
 from . import texts
 from .cast import apply_cast_roll, bait_total, consume_bait
+from .record_assets import FISH_RECORD_ASSETS
 from .settings import (
     CAST_COOLDOWN_SEC,
     CAST_ENERGY_COST,
     FIRST_FISH_BONUS,
     FISH_OF_WEEK_BONUS,
-    FISH_RECORD_ASSETS,
     FISH_SPECIES,
     FISHING_CMD,
     MAGGOT_COST,

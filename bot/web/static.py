@@ -44,6 +44,11 @@ async def serve_obs_card_template(relative_path: str) -> web.StreamResponse:
     return await _serve_under(OBS_DIR / "card-templates", relative_path)
 
 
+async def serve_obs_test(relative_path: str) -> web.StreamResponse:
+    """Раздача файлов из obs/test/ (эксперименты / превью)."""
+    return await _serve_under(OBS_DIR / "test", relative_path)
+
+
 async def _serve_under(base_dir: Path, relative_path: str) -> web.StreamResponse:
     base = base_dir.resolve()
     path = (base_dir / relative_path).resolve()
