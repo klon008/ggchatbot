@@ -38,7 +38,7 @@ class StealStore:
         victim_id: str,
         amount: int,
     ) -> None:
-        points.transfer(thief_id, victim_id, amount)
+        points.transfer(victim_id, thief_id, amount)
         await steal_db.record_steal_success(self._db, thief_id, amount)
 
     async def increment_jail_count(self, user_id: str) -> None:
