@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator, Optional
@@ -15,6 +16,9 @@ from .schema import init_schema
 log = logging.getLogger("bot.db")
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+# Если лок ждут дольше — в консоль (типичный признак «все ! команды умерли»).
+LOCK_WARN_SEC = 1.0
+LOCK_ERROR_SEC = 5.0
 
 
 def default_db_path() -> Path:
@@ -26,6 +30,7 @@ class Database:
         self.path = path or default_db_path()
         self._conn: Optional[aiosqlite.Connection] = None
         self._lock = asyncio.Lock()
+        self._lock_holder: str = ""
 
     @property
     def conn(self) -> aiosqlite.Connection:
@@ -52,30 +57,56 @@ class Database:
         self._conn = None
         log.info("SQLite closed.")
 
+    @asynccontextmanager
+    async def _locked(self, op: str) -> AsyncIterator[None]:
+        t0 = time.monotonic()
+        await self._lock.acquire()
+        waited = time.monotonic() - t0
+        if waited >= LOCK_ERROR_SEC:
+            log.error(
+                "DB lock ждали %.1fс (op=%s, holder=%r) — команды могли «зависнуть»",
+                waited,
+                op,
+                self._lock_holder,
+            )
+        elif waited >= LOCK_WARN_SEC:
+            log.warning(
+                "DB lock ждали %.1fс (op=%s, holder=%r)",
+                waited,
+                op,
+                self._lock_holder,
+            )
+        self._lock_holder = op
+        try:
+            yield
+        finally:
+            self._lock_holder = ""
+            self._lock.release()
+
     async def execute(self, sql: str, params: tuple = ()) -> aiosqlite.Cursor:
-        async with self._lock:
+        async with self._locked("execute"):
             cursor = await self.conn.execute(sql, params)
             await self.conn.commit()
             return cursor
 
     async def executemany(self, sql: str, params_seq) -> None:
-        async with self._lock:
+        async with self._locked("executemany"):
             await self.conn.executemany(sql, params_seq)
             await self.conn.commit()
 
     async def fetchone(self, sql: str, params: tuple = ()) -> Optional[aiosqlite.Row]:
-        async with self._lock:
+        async with self._locked("fetchone"):
             cursor = await self.conn.execute(sql, params)
             return await cursor.fetchone()
 
     async def fetchall(self, sql: str, params: tuple = ()) -> list[aiosqlite.Row]:
-        async with self._lock:
+        async with self._locked("fetchall"):
             cursor = await self.conn.execute(sql, params)
             return await cursor.fetchall()
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
-        async with self._lock:
+        async with self._locked("transaction"):
             await self.conn.execute("BEGIN")
             try:
                 yield self.conn

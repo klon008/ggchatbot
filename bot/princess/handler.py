@@ -117,9 +117,12 @@ class PrincessHandler:
         if await self.prison.is_in_prison(user_id):
             if cmd == "!срок":
                 await cmd_srok(self, msg)
-            elif cmd.startswith("!"):
+                return True
+            if cmd.startswith("!"):
                 await self._say(user_name, "ты в тюрьме. Доступна команда !срок")
-            return True
+                return True
+            # Обычные сообщения узника — не глотаем цепочку зря.
+            return False
 
         if not text.startswith("!"):
             await self.points.add(user_id, MESSAGE_POINTS)

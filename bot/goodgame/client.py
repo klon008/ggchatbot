@@ -21,8 +21,11 @@ CHATLOGIN_URL = "https://goodgame.ru/ajax/chatlogin"
 USERS_LIST_TIMEOUT_SEC = 10.0
 SEND_MESSAGE_ECHO_TIMEOUT_SEC = 5.0
 AUTH_TIMEOUT_SEC = 8.0
+JOIN_TIMEOUT_SEC = 8.0
 CHATLOGIN_RETRIES = 3
 CHATLOGIN_RETRY_DELAY_SEC = 1.5
+# Сколько незавершённых обработчиков сообщений считать подозрительным backlog.
+DISPATCH_BACKLOG_WARN = 25
 
 RIGHTS_STREAM_MODER = 10
 
@@ -69,14 +72,24 @@ class GoodGameClient:
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._stop = False
         self._authenticated = False
+        self._joined = False
+        self._banned = False
         self._users_list_lock = asyncio.Lock()
         self._users_list_future: Optional[asyncio.Future] = None
         self._auth_future: Optional[asyncio.Future] = None
+        self._join_future: Optional[asyncio.Future] = None
         self._pending_send_futures: Deque[asyncio.Future] = deque()
+        self._dispatch_inflight = 0
 
     @property
     def can_send(self) -> bool:
-        return bool(self.token) and self._authenticated and self._ws is not None
+        return (
+            bool(self.token)
+            and self._authenticated
+            and self._joined
+            and not self._banned
+            and self._ws is not None
+        )
 
     async def _fetch_token(self) -> bool:
         """Обновить token через chatlogin. При ошибке старый token не затираем."""
@@ -170,6 +183,8 @@ class GoodGameClient:
 
     async def _connect_and_listen(self) -> None:
         self._authenticated = False
+        self._joined = False
+        self._banned = False
         try:
             async with websockets.connect(
                 WS_URL, ping_interval=20, ping_timeout=20
@@ -177,46 +192,71 @@ class GoodGameClient:
                 self._ws = ws
                 log.info("Подключение к чату GG установлено.")
 
-                if self.token and self.user_id:
-                    ok = await self._authenticate()
-                    if not ok:
+                # Читаем сокет параллельно с auth/join — иначе wait_for никогда
+                # не получит success_auth/success_join (сообщения лежат в буфере).
+                reader = asyncio.create_task(
+                    self._read_loop(ws), name="gg-ws-reader"
+                )
+                try:
+                    if self.token and self.user_id:
+                        ok = await self._authenticate()
+                        if not ok:
+                            _cli_error(
+                                "GoodGame: auth не прошёл после reconnect. "
+                                "Бот в режиме readonly (команды видит, в чат писать не может). "
+                                "Проверьте GG_LOGIN/GG_PASSWORD или дождитесь восстановления GG."
+                            )
+                            log.error(
+                                "GG auth failed — работаем без права отправки сообщений"
+                            )
+                    elif self.login and self.password:
                         _cli_error(
-                            "GoodGame: auth не прошёл после reconnect. "
-                            "Бот в режиме readonly (команды видит, в чат писать не может). "
-                            "Проверьте GG_LOGIN/GG_PASSWORD или дождитесь восстановления GG."
+                            "GoodGame: нет token (chatlogin не удался). "
+                            "Бот подключён как гость — читать может, писать в чат нет."
+                        )
+                        log.error("GG без token — guest/readonly join")
+                    else:
+                        log.warning("GG guest mode (логин не задан)")
+
+                    joined = await self._join_channel()
+                    if not joined:
+                        _cli_error(
+                            f"GoodGame: не получили success_join для канала {self.channel_id}. "
+                            "Команды не будут приходить. Проверьте GG_CHANNEL_ID."
                         )
                         log.error(
-                            "GG auth failed — работаем без права отправки сообщений"
+                            "GG join failed — канал %s, сообщения чата недоступны",
+                            self.channel_id,
                         )
-                elif self.login and self.password:
-                    _cli_error(
-                        "GoodGame: нет token (chatlogin не удался). "
-                        "Бот подключён как гость — читать может, писать в чат нет."
-                    )
-                    log.error("GG без token — guest/readonly join")
-                else:
-                    log.warning("GG guest mode (логин не задан)")
+                    else:
+                        log.info(
+                            "В канале %s (send=%s).",
+                            self.channel_id,
+                            "ok" if self.can_send else "readonly",
+                        )
 
-                await self._send(
-                    {
-                        "type": "join",
-                        "data": {"channel_id": self.channel_id, "hidden": 0},
-                    }
-                )
-                log.info(
-                    "Присоединились к каналу %s (send=%s).",
-                    self.channel_id,
-                    "ok" if self._authenticated else "readonly",
-                )
-
-                async for raw in ws:
-                    await self._handle_raw(raw)
+                    # Держим соединение, пока reader не завершится (disconnect/ошибка).
+                    await reader
+                finally:
+                    if not reader.done():
+                        reader.cancel()
+                        try:
+                            await reader
+                        except asyncio.CancelledError:
+                            pass
         finally:
             self._authenticated = False
+            self._joined = False
+            self._banned = False
             self._cancel_auth_waiter()
+            self._cancel_join_waiter()
             self._cancel_users_list_waiter()
             self._fail_pending_sends(ConnectionError("WebSocket отключён"))
             self._ws = None
+
+    async def _read_loop(self, ws) -> None:
+        async for raw in ws:
+            await self._handle_raw(raw)
 
     async def _authenticate(self) -> bool:
         """Отправить auth и дождаться success_auth."""
@@ -247,10 +287,38 @@ class GoodGameClient:
             if not fut.done():
                 fut.cancel()
 
+    async def _join_channel(self) -> bool:
+        """Отправить join и дождаться success_join."""
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future = loop.create_future()
+        self._join_future = fut
+        try:
+            await self._send(
+                {
+                    "type": "join",
+                    "data": {"channel_id": self.channel_id, "hidden": 0},
+                }
+            )
+            log.info("join отправлен в канал %s, ждём success_join…", self.channel_id)
+            await asyncio.wait_for(asyncio.shield(fut), timeout=JOIN_TIMEOUT_SEC)
+            return True
+        except asyncio.TimeoutError:
+            log.error("Таймаут ожидания success_join (%.0fс)", JOIN_TIMEOUT_SEC)
+            return False
+        except Exception:  # noqa: BLE001
+            log.exception("Ошибка при join")
+            return False
+        finally:
+            if self._join_future is fut:
+                self._join_future = None
+            if not fut.done():
+                fut.cancel()
+
     async def _handle_raw(self, raw: str) -> None:
         try:
             packet = json.loads(raw)
         except json.JSONDecodeError:
+            log.warning("GG: невалидный JSON (%d байт)", len(raw))
             return
         ptype = packet.get("type")
         data = packet.get("data", {}) or {}
@@ -261,6 +329,42 @@ class GoodGameClient:
             log.info("auth OK: %s", data.get("user_name"))
             if self._auth_future is not None and not self._auth_future.done():
                 self._auth_future.set_result(True)
+        elif ptype == "success_join":
+            ch = str(data.get("channel_id", self.channel_id))
+            banned = bool(data.get("is_banned"))
+            smile_only = bool(data.get("smile_only_mode"))
+            # Забаненный клиент не считается joined: send/get_users_list должны отказать.
+            self._banned = banned
+            self._joined = not banned
+            log.info(
+                "success_join channel=%s name=%r banned=%s smile_only=%s rights=%s",
+                ch,
+                data.get("channel_name") or data.get("channel_key") or "",
+                banned,
+                smile_only,
+                data.get("access_rights"),
+            )
+            if banned:
+                _cli_error(
+                    "GoodGame: бот забанен в канале — писать в чат нельзя."
+                )
+                log.error("GG is_banned=true в канале %s", ch)
+                if self._join_future is not None and not self._join_future.done():
+                    self._join_future.set_exception(
+                        ConnectionError(f"GG banned in channel {ch}")
+                    )
+            else:
+                if smile_only:
+                    log.warning(
+                        "В канале smile_only_mode — текстовые ответы могут резаться GG"
+                    )
+                if self._join_future is not None and not self._join_future.done():
+                    self._join_future.set_result(True)
+        elif ptype == "unjoin":
+            ch = str(data.get("channel_id", ""))
+            self._joined = False
+            self._banned = False
+            log.warning("GG unjoin channel=%s — сообщения канала больше не приходят", ch)
         elif ptype == "error":
             err = data.get("errorMsg") or data.get("message") or data
             log.warning("GG error: %s", err)
@@ -270,6 +374,16 @@ class GoodGameClient:
                 if "auth" in err_l or "token" in err_l or "логин" in err_l:
                     self._auth_future.set_exception(
                         ConnectionError(f"GG auth error: {err}")
+                    )
+            if self._join_future is not None and not self._join_future.done():
+                if (
+                    "канал" in err_l
+                    or "channel" in err_l
+                    or "join" in err_l
+                    or "не найден" in err_l
+                ):
+                    self._join_future.set_exception(
+                        ConnectionError(f"GG join error: {err}")
                     )
         elif ptype == "users_list":
             self._resolve_users_list(data.get("users") or [])
@@ -290,14 +404,25 @@ class GoodGameClient:
             user_rights=int(data.get("user_rights", 0) or 0),
             text=str(data.get("text", "")),
         )
+        text = msg.text.strip()
+        if text.startswith("!"):
+            log.info("GG !cmd from=%s text=%r", msg.user_name, text[:80])
+            if self._dispatch_inflight >= DISPATCH_BACKLOG_WARN:
+                log.warning(
+                    "Обработчиков сообщений в полёте: %d — возможен зависший DB/handler",
+                    self._dispatch_inflight,
+                )
         # Не блокируем WS-reader: иначе send_message(wait echo) из handler — deadlock.
         asyncio.create_task(self._dispatch_message(msg), name="gg-on-message")
 
     async def _dispatch_message(self, msg: ChatMessage) -> None:
+        self._dispatch_inflight += 1
         try:
             await self._on_message(msg)
         except Exception:  # noqa: BLE001
             log.exception("Ошибка обработчика сообщения GG")
+        finally:
+            self._dispatch_inflight = max(0, self._dispatch_inflight - 1)
 
     def _resolve_own_send(self, message_id: str) -> None:
         while self._pending_send_futures:
@@ -332,10 +457,19 @@ class GoodGameClient:
             self._auth_future.set_exception(ConnectionError("WebSocket отключён"))
         self._auth_future = None
 
+    def _cancel_join_waiter(self) -> None:
+        if self._join_future is not None and not self._join_future.done():
+            self._join_future.set_exception(ConnectionError("WebSocket отключён"))
+        self._join_future = None
+
     async def get_users_list(self) -> list[dict]:
         """Запросить список авторизованных зрителей в чате канала (get_users_list2)."""
         if self._ws is None:
             raise ConnectionError("WebSocket не подключён")
+        if self._banned:
+            raise ConnectionError("Бот забанен в канале")
+        if not self._joined:
+            raise ConnectionError("Ещё не в канале (нет success_join)")
 
         async with self._users_list_lock:
             if self._users_list_future is not None and not self._users_list_future.done():
@@ -358,7 +492,7 @@ class GoodGameClient:
     async def send_message(self, text: str) -> Optional[str]:
         """Отправить сообщение и вернуть message_id из echo (или None)."""
         if not self.login or not self.password:
-            log.debug("Пропуск ответа в чат (гость без логина): %s", text)
+            log.warning("Пропуск ответа в чат (гость без логина): %s", text[:120])
             return None
         if not self.token:
             log.error(
@@ -370,6 +504,18 @@ class GoodGameClient:
             log.error(
                 "Пропуск send_message: нет success_auth (readonly после reconnect). "
                 "Текст: %s",
+                text[:120],
+            )
+            return None
+        if self._banned:
+            log.error(
+                "Пропуск send_message: бот забанен в канале. Текст: %s",
+                text[:120],
+            )
+            return None
+        if not self._joined:
+            log.error(
+                "Пропуск send_message: нет success_join (не в канале). Текст: %s",
                 text[:120],
             )
             return None

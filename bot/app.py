@@ -162,7 +162,10 @@ class StreamBot:
             )
 
     async def _dispatch_chat_message(self, msg) -> None:
-        cmd = msg.text.strip().split(maxsplit=1)[0].lower()
+        text = (msg.text or "").strip()
+        cmd = text.split(maxsplit=1)[0].lower() if text else ""
+        if cmd.startswith("!"):
+            log.info("cmd %s from %s", cmd, getattr(msg, "user_name", "?"))
         if cmd == HELP_COMMAND:
             await self._reply(f"{msg.user_name}, {format_help()}")
             return
