@@ -270,15 +270,18 @@ class CardsHandler:
             )
             return
 
-        series = await cards_db.count_series_progress(self._db, target_user_id)
+        draw = await cards_db.get_active_draw(self._db)
         collection = await cards_db.count_collection(self._db, target_user_id)
 
-        progress_parts = []
-        if series:
-            s = series[0]
-            progress_parts.append(f"{s['owned']}/{s['total']}")
+        progress_parts: list[str] = []
+        if draw is not None:
+            series = await cards_db.count_series_progress_for_booster(
+                self._db, target_user_id, draw.booster_id
+            )
+            for s in series:
+                progress_parts.append(f"{s['name']} {s['owned']}/{s['total']}")
         progress_parts.append(
-            f"коллекция {collection['owned']}/{collection['total']}"
+            f"общая коллекция {collection['owned']}/{collection['total']}"
         )
         progress = " · ".join(progress_parts)
 

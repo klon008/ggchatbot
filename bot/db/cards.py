@@ -176,6 +176,19 @@ async def count_user_cards(db: Database, user_id: str) -> int:
     return int(row[0]) if row else 0
 
 
+def _series_progress_rows(rows: list[Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": r[0],
+            "name": r[1],
+            "total": int(r[2]),
+            "owned": int(r[3]),
+            "card_back_id": r[4] or "card-back",
+        }
+        for r in rows
+    ]
+
+
 async def count_series_progress(db: Database, user_id: str) -> list[dict[str, Any]]:
     async with db.transaction() as conn:
         cur = await conn.execute(
@@ -192,16 +205,35 @@ async def count_series_progress(db: Database, user_id: str) -> list[dict[str, An
             (user_id,),
         )
         rows = await cur.fetchall()
-    return [
-        {
-            "id": r[0],
-            "name": r[1],
-            "total": int(r[2]),
-            "owned": int(r[3]),
-            "card_back_id": r[4] or "card-back",
-        }
-        for r in rows
-    ]
+    return _series_progress_rows(rows)
+
+
+async def count_series_progress_for_booster(
+    db: Database, user_id: str, booster_id: str
+) -> list[dict[str, Any]]:
+    """Прогресс по сериям, которые есть в пуле бустера (обычно одна)."""
+    async with db.transaction() as conn:
+        cur = await conn.execute(
+            """
+            SELECT s.id, s.name,
+                   (SELECT COUNT(*) FROM cards c WHERE c.series_id = s.id) AS total,
+                   (SELECT COUNT(*) FROM user_cards uc
+                    JOIN cards c2 ON c2.id = uc.card_id
+                    WHERE uc.user_id = ? AND c2.series_id = s.id) AS owned,
+                   COALESCE(s.card_back_id, 'card-back') AS card_back_id
+            FROM card_series s
+            WHERE s.id IN (
+                SELECT DISTINCT c.series_id
+                FROM booster_pool bp
+                JOIN cards c ON c.id = bp.card_id
+                WHERE bp.booster_id = ?
+            )
+            ORDER BY s.sort_order, s.name
+            """,
+            (user_id, booster_id),
+        )
+        rows = await cur.fetchall()
+    return _series_progress_rows(rows)
 
 
 async def count_collection(db: Database, user_id: str) -> dict[str, int]:
