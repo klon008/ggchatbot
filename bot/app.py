@@ -152,6 +152,16 @@ class StreamBot:
         await self.db.close()
 
     async def _on_chat_message(self, msg) -> None:
+        try:
+            await self._dispatch_chat_message(msg)
+        except Exception:  # noqa: BLE001
+            log.exception(
+                "Необработанная ошибка команды от %s: %s",
+                getattr(msg, "user_name", "?"),
+                (getattr(msg, "text", "") or "")[:80],
+            )
+
+    async def _dispatch_chat_message(self, msg) -> None:
         cmd = msg.text.strip().split(maxsplit=1)[0].lower()
         if cmd == HELP_COMMAND:
             await self._reply(f"{msg.user_name}, {format_help()}")

@@ -45,6 +45,7 @@ async def cmd_steal(handler: "PrincessHandler", msg: ChatMessage) -> None:
         )
         return
 
+    await handler._refresh_viewers()
     if len(handler._viewers) < STEAL_MIN_VIEWERS:
         await handler._say(
             msg.user_name,
@@ -84,14 +85,15 @@ async def cmd_steal(handler: "PrincessHandler", msg: ChatMessage) -> None:
         await handler._say(msg.user_name, msg_text)
     else:
         max_possible = max(0, victim_points - VICTIM_MIN_BALANCE)
-        if max_possible == 0:
+        if max_possible < STEAL_AMOUNT_MIN:
             await handler._say(msg.user_name, "У жертвы почти ничего не осталось для кражи.")
-            return
-
-        stolen = random.randint(STEAL_AMOUNT_MIN, min(STEAL_AMOUNT_MAX, max_possible))
-        await handler.steal.execute_steal(handler.points, uid, victim_id, stolen)
-
-        await handler._say(msg.user_name, f"Успех! Тебе удалось украсть {stolen} принцесс у {victim_name}.")
+        else:
+            stolen = random.randint(STEAL_AMOUNT_MIN, min(STEAL_AMOUNT_MAX, max_possible))
+            await handler.steal.execute_steal(handler.points, uid, victim_id, stolen)
+            await handler._say(
+                msg.user_name,
+                f"Успех! Тебе удалось украсть {stolen} принцесс у {victim_name}.",
+            )
 
     chance_to_prison = prison_chance_for_amount(stolen)
     if chance_to_prison and random.randint(1, STEAL_ROLL_MAX) <= chance_to_prison:

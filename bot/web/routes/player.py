@@ -119,9 +119,15 @@ class PlayerRoutes:
                 self._fishing_record_clients.add(ws)
             elif overlay == "races":
                 await self._claim_races_slot(ws)
-        await self._on_status(data)
+        try:
+            await self._on_status(data)
+        except Exception:  # noqa: BLE001
+            log.exception("Ошибка обработчика статуса плеера: %s", data.get("status"))
         for handler in self._extra_handlers:
-            await handler(data)
+            try:
+                await handler(data)
+            except Exception:  # noqa: BLE001
+                log.exception("Ошибка extra status handler: %s", data.get("status"))
 
     async def _claim_races_slot(self, ws: web.WebSocketResponse) -> None:
         """Один races.html: новый коннект вытесняет старый (без дублей анимации)."""

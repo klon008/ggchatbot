@@ -44,7 +44,12 @@ class PlaybackController:
         self._advance_lock = asyncio.Lock()
         self._watchdog: Optional[asyncio.Task] = None
         self._youtube_api_warned = False
+        self._youtube_available = True
         self.player_paused = False
+
+    @property
+    def youtube_available(self) -> bool:
+        return self._youtube_available
 
     async def close(self) -> None:
         if self._watchdog:
@@ -62,18 +67,44 @@ class PlaybackController:
         timeout = self._cfg.max_duration_sec + self._cfg.track_watchdog_extra_sec
         self._watchdog = asyncio.create_task(self._watchdog_run(token, timeout))
 
+    @staticmethod
+    def _is_youtube_unavailable_error(data: dict) -> bool:
+        code = data.get("code")
+        if code == "youtube_api_unavailable":
+            return True
+        message = str(data.get("message") or "").lower()
+        return "youtube iframe api" in message or "youtube.com/iframe_api" in message
+
     async def on_obs_status(self, data: dict) -> None:
         status = data.get("status")
         if status == "ready":
-            if data.get("overlay") == "booster":
+            # booster / races / fishing-record шлют свой ready на тот же /ws
+            if data.get("overlay"):
                 return
+            api_ok = data.get("youtubeApi") is True
+            api_state = str(data.get("youtubeApiState") or "")
             log.info(
                 "Плеер готов (youtubeApi=%s, state=%s).",
                 data.get("youtubeApi"),
-                data.get("youtubeApiState"),
+                api_state or data.get("youtubeApiState"),
             )
-            if data.get("youtubeApi") is False:
-                await self._warn_youtube_api_unavailable(data)
+            # idle/loading — API ещё не грузили (lazy-init), это не авария.
+            if not api_ok and api_state == "failed":
+                await self._handle_youtube_outage(data)
+                return
+
+            if api_ok:
+                was_down = not self._youtube_available
+                self._youtube_available = True
+                if was_down:
+                    self._youtube_api_warned = False
+                    log.info("YouTube IFrame API снова доступен — возобновляем очередь.")
+            elif api_state in ("idle", "loading") and not self._youtube_available:
+                # OBS перезагрузил источник — даём снова принимать заказы.
+                self._youtube_available = True
+                self._youtube_api_warned = False
+                log.info("Плеер переподключился (state=%s) — снимаем блок YouTube.", api_state)
+
             if self._queue.is_playing and self._queue.current:
                 await self._send_play(self._queue.current, self._queue.current_token or "")
                 self.arm_watchdog(self._queue.current_token)
@@ -82,7 +113,7 @@ class PlaybackController:
             return
 
         if status == "api_error":
-            await self._warn_youtube_api_unavailable(data)
+            await self._handle_youtube_outage(data)
             return
 
         token = data.get("token")
@@ -100,6 +131,9 @@ class PlaybackController:
                 data.get("code"),
                 reason,
             )
+            if self._is_youtube_unavailable_error(data):
+                await self._handle_youtube_outage(data)
+                return
             await self.advance(expected_token=token, skip_reason=reason)
             return
 
@@ -113,7 +147,32 @@ class PlaybackController:
             )
             await self.advance(expected_token=token, skip_reason=reason)
 
-    async def advance(self, expected_token: Optional[str], skip_reason: Optional[str] = None) -> None:
+    async def _handle_youtube_outage(self, data: dict) -> None:
+        """YouTube API недоступен: рефанд всей очереди, чтобы не терять экономику."""
+        self._youtube_available = False
+        await self._warn_youtube_api_unavailable(data)
+
+        tracks = self._queue.all_tracks()
+        if not tracks:
+            return
+
+        count = len(tracks)
+        total_refunded = await self.clear_queue_with_refunds(reason="падение YouTube")
+        if total_refunded > 0:
+            await self._say(
+                f"YouTube недоступен — очередь очищена ({count}), "
+                f"возвращено {total_refunded} {pluralize_princess(total_refunded)}."
+            )
+        else:
+            await self._say(f"YouTube недоступен — очередь очищена ({count}).")
+
+    async def advance(
+        self,
+        expected_token: Optional[str],
+        skip_reason: Optional[str] = None,
+        *,
+        continue_queue: bool = True,
+    ) -> None:
         async with self._advance_lock:
             self.player_paused = False
             if self._queue.is_playing:
@@ -128,6 +187,19 @@ class PlaybackController:
                 elif self._queue.current is not None:
                     await self._queue.force_skip()
 
+            if not continue_queue:
+                await self._player.send_queue_state(self._queue.snapshot())
+                log.warning(
+                    "Очередь на паузе (YouTube недоступен), в ожидании: %d.",
+                    len(self._queue),
+                )
+                return
+
+            if not self._youtube_available:
+                await self._player.send_queue_state(self._queue.snapshot())
+                log.warning("Пропуск старта очереди: YouTube API ещё недоступен.")
+                return
+
             nxt = await self._queue.start_next()
             if nxt is None:
                 await self._player.send_queue_state(self._queue.snapshot())
@@ -139,7 +211,7 @@ class PlaybackController:
             await self._send_play(track, token)
             self.arm_watchdog(token)
 
-    async def clear_queue_with_refunds(self) -> int:
+    async def clear_queue_with_refunds(self, *, reason: str = "отключение заказов") -> int:
         async with self._advance_lock:
             self.player_paused = False
             tracks = self._queue.all_tracks()
@@ -152,15 +224,24 @@ class PlaybackController:
                 if refunded:
                     name = track.requested_by_name or track.requested_by
                     log.info(
-                        "Возврат %d принцесс пользователю %s (%s) при отключении заказов",
+                        "Возврат %d принцесс пользователю %s (%s) — %s",
                         refunded,
                         track.requested_by,
                         name,
+                        reason,
                     )
                     total_refunded += refunded
             await self._queue.clear()
             await self._player.send_queue_state(self._queue.snapshot())
-            log.info("Очередь очищена (%d трек(ов)), заказы отключены.", len(tracks))
+            points = self._points_getter()
+            if points is not None and total_refunded > 0:
+                await points.flush_pending()
+            log.info(
+                "Очередь очищена (%d трек(ов)), причина: %s, возвращено %d.",
+                len(tracks),
+                reason,
+                total_refunded,
+            )
             return total_refunded
 
     def _format_player_error(self, data: dict) -> str:

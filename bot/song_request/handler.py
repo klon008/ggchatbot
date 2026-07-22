@@ -127,8 +127,27 @@ class SongRequestHandler:
         await self.playback.on_obs_status(data)
 
     async def _cmd_sr(self, msg: ChatMessage, arg: str) -> None:
+        try:
+            await self._cmd_sr_inner(msg, arg)
+        except Exception:  # noqa: BLE001
+            log.exception("Ошибка обработки заказа от %s", msg.user_name)
+            try:
+                await self._say(
+                    f"{msg.user_name}, не удалось оформить заказ — попробуй позже"
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+    async def _cmd_sr_inner(self, msg: ChatMessage, arg: str) -> None:
         if not self._orders_enabled:
             await self._say(f"{msg.user_name}, заказ песен временно отключён")
+            return
+
+        if not self.playback.youtube_available:
+            await self._say(
+                f"{msg.user_name}, плеер не может подключиться к YouTube — "
+                "заказ сейчас недоступен"
+            )
             return
 
         if self.cfg.user_cooldown_sec > 0:
