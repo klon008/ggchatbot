@@ -9,7 +9,7 @@ import json
 import logging
 from collections import deque
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Deque, Optional
+from typing import Awaitable, Callable, Deque, Optional, Set
 
 import aiohttp
 import websockets
@@ -79,7 +79,7 @@ class GoodGameClient:
         self._auth_future: Optional[asyncio.Future] = None
         self._join_future: Optional[asyncio.Future] = None
         self._pending_send_futures: Deque[asyncio.Future] = deque()
-        self._dispatch_inflight = 0
+        self._dispatch_tasks: Set[asyncio.Task] = set()
 
     @property
     def can_send(self) -> bool:
@@ -407,22 +407,22 @@ class GoodGameClient:
         text = msg.text.strip()
         if text.startswith("!"):
             log.info("GG !cmd from=%s text=%r", msg.user_name, text[:80])
-            if self._dispatch_inflight >= DISPATCH_BACKLOG_WARN:
+            backlog = len(self._dispatch_tasks)
+            if backlog >= DISPATCH_BACKLOG_WARN:
                 log.warning(
                     "Обработчиков сообщений в полёте: %d — возможен зависший DB/handler",
-                    self._dispatch_inflight,
+                    backlog,
                 )
         # Не блокируем WS-reader: иначе send_message(wait echo) из handler — deadlock.
-        asyncio.create_task(self._dispatch_message(msg), name="gg-on-message")
+        task = asyncio.create_task(self._dispatch_message(msg), name="gg-on-message")
+        self._dispatch_tasks.add(task)
+        task.add_done_callback(self._dispatch_tasks.discard)
 
     async def _dispatch_message(self, msg: ChatMessage) -> None:
-        self._dispatch_inflight += 1
         try:
             await self._on_message(msg)
         except Exception:  # noqa: BLE001
             log.exception("Ошибка обработчика сообщения GG")
-        finally:
-            self._dispatch_inflight = max(0, self._dispatch_inflight - 1)
 
     def _resolve_own_send(self, message_id: str) -> None:
         while self._pending_send_futures:

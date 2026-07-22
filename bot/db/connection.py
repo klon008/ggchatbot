@@ -64,24 +64,26 @@ class Database:
         # Всё после acquire — под try/finally, иначе падение в логе оставит лок навсегда.
         try:
             waited = time.monotonic() - t0
+            # Не обнуляем holder в finally: иначе waiter после acquire видит "" —
+            # имя прошлой операции остаётся до перезаписи ниже.
+            blocked_by = self._lock_holder
             if waited >= LOCK_ERROR_SEC:
                 log.error(
                     "DB lock ждали %.1fс (op=%s, holder=%r) — команды могли «зависнуть»",
                     waited,
                     op,
-                    self._lock_holder,
+                    blocked_by,
                 )
             elif waited >= LOCK_WARN_SEC:
                 log.warning(
                     "DB lock ждали %.1fс (op=%s, holder=%r)",
                     waited,
                     op,
-                    self._lock_holder,
+                    blocked_by,
                 )
             self._lock_holder = op
             yield
         finally:
-            self._lock_holder = ""
             self._lock.release()
 
     async def execute(self, sql: str, params: tuple = ()) -> aiosqlite.Cursor:
