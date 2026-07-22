@@ -61,23 +61,24 @@ class Database:
     async def _locked(self, op: str) -> AsyncIterator[None]:
         t0 = time.monotonic()
         await self._lock.acquire()
-        waited = time.monotonic() - t0
-        if waited >= LOCK_ERROR_SEC:
-            log.error(
-                "DB lock ждали %.1fс (op=%s, holder=%r) — команды могли «зависнуть»",
-                waited,
-                op,
-                self._lock_holder,
-            )
-        elif waited >= LOCK_WARN_SEC:
-            log.warning(
-                "DB lock ждали %.1fс (op=%s, holder=%r)",
-                waited,
-                op,
-                self._lock_holder,
-            )
-        self._lock_holder = op
+        # Всё после acquire — под try/finally, иначе падение в логе оставит лок навсегда.
         try:
+            waited = time.monotonic() - t0
+            if waited >= LOCK_ERROR_SEC:
+                log.error(
+                    "DB lock ждали %.1fс (op=%s, holder=%r) — команды могли «зависнуть»",
+                    waited,
+                    op,
+                    self._lock_holder,
+                )
+            elif waited >= LOCK_WARN_SEC:
+                log.warning(
+                    "DB lock ждали %.1fс (op=%s, holder=%r)",
+                    waited,
+                    op,
+                    self._lock_holder,
+                )
+            self._lock_holder = op
             yield
         finally:
             self._lock_holder = ""
