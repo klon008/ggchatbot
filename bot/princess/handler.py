@@ -115,14 +115,12 @@ class PrincessHandler:
         await self.points.touch_name(user_id, user_name)
 
         if await self.prison.is_in_prison(user_id):
+            # Узник изолирован от остальных фич (SR, карты, …); доступна только !срок.
             if cmd == "!срок":
                 await cmd_srok(self, msg)
-                return True
-            if cmd.startswith("!"):
+            elif cmd.startswith("!"):
                 await self._say(user_name, "ты в тюрьме. Доступна команда !срок")
-                return True
-            # Обычные сообщения узника — не глотаем цепочку зря.
-            return False
+            return True
 
         if not text.startswith("!"):
             await self.points.add(user_id, MESSAGE_POINTS)
