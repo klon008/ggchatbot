@@ -545,6 +545,8 @@
       <a href="admin.html">← Админ-панель</a>
       ·
       <a href="series-pack.html">Новая серия / импорт ZIP</a>
+      ·
+      <span style="color:#8888a0;font-size:12px;">портрет <span class="mono">310×330</span> · рубашка <span class="mono">350×490</span></span>
     </p>
 
     <div id="statusBar">Готово</div>
@@ -658,7 +660,8 @@
       <p class="tab-help">
         <strong>Серии</strong> - группы карт (каждая карта принадлежит одной серии).
         Слева список серий, справа галерея карт и правка названия, порядка и id рубашки
-        <span class="mono">card_back_id</span> (файл: <span class="mono">obs/assets/cards/{id}.svg</span>).
+        <span class="mono">card_back_id</span> (файл: <span class="mono">obs/assets/cards/{id}.svg</span>,
+        размер рубашки <span class="mono">350×490</span>).
         Создавать карты здесь нельзя —
         <a href="series-pack.html">Series Pack</a> (сборка ZIP / импорт).
         Клик по карте или рубашке - просмотр в лайтбоксе.
@@ -690,7 +693,10 @@
               </div>
               <button type="submit" class="primary">Сохранить</button>
             </form>
-            <p class="hint">Файл рубашки: <span class="mono">obs/assets/cards/{card_back_id}.svg</span></p>
+            <p class="hint">
+              Файл рубашки: <span class="mono">obs/assets/cards/{card_back_id}.svg</span>
+              · желательный размер <span class="mono">350×490</span>
+            </p>
           </div>
           <div class="card">
             <h3 id="seriesGalleryTitle">Карты серии</h3>

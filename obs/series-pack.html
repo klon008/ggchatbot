@@ -297,6 +297,8 @@
       <a href="cards-admin.html">← Карты</a>
       ·
       <a href="admin.html">Админ-панель</a>
+      ·
+      <span class="hint">портрет 310×330 · рубашка 350×490</span>
     </p>
 
     <div id="statusBar">Готово</div>
@@ -318,7 +320,8 @@
               <li><strong>ID серии</strong> — технический код латиницей, без пробелов. Его видит только система.
                 Пример: <code>winter-tales</code></li>
               <li><strong>Название</strong> — как люди увидят серию. Можно по-русски: «Зимние сказки».</li>
-              <li><strong>Рубашка</strong> — картинка «рубашки» карты (задняя сторона). Можно <em>не выбирать</em> —
+              <li><strong>Рубашка</strong> — картинка «рубашки» карты (задняя сторона). Размер
+                <strong>350×490</strong> px (как весь шаблон карты). Можно <em>не выбирать</em> —
                 тогда будет обычная дефолтная. Если выберете свой SVG, ID рубашки подставится сам
                 (<code>card-back-</code> + ID серии).</li>
               <li><strong>Порядок</strong> — число для сортировки в списке (обычно оставьте <code>1</code>).</li>
@@ -347,7 +350,7 @@
                 <button type="button" class="file-clear" id="backClearBtn" hidden>Сбросить</button>
                 <input type="file" id="backFile" accept=".svg,image/svg+xml" tabindex="-1" />
               </div>
-              <span class="hint">если не выбрана — берём obs/assets/cards/card-back.svg</span>
+              <span class="hint">желательно 350×490 · если не выбрана — obs/assets/cards/card-back.svg</span>
             </label>
           </div>
         </div>
