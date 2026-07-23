@@ -311,6 +311,9 @@ async function playOpening(payload) {
     ? `${payload.userName} · ${payload.boosterName || "бустер"}`
     : payload.boosterName || "";
   showStage(label);
+  if (typeof window.playObsSfx === "function") {
+    window.playObsSfx("/assets/sounds/cards.mp3");
+  }
   await sleep(t.stageIn);
 
   for (let i = 0; i < cards.length; i++) {

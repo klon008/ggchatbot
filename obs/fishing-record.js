@@ -175,6 +175,9 @@
     stage.classList.remove("is-leaving");
     stage.classList.add("is-visible");
     stage.setAttribute("aria-hidden", "false");
+    if (typeof window.playObsSfx === "function") {
+      window.playObsSfx("/assets/sounds/fish.mp3");
+    }
 
     await sleep(ENTER_MS + HOLD_MS);
 

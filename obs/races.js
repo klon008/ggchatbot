@@ -47,6 +47,7 @@
   var pollTimer = null;
   var ws = null;
   var prevRoundId = 0;
+  var prevState = "IDLE";
   var lineupCache = []; // Текущий состав для DOM
   var animRaf = 0; // requestAnimationFrame id
   var animPlaying = false; // Идёт RAF-проигрывание сценария
@@ -527,6 +528,12 @@
       }
     }
 
+    if (state === "OPEN" && prevState !== "OPEN") {
+      if (typeof window.playObsSfx === "function") {
+        window.playObsSfx("/assets/sounds/race.mp3");
+      }
+    }
+
     if (state === "OPEN" || state === "RACE_WAIT" || state === "RACE") {
       setVisible(true);
       if ((state === "OPEN" || state === "RACE_WAIT") && !animPlaying) {
@@ -539,6 +546,8 @@
     } else if (!alwaysVisible && !animPlaying) {
       setVisible(false);
     }
+
+    prevState = state;
   }
 
   function pollInterval(state) {

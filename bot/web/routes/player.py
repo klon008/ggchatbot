@@ -36,6 +36,7 @@ class PlayerRoutes:
                 web.get("/booster.js", self._handle_booster_js),
                 web.get("/fishing-record.html", self._handle_fishing_record_html),
                 web.get("/fishing-record.js", self._handle_fishing_record_js),
+                web.get("/sfx.js", self._handle_sfx_js),
                 web.get("/ws", self._handle_ws),
             ]
         )
@@ -67,6 +68,9 @@ class PlayerRoutes:
         return await serve_obs_file(
             "fishing-record.js", "application/javascript; charset=utf-8"
         )
+
+    async def _handle_sfx_js(self, request: web.Request) -> web.StreamResponse:
+        return await serve_obs_file("sfx.js", "application/javascript; charset=utf-8")
 
     @property
     def has_clients(self) -> bool:

@@ -373,6 +373,12 @@
       " phase=" + phase
     );
 
+    if (state === "OPEN" && prevState !== "OPEN") {
+      if (typeof window.playObsSfx === "function") {
+        window.playObsSfx("/assets/sounds/roulette.mp3");
+      }
+    }
+
     if (state === "SPIN_WAIT" && prevState !== "SPIN_WAIT") {
       beginSpinSession(data);
     } else if (state === "SPIN" && prevState === "OPEN" && phase === "idle") {

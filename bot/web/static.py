@@ -20,6 +20,7 @@ _CONTENT_TYPES = {
     ".htm": "text/html",
     ".md": "text/markdown",
     ".txt": "text/plain",
+    ".mp3": "audio/mpeg",
 }
 
 
