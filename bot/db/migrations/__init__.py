@@ -25,6 +25,7 @@ from . import (
     m017_polls,
     m018_fishing,
     m019_fishing_week_rewards,
+    m020_series_summer_2026,
 )
 
 
@@ -54,4 +55,5 @@ MIGRATIONS: list[Migration] = [
     m017_polls,
     m018_fishing,
     m019_fishing_week_rewards,
+    m020_series_summer_2026,
 ]
