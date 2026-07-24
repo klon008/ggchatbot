@@ -11,6 +11,7 @@ from bot.db import Database
 from bot.db import minigames_bank
 from bot.db import roulette as roulette_db
 from bot.db.roulette import RouletteBet
+from bot.economy.busy import REASON_ROULETTE, EconomyBusyGate
 from bot.economy.points import PointsStore
 from bot.minigames.settings import BANK_RESET_AMOUNT, MIN_BANK_TO_START
 
@@ -41,6 +42,7 @@ class RoundManager:
     def __init__(self, db: Database) -> None:
         self._db = db
         self._points: Optional[PointsStore] = None
+        self._busy: Optional[EconomyBusyGate] = None
         self._say: Optional[SayFn] = None
         self._timer_task: Optional[asyncio.Task] = None
         self._watchdog_task: Optional[asyncio.Task] = None
@@ -52,6 +54,17 @@ class RoundManager:
     def bind_points(self, store: PointsStore) -> None:
         self._points = store
 
+    def bind_busy(self, gate: EconomyBusyGate) -> None:
+        self._busy = gate
+
+    def _set_economy_busy(self, active: bool) -> None:
+        if self._busy is None:
+            return
+        if active:
+            self._busy.activate(REASON_ROULETTE)
+        else:
+            self._busy.release(REASON_ROULETTE)
+
     def bind_say(self, say: SayFn) -> None:
         self._say = say
 
@@ -59,11 +72,14 @@ class RoundManager:
         meta = await roulette_db.get_meta(self._db)
         self._collect_sec = meta.collect_sec
         self._cooldown_sec = meta.cooldown_sec
+        if meta.state in _ACTIVE_ROUND_STATES:
+            self._set_economy_busy(True)
         await self._recover_scheduled_state(meta)
         self._watchdog_task = asyncio.create_task(self._watchdog_loop())
 
     async def close(self) -> None:
         self._cancel_timer()
+        self._set_economy_busy(False)
         if self._watchdog_task is not None:
             self._watchdog_task.cancel()
             self._watchdog_task = None
@@ -280,6 +296,7 @@ class RoundManager:
             closes_at=closes_at,
             cooldown_until=None,
         )
+        self._set_economy_busy(True)
         self._schedule_timer(collect, self._on_collect_timeout)
         return True
 
@@ -415,6 +432,7 @@ class RoundManager:
             closes_at=None,
             round_opened_at=None,
         )
+        self._set_economy_busy(False)
         self._schedule_timer(cooldown, self._on_cooldown_timeout)
 
     async def _on_cooldown_timeout(self) -> None:
@@ -422,6 +440,7 @@ class RoundManager:
 
     async def _set_idle(self) -> None:
         self._cancel_timer()
+        self._set_economy_busy(False)
         await roulette_db.update_meta(
             self._db,
             state=STATE_IDLE,

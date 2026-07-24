@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 from urllib.parse import parse_qs, urlparse
 
 from bot.db import cards as cards_db
+from bot.economy.busy import REASON_BOOSTER
 from bot.goodgame import ChatMessage
 
 from .album_token import build_album_url
@@ -24,6 +25,7 @@ from .draws import (
 if TYPE_CHECKING:
     from bot.cards.clo_tunnel import CloTunnel
     from bot.db import Database
+    from bot.economy.busy import EconomyBusyGate
     from bot.economy.points import PointsStore
     from bot.web.routes.player import PlayerRoutes
 
@@ -59,6 +61,7 @@ class CardsHandler:
         self._site_base_url = site_base_url
         self._clo = clo
         self._points: Optional["PointsStore"] = None
+        self._busy: Optional["EconomyBusyGate"] = None
         self._reply: Optional[ReplyFn] = None
         self._player: Optional["PlayerRoutes"] = None
         self._present_lock = asyncio.Lock()
@@ -66,6 +69,9 @@ class CardsHandler:
         # другие игроки получают отказ, а не очередь.
         self._opening_busy = False
         self._pending_opens: dict[str, asyncio.Future[bool]] = {}
+
+    def bind_busy(self, gate: "EconomyBusyGate") -> None:
+        self._busy = gate
 
     def bind_points(self, points: "PointsStore") -> None:
         self._points = points
@@ -136,6 +142,8 @@ class CardsHandler:
             return
 
         self._opening_busy = True
+        if self._busy is not None:
+            self._busy.activate(REASON_BOOSTER)
         try:
             # Весь цикл под локом: списание → анимация → итог.
             # Пока лок держится, другие !бустер получают отказ выше.
@@ -153,6 +161,8 @@ class CardsHandler:
                 await self._present_opening(msg.user_name, result)
         finally:
             self._opening_busy = False
+            if self._busy is not None:
+                self._busy.release(REASON_BOOSTER)
 
     async def _present_opening(self, user_name: str, result: OpenResult) -> None:
         """Шаг 1 → WS анимация → шаг 2. Вызывать только под _present_lock."""

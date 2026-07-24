@@ -10,6 +10,7 @@ from bot.cards.album_server import AlbumWebServer
 from bot.cards.clo_tunnel import CloTunnel, CloTunnelError
 from bot.commands import HELP_COMMAND, format_help
 from bot.db import Database
+from bot.economy import EconomyBusyGate
 from bot.web import LocalWebServer
 from bot.cards.routes.admin_api import CardsAdminRoutes
 from bot.web.routes.admin import AdminRoutes
@@ -31,6 +32,7 @@ class StreamBot:
     def __init__(self, cfg: Config, db_path: Optional[Path] = None) -> None:
         self.cfg = cfg
         self.db = Database(db_path)
+        self.busy = EconomyBusyGate()
         self.web = LocalWebServer(cfg.obs_host, cfg.obs_port)
         self.princess = PrincessHandler(
             db=self.db,
@@ -109,11 +111,6 @@ class StreamBot:
         self.princess.bind_viewers_fetch(self.gg.get_users_list)
         self.princess.bind_reply(self._princess_reply)
         self.sr.bind_reply(self._reply)
-        await self.princess.start()
-        await self.roulette.start()
-        await self.races.start()
-        await self.polls.start()
-        await self.fishing.start()
         self.roulette.bind_reply(self._reply)
         self.races.bind_reply(self._reply)
         self.races.bind_remove(self._remove_chat)
@@ -125,10 +122,18 @@ class StreamBot:
         self.fishing.bind_points(self.princess.points)
         self.sr.bind_points(self.princess.points)
         self.cards.bind_points(self.princess.points)
+        self.roulette.bind_busy(self.busy)
+        self.races.bind_busy(self.busy)
+        self.cards.bind_busy(self.busy)
         self.cards.bind_reply(self._reply)
         self.cards.bind_obs(self.sr.player)
         self.fishing.bind_obs(self.sr.player)
         self.races.bind_obs(self.sr.player)
+        await self.princess.start()
+        await self.roulette.start()
+        await self.races.start()
+        await self.polls.start()
+        await self.fishing.start()
         log.info("Бустер OBS: http://%s:%d/booster.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info(
             "Рыбалка-рекорд OBS: http://%s:%d/fishing-record.html",
@@ -168,6 +173,10 @@ class StreamBot:
             log.info("cmd %s from %s", cmd, getattr(msg, "user_name", "?"))
         if cmd == HELP_COMMAND:
             await self._reply(f"{msg.user_name}, {format_help()}")
+            return
+        if cmd and self.busy.should_block(cmd, text):
+            if self.busy.take_deny_reply(getattr(msg, "user_id", "")):
+                await self._reply(self.busy.deny_message(msg.user_name))
             return
         if await self.princess.handle_message(msg):
             return

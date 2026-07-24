@@ -42,7 +42,9 @@ class Database:
         if self._conn is not None:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = await aiosqlite.connect(self.path)
+        # isolation_level=None — autocommit; иначе sqlite3 сам делает BEGIN на DML,
+        # и явный BEGIN в transaction() падает: "cannot start a transaction within a transaction".
+        self._conn = await aiosqlite.connect(self.path, isolation_level=None)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
@@ -110,10 +112,14 @@ class Database:
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
         async with self._locked("transaction"):
+            # Сбросить «хвост» после CancelledError/сбоя (except Exception его не ловил).
+            if self.conn.in_transaction:
+                await self.conn.rollback()
             await self.conn.execute("BEGIN")
             try:
                 yield self.conn
-                await self.conn.commit()
-            except Exception:
+            except BaseException:
                 await self.conn.rollback()
                 raise
+            else:
+                await self.conn.commit()

@@ -6,6 +6,7 @@ import logging
 from typing import Awaitable, Callable, Optional
 
 from bot.db import Database
+from bot.economy.busy import EconomyBusyGate
 from bot.economy.points import PointsStore
 from bot.goodgame import ChatMessage
 
@@ -42,6 +43,9 @@ class RouletteHandler:
 
     def bind_points(self, store: PointsStore) -> None:
         self.rounds.bind_points(store)
+
+    def bind_busy(self, gate: EconomyBusyGate) -> None:
+        self.rounds.bind_busy(gate)
 
     async def get_status(self) -> dict:
         return await self.rounds.status_snapshot()
