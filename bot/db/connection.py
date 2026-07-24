@@ -118,8 +118,7 @@ class Database:
             await self.conn.execute("BEGIN")
             try:
                 yield self.conn
+                await self.conn.commit()
             except BaseException:
                 await self.conn.rollback()
                 raise
-            else:
-                await self.conn.commit()
