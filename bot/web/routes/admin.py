@@ -546,6 +546,7 @@ class AdminRoutes:
             status = await self._fishing.admin_set_week_rewards(
                 species=data.get("species"),
                 fish_of_week_bonus=data.get("fish_of_week_bonus"),
+                enabled=data.get("enabled"),
             )
         except ValueError:
             return error_response("Некорректные суммы наград", status=400)
@@ -563,6 +564,7 @@ class AdminRoutes:
                 announce=True,
                 species=data.get("species"),
                 fish_of_week_bonus=data.get("fish_of_week_bonus"),
+                enabled=data.get("enabled"),
                 persist=True,
             )
         except ValueError:

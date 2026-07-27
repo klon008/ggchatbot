@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 from bot.db import Database
 from bot.db import fishing as fishing_db
@@ -117,20 +117,37 @@ class FishingHandler:
             "pending_fish_of_week": pending_fow,
             "week_rewards": rewards["species"],
             "fish_of_week_bonus": rewards["fish_of_week_bonus"],
+            "species_enabled": rewards["enabled"],
             "week_rewards_defaults": rewards["defaults"],
         }
+
+    def _default_enabled(self) -> dict[str, bool]:
+        return {name: True for name in FISH_SPECIES}
 
     def _default_reward_config(self) -> dict:
         species = {name: int(WEEK_REWARDS.get(name, 0)) for name in FISH_SPECIES}
         fow = int(FISH_OF_WEEK_BONUS)
+        enabled = self._default_enabled()
         return {
             "species": species,
             "fish_of_week_bonus": fow,
+            "enabled": enabled,
             "defaults": {
                 "species": dict(species),
                 "fish_of_week_bonus": fow,
+                "enabled": dict(enabled),
             },
         }
+
+    def _parse_enabled_map(self, raw: Any, *, base: dict[str, bool]) -> dict[str, bool]:
+        out = dict(base)
+        if not isinstance(raw, dict):
+            return out
+        for name in FISH_SPECIES:
+            if name not in raw:
+                continue
+            out[name] = bool(raw[name])
+        return out
 
     async def get_reward_config(self) -> dict:
         base = self._default_reward_config()
@@ -153,17 +170,24 @@ class FishingHandler:
             fow = max(0, int(stored.get("fish_of_week_bonus", base["fish_of_week_bonus"])))
         except (TypeError, ValueError):
             fow = base["fish_of_week_bonus"]
+        enabled = self._parse_enabled_map(stored.get("enabled"), base=base["enabled"])
         return {
             "species": species,
             "fish_of_week_bonus": fow,
+            "enabled": enabled,
             "defaults": base["defaults"],
         }
+
+    async def get_enabled_species_set(self) -> set[str]:
+        cfg = await self.get_reward_config()
+        return {name for name, on in cfg["enabled"].items() if on}
 
     def _normalize_reward_payload(
         self,
         species: Optional[dict],
         fish_of_week_bonus: Optional[int],
-    ) -> tuple[dict[str, int], int]:
+        enabled: Optional[dict] = None,
+    ) -> tuple[dict[str, int], int, dict[str, bool]]:
         base = self._default_reward_config()
         out_species = dict(base["species"])
         if isinstance(species, dict):
@@ -180,19 +204,26 @@ class FishingHandler:
                 fow = max(0, int(fish_of_week_bonus))
             except (TypeError, ValueError) as exc:
                 raise ValueError("bad_fow_bonus") from exc
-        return out_species, fow
+        out_enabled = dict(base["enabled"])
+        if enabled is not None:
+            out_enabled = self._parse_enabled_map(enabled, base=out_enabled)
+        return out_species, fow, out_enabled
 
     async def admin_set_week_rewards(
         self,
         *,
         species: Optional[dict] = None,
         fish_of_week_bonus: Optional[int] = None,
+        enabled: Optional[dict] = None,
     ) -> dict:
-        out_species, fow = self._normalize_reward_payload(species, fish_of_week_bonus)
+        out_species, fow, out_enabled = self._normalize_reward_payload(
+            species, fish_of_week_bonus, enabled
+        )
         await fishing_db.set_week_rewards_override(
             self._db,
             species=out_species,
             fish_of_week_bonus=fow,
+            enabled=out_enabled,
         )
         status = await self.get_status()
         return status
@@ -212,6 +243,7 @@ class FishingHandler:
         announce: bool = True,
         species: Optional[dict] = None,
         fish_of_week_bonus: Optional[int] = None,
+        enabled: Optional[dict] = None,
         persist: bool = True,
     ) -> dict:
         points = self._require_points()
@@ -220,15 +252,16 @@ class FishingHandler:
         if not pending:
             raise RuntimeError("nothing_to_pay")
 
-        if species is not None or fish_of_week_bonus is not None:
-            reward_species, fow_bonus_cfg = self._normalize_reward_payload(
-                species, fish_of_week_bonus
+        if species is not None or fish_of_week_bonus is not None or enabled is not None:
+            reward_species, fow_bonus_cfg, out_enabled = self._normalize_reward_payload(
+                species, fish_of_week_bonus, enabled
             )
             if persist:
                 await fishing_db.set_week_rewards_override(
                     self._db,
                     species=reward_species,
                     fish_of_week_bonus=fow_bonus_cfg,
+                    enabled=out_enabled,
                 )
         else:
             cfg = await self.get_reward_config()
@@ -361,7 +394,12 @@ class FishingHandler:
         player["last_cast_at"] = now
 
         balance = await points.get_balance(msg.user_id)
-        result, delta = apply_cast_roll(player, points_balance=balance)
+        enabled = await self.get_enabled_species_set()
+        result, delta = apply_cast_roll(
+            player,
+            points_balance=balance,
+            enabled_species=enabled,
+        )
 
         if result.kind == "fish" and result.species and result.weight is not None:
             if await self.store.claim_first_fish():

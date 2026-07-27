@@ -116,11 +116,14 @@ async def set_week_rewards_override(
     *,
     species: dict[str, int],
     fish_of_week_bonus: int,
+    enabled: Optional[dict[str, bool]] = None,
 ) -> None:
-    payload = {
+    payload: dict[str, Any] = {
         "species": {str(k): int(v) for k, v in species.items()},
         "fish_of_week_bonus": int(fish_of_week_bonus),
     }
+    if enabled is not None:
+        payload["enabled"] = {str(k): bool(v) for k, v in enabled.items()}
     await set_meta(db, week_rewards_json=json.dumps(payload, ensure_ascii=False))
 
 

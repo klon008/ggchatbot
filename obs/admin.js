@@ -1026,36 +1026,65 @@
       const n = parseInt(input.value, 10);
       species[name] = Number.isFinite(n) && n >= 0 ? n : 0;
     });
+    const enabled = {};
+    fishingRewardsFields.querySelectorAll("input[data-enabled-species]").forEach((input) => {
+      const name = input.getAttribute("data-enabled-species");
+      enabled[name] = !!input.checked;
+    });
     const fow = parseInt(fishingFowBonus.value, 10);
     return {
       species,
+      enabled,
       fish_of_week_bonus: Number.isFinite(fow) && fow >= 0 ? fow : 0,
     };
   }
 
-  function fishingFillRewardInputs(rewards, fowBonus) {
+  function fishingApplyEnabledStyles() {
+    fishingRewardsFields.querySelectorAll("label[data-species-row]").forEach((label) => {
+      const name = label.getAttribute("data-species-row");
+      const cb = label.querySelector(`input[data-enabled-species="${CSS.escape(name)}"]`);
+      const on = cb ? cb.checked : true;
+      label.style.opacity = on ? "1" : "0.55";
+    });
+  }
+
+  function fishingFillRewardInputs(rewards, fowBonus, enabledMap) {
     const species = rewards || {};
     const names = Object.keys(species);
-    if (!fishingRewardsBuilt || fishingRewardsFields.childElementCount !== names.length) {
+    const enabled = enabledMap || {};
+    if (!fishingRewardsBuilt || fishingRewardsFields.querySelectorAll("label[data-species-row]").length !== names.length) {
       fishingRewardsFields.innerHTML = names
-        .map(
-          (name) => `
-        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px">
+        .map((name) => {
+          const on = enabled[name] !== false;
+          return `
+        <label data-species-row="${esc(name)}" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;opacity:${on ? "1" : "0.55"}">
+          <input type="checkbox" data-enabled-species="${esc(name)}" ${on ? "checked" : ""} title="В дропе заброса" />
           <span style="min-width:4.5em">${esc(name)}</span>
           <input type="number" data-species="${esc(name)}" min="0" step="1"
             style="width:90px" value="${esc(species[name])}" />
-        </label>`
-        )
+        </label>`;
+        })
         .join("");
       fishingRewardsBuilt = true;
-      fishingRewardsFields.querySelectorAll("input").forEach((input) => {
+      fishingRewardsFields.querySelectorAll("input[data-species]").forEach((input) => {
         input.addEventListener("input", () => fishingUpdatePreview(fishingLastData));
+      });
+      fishingRewardsFields.querySelectorAll("input[data-enabled-species]").forEach((input) => {
+        input.addEventListener("change", () => {
+          fishingApplyEnabledStyles();
+          fishingUpdatePreview(fishingLastData);
+        });
       });
     } else {
       fishingRewardsFields.querySelectorAll("input[data-species]").forEach((input) => {
         const name = input.getAttribute("data-species");
         if (name in species) input.value = String(species[name]);
       });
+      fishingRewardsFields.querySelectorAll("input[data-enabled-species]").forEach((input) => {
+        const name = input.getAttribute("data-enabled-species");
+        input.checked = enabled[name] !== false;
+      });
+      fishingApplyEnabledStyles();
     }
     fishingFowBonus.value = String(fowBonus ?? 0);
   }
@@ -1119,7 +1148,11 @@
         "Сейчас нечего выдавать: нет закрытой недели с ожидающими наградами";
     }
 
-    fishingFillRewardInputs(data.week_rewards || {}, data.fish_of_week_bonus ?? 0);
+    fishingFillRewardInputs(
+      data.week_rewards || {},
+      data.fish_of_week_bonus ?? 0,
+      data.species_enabled || {}
+    );
     const cfg = fishingReadRewardsFromForm();
 
     const leaders = data.week_leaders || [];
@@ -1190,7 +1223,7 @@
       setStatus("Нет defaults — обновите вкладку", "err");
       return;
     }
-    fishingFillRewardInputs(defaults.species || {}, defaults.fish_of_week_bonus ?? 0);
+    fishingFillRewardInputs(defaults.species || {}, defaults.fish_of_week_bonus ?? 0, defaults.enabled || {});
     const body = fishingReadRewardsFromForm();
     setStatus("Сброс наград к defaults…");
     try {

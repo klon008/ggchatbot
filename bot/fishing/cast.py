@@ -42,8 +42,14 @@ def _roll_neg_event() -> Optional[str]:
     return None
 
 
-def _pick_species() -> str:
-    names = list(FISH_SPECIES.keys())
+def _pick_species(enabled: Optional[set[str]] = None) -> Optional[str]:
+    names = [
+        n
+        for n in FISH_SPECIES
+        if enabled is None or n in enabled
+    ]
+    if not names:
+        return None
     weights = [FISH_SPECIES[n][0] for n in names]
     return random.choices(names, weights=weights, k=1)[0]
 
@@ -75,10 +81,12 @@ def apply_cast_roll(
     *,
     points_balance: int,
     with_prefix: bool = True,
+    enabled_species: Optional[set[str]] = None,
 ) -> tuple[CastResult, int]:
     """
     Ресурсы заброса уже списаны.
     Возвращает (результат, дельта принцесс: отрицательная = штраф, положительная = продажа без бонуса дня).
+    enabled_species: если задан — дроп только из этого множества (пусто → сход вместо рыбы).
     """
     prefix = (texts.pick(texts.CAST_PREFIX) + " ") if with_prefix else ""
     event = _roll_neg_event()
@@ -117,7 +125,11 @@ def apply_cast_roll(
         msg = prefix + texts.pick(texts.TRASH[trash_key])
         return CastResult(kind="trash", message=msg), 0
 
-    species = _pick_species()
+    species = _pick_species(enabled_species)
+    if species is None:
+        msg = prefix + texts.pick(texts.MISS)
+        return CastResult(kind="miss", message=msg), 0
+
     weight = _roll_weight(species)
     size, sale = sell_price(species, weight)
     catch = texts.pick(texts.FISH_CATCH).format(

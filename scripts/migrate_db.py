@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from bot.db import Database  # noqa: E402
+from bot.db.connection import Database  # noqa: E402
 from bot.db.migrate import get_schema_version  # noqa: E402
 
 
