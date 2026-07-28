@@ -259,10 +259,7 @@
         player.clearVideo();
       } catch (e) {}
     }
-    var el = document.getElementById("player");
-    if (el) {
-      el.classList.remove("is-hidden");
-    }
+    // Не снимаем is-hidden здесь: при уходе на ЯМузыку iframe должен остаться скрытым.
   }
 
   function stopYandexPlayback() {
@@ -270,6 +267,7 @@
     if (ymAudio) {
       try {
         ymAudio.pause();
+        ymAudio.muted = true;
         ymAudio.removeAttribute("src");
         ymAudio.load();
       } catch (e) {}
@@ -417,14 +415,35 @@
     }
   }
 
+  function forceYouTubeAudible() {
+    if (!player || !playerReady || activeBackend !== "youtube") return;
+    try {
+      player.unMute();
+      player.setVolume(100);
+    } catch (e) {
+      debugLog("warn", "forceYouTubeAudible: " + e.message);
+    }
+  }
+
   function startYouTubePlayback() {
     updateNowPlaying(current.requestedBy, current.title || "Загрузка…");
     var el = document.getElementById("player");
     if (el) el.classList.remove("is-hidden");
     showPlayer();
     try {
+      // Autoplay: стартуем mute, затем принудительно открываем звук
+      // (после <audio> ЯМузыки unmute иногда не срабатывает сам).
       player.mute();
       player.loadVideoById(current.videoId);
+      setTimeout(function () {
+        if (activeBackend !== "youtube") return;
+        try {
+          player.playVideo();
+        } catch (e) {}
+        forceYouTubeAudible();
+      }, 350);
+      setTimeout(forceYouTubeAudible, 900);
+      setTimeout(forceYouTubeAudible, 1800);
     } catch (e) {
       reportError(2, "loadVideoById: " + e.message);
     }
@@ -864,15 +883,15 @@
     switch (evt.data) {
       case YT.PlayerState.PLAYING:
         refreshTitleFromPlayer();
+        forceYouTubeAudible();
         try {
-          player.unMute();
-          player.setVolume(100);
           player.setOption("captions", "track", {});
         } catch (e) {}
         checkDuration(0);
         break;
       case YT.PlayerState.BUFFERING:
         refreshTitleFromPlayer();
+        forceYouTubeAudible();
         break;
       case YT.PlayerState.ENDED:
         hidePlayer();
