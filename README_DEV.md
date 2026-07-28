@@ -460,7 +460,7 @@ class Track:
 - URL: `/album/{albumId}/track/{trackId}`, `/track/{trackId}`, iframe-hash
 - Хосты: music.yandex.ru, music.yandex.com
 - Playback: скачивание по `YANDEX_MUSIC_TOKEN` → `/ym/file/{token}` → OBS `<audio>`
-- Токен: `python tools/yandex_music_token.py` (нужен Plus)
+- Токен: `tools\yandex_music_token.cmd` (GUI) или `python tools/yandex_music_token.py` (нужен Plus)
 
 #### Роутер (`validate.py`)
 
@@ -869,7 +869,7 @@ python scripts/migrate_json_to_sqlite.py
 
 См. [docs/song_request_providers.md](docs/song_request_providers.md): iframe (отклонён) → **`<audio>` (сейчас)** → API/Ynison.
 
-Токен ЯМузыки: `YANDEX_MUSIC_TOKEN` в `.env`, скрипт `tools/yandex_music_token.py`.
+Токен ЯМузыки: `YANDEX_MUSIC_TOKEN` в `.env`, GUI `tools/yandex_music_token.cmd`.
 
 ### SQLite
 

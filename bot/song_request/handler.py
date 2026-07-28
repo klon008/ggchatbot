@@ -182,7 +182,7 @@ class SongRequestHandler:
         if result.provider == PROVIDER_YANDEX and not self.playback.yandex_configured:
             await self._say(
                 f"{msg.user_name}, Яндекс Музыка не настроена "
-                "(нужен YANDEX_MUSIC_TOKEN, см. tools/yandex_music_token.py)"
+                "(нужен YANDEX_MUSIC_TOKEN — tools\\yandex_music_token.cmd)"
             )
             return
 

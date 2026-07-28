@@ -80,7 +80,7 @@ copy bot\fishing\settings.example.py bot\fishing\settings.py
 | `MAX_DURATION_SEC` | Лимит длительности трека (проверяется в плеере). |
 | `TRACK_WATCHDOG_EXTRA_SEC` | Запас к лимиту для watchdog принудительного перехода. |
 | `USER_COOLDOWN_SEC` | Антиспам: пауза между `!sr` одного пользователя (`0` = выкл). |
-| `YANDEX_MUSIC_TOKEN` | OAuth-токен Яндекс Музыки (Plus). Получить: `python tools/yandex_music_token.py`. Без него заказы ЯМузыки отклоняются. |
+| `YANDEX_MUSIC_TOKEN` | OAuth-токен Яндекс Музыки (Plus). GUI: двойной клик `tools\yandex_music_token.cmd`. Без него заказы ЯМузыки отклоняются. |
 
 Логи бота пишутся в консоль и в `logs/bot.log` (ротация ~5 МБ × 5 файлов). При проблемах на эфире пришлите `logs/bot.log` (и при наличии `bot.log.1` …).
 
@@ -222,7 +222,8 @@ botmsc/
   docs/
     song_request_providers.md  # этапы: iframe → audio → API
   tools/
-    yandex_music_token.py # Device Flow → YANDEX_MUSIC_TOKEN
+    yandex_music_token.py # Device Flow GUI → .env
+    yandex_music_token.cmd # двойной клик для пользователя
   data/
     queue.json            # song-request (в .gitignore)
     princess_points.json  # princess (в .gitignore)
