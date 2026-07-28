@@ -11,6 +11,8 @@ from typing import Optional
 log = logging.getLogger("song_request.yandex_stream")
 
 _SAFE_TOKEN_RE = re.compile(r"^t-[0-9]+$")
+_AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".mp4", ".flac", ".ogg", ".opus"}
+_COVER_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 class YandexStreamError(Exception):
@@ -25,6 +27,7 @@ class CachedTrack:
     duration_sec: float
     content_type: str
     audio_url: str
+    cover_url: str = ""
 
 
 class YandexStreamService:
@@ -33,6 +36,7 @@ class YandexStreamService:
         self._cache_dir = cache_dir
         self._client = None
         self._files: dict[str, Path] = {}
+        self._covers: dict[str, Path] = {}
 
     @property
     def configured(self) -> bool:
@@ -74,7 +78,6 @@ class YandexStreamService:
     def _pick_download_info(infos: list):
         if not infos:
             return None
-        # Предпочитаем mp3 с максимальным битрейтом.
         mp3 = [i for i in infos if str(getattr(i, "codec", "")).lower() == "mp3"]
         pool = mp3 or list(infos)
 
@@ -85,6 +88,51 @@ class YandexStreamService:
                 return 0
 
         return max(pool, key=bitrate)
+
+    def _find_audio_on_disk(self, play_token: str) -> Optional[Path]:
+        if not self._cache_dir.is_dir():
+            return None
+        for candidate in self._cache_dir.glob(f"{play_token}.*"):
+            if candidate.is_file() and candidate.suffix.lower() in _AUDIO_EXTS:
+                return candidate
+        return None
+
+    def _find_cover_on_disk(self, play_token: str) -> Optional[Path]:
+        if not self._cache_dir.is_dir():
+            return None
+        for candidate in self._cache_dir.glob(f"{play_token}.*"):
+            if candidate.is_file() and candidate.suffix.lower() in _COVER_EXTS:
+                return candidate
+        return None
+
+    def _download_cover(self, track, play_token: str) -> Optional[Path]:
+        cover_path = self._cache_dir / f"{play_token}.jpg"
+        try:
+            if hasattr(track, "download_cover"):
+                track.download_cover(str(cover_path), size="400x400")
+            elif hasattr(track, "downloadCover"):
+                track.downloadCover(str(cover_path), size="400x400")
+            else:
+                return None
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Не удалось скачать обложку YM: %s", exc)
+            if cover_path.exists():
+                try:
+                    cover_path.unlink()
+                except OSError:
+                    pass
+            return None
+        if cover_path.is_file() and cover_path.stat().st_size > 0:
+            self._covers[play_token] = cover_path
+            return cover_path
+        return None
+
+    def _cover_url_for(self, play_token: str) -> str:
+        cover = self._covers.get(play_token) or self._find_cover_on_disk(play_token)
+        if cover and cover.is_file():
+            self._covers[play_token] = cover
+            return f"/ym/cover/{play_token}"
+        return ""
 
     def _resolve_sync(
         self,
@@ -107,6 +155,7 @@ class YandexStreamService:
                 duration_sec=0.0,
                 content_type=content_type,
                 audio_url=f"/ym/file/{play_token}",
+                cover_url=self._cover_url_for(play_token),
             )
 
         client = self._get_client()
@@ -125,6 +174,8 @@ class YandexStreamService:
             duration_sec = float(duration_ms) / 1000.0
         except (TypeError, ValueError):
             duration_sec = 0.0
+
+        self._download_cover(track, play_token)
 
         track_key = getattr(track, "track_id", None) or query
         infos = client.tracks_download_info(track_key, get_direct_links=False)
@@ -161,6 +212,7 @@ class YandexStreamService:
             duration_sec=duration_sec,
             content_type=content_type,
             audio_url=f"/ym/file/{play_token}",
+            cover_url=self._cover_url_for(play_token),
         )
 
     async def resolve_and_cache(
@@ -183,36 +235,50 @@ class YandexStreamService:
             return None
         path = self._files.get(play_token)
         if path is None or not path.is_file():
-            # Поиск на диске после рестарта (редко нужно).
-            for candidate in self._cache_dir.glob(f"{play_token}.*"):
-                if candidate.is_file():
-                    ext = candidate.suffix.lower()
-                    ctype = "audio/mpeg" if ext == ".mp3" else "audio/mp4"
-                    self._files[play_token] = candidate
-                    return candidate, ctype
-            return None
+            path = self._find_audio_on_disk(play_token)
+            if path is None:
+                return None
+            self._files[play_token] = path
         ext = path.suffix.lower()
         ctype = "audio/mpeg" if ext == ".mp3" else "audio/mp4"
+        return path, ctype
+
+    def get_cover(self, play_token: str) -> Optional[tuple[Path, str]]:
+        if not _SAFE_TOKEN_RE.match(play_token):
+            return None
+        path = self._covers.get(play_token)
+        if path is None or not path.is_file():
+            path = self._find_cover_on_disk(play_token)
+            if path is None:
+                return None
+            self._covers[play_token] = path
+        ext = path.suffix.lower()
+        if ext in (".jpg", ".jpeg"):
+            ctype = "image/jpeg"
+        elif ext == ".png":
+            ctype = "image/png"
+        elif ext == ".webp":
+            ctype = "image/webp"
+        else:
+            ctype = "image/jpeg"
         return path, ctype
 
     def cleanup(self, play_token: Optional[str]) -> None:
         if not play_token:
             return
-        path = self._files.pop(play_token, None)
-        candidates = [path] if path else []
+        self._files.pop(play_token, None)
+        self._covers.pop(play_token, None)
         if self._cache_dir.is_dir():
-            candidates.extend(self._cache_dir.glob(f"{play_token}.*"))
-        for p in candidates:
-            if p is None:
-                continue
-            try:
-                if p.is_file():
-                    p.unlink()
-            except OSError as exc:
-                log.warning("Не удалось удалить кэш YM %s: %s", p, exc)
+            for p in self._cache_dir.glob(f"{play_token}.*"):
+                try:
+                    if p.is_file():
+                        p.unlink()
+                except OSError as exc:
+                    log.warning("Не удалось удалить кэш YM %s: %s", p, exc)
 
     def cleanup_all(self) -> None:
-        for token in list(self._files.keys()):
+        tokens = set(self._files.keys()) | set(self._covers.keys())
+        for token in list(tokens):
             self.cleanup(token)
         if self._cache_dir.is_dir():
             for p in self._cache_dir.glob("t-*"):

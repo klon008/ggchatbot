@@ -28,6 +28,8 @@
   var playerWrap = document.getElementById("playerWrap");
   var playerInner = document.getElementById("playerInner");
   var ymAudio = document.getElementById("ymAudio");
+  var ymCoverWrap = document.getElementById("ymCoverWrap");
+  var ymCover = document.getElementById("ymCover");
   var npTrack = document.getElementById("npTrack");
   var npChunkB = document.getElementById("npChunkB");
   var npUser = document.getElementById("npUser");
@@ -69,6 +71,7 @@
     trackId: null,
     albumId: "",
     audioUrl: null,
+    coverUrl: null,
     maxDurationSec: 0,
     requestedBy: "",
     title: ""
@@ -264,6 +267,7 @@
 
   function stopYandexPlayback() {
     ymDurationChecked = false;
+    hideYmCover();
     if (ymAudio) {
       try {
         ymAudio.pause();
@@ -272,6 +276,36 @@
         ymAudio.load();
       } catch (e) {}
     }
+  }
+
+  function hideYmCover() {
+    if (ymCoverWrap) {
+      ymCoverWrap.classList.remove("is-active");
+      ymCoverWrap.setAttribute("aria-hidden", "true");
+    }
+    if (ymCover) {
+      try {
+        ymCover.removeAttribute("src");
+      } catch (e) {}
+    }
+  }
+
+  function showYmCover(url) {
+    if (!ymCoverWrap || !ymCover) return;
+    if (!url) {
+      hideYmCover();
+      return;
+    }
+    var src = absoluteAudioUrl(url);
+    ymCover.onload = function () {
+      ymCoverWrap.classList.add("is-active");
+      ymCoverWrap.setAttribute("aria-hidden", "false");
+    };
+    ymCover.onerror = function () {
+      debugLog("warn", "Обложка YM не загрузилась: " + src);
+      hideYmCover();
+    };
+    ymCover.src = src;
   }
 
   function stopOther(provider) {
@@ -516,6 +550,7 @@
     var el = document.getElementById("player");
     if (el) el.classList.add("is-hidden");
     updateNowPlaying(current.requestedBy, current.title || "Яндекс Музыка");
+    showYmCover(current.coverUrl);
     showPlayer();
 
     var src = absoluteAudioUrl(current.audioUrl);
@@ -557,6 +592,7 @@
       trackId: cmd.trackId || null,
       albumId: cmd.albumId || "",
       audioUrl: cmd.audioUrl || null,
+      coverUrl: cmd.coverUrl || null,
       maxDurationSec: cmd.maxDurationSec || 0,
       requestedBy: cmd.requestedBy || "",
       title: cmd.title || ""
@@ -571,6 +607,7 @@
       return;
     }
 
+    hideYmCover();
     activeBackend = "youtube";
     if (apiState === "failed") {
       reportApiUnavailableForPlay();

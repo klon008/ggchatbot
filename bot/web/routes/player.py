@@ -46,6 +46,7 @@ class PlayerRoutes:
                 web.get("/fishing-record.js", self._handle_fishing_record_js),
                 web.get("/sfx.js", self._handle_sfx_js),
                 web.get("/ym/file/{play_token}", self._handle_ym_file),
+                web.get("/ym/cover/{play_token}", self._handle_ym_cover),
                 web.get("/ws", self._handle_ws),
             ]
         )
@@ -69,6 +70,18 @@ class PlayerRoutes:
         found = getter(play_token)
         if not found:
             raise web.HTTPNotFound(text="file not found")
+        path, content_type = found
+        return web.FileResponse(path, headers={"Content-Type": content_type})
+
+    async def _handle_ym_cover(self, request: web.Request) -> web.StreamResponse:
+        play_token = str(request.match_info.get("play_token") or "")
+        stream = self._ym_stream
+        getter = getattr(stream, "get_cover", None) if stream is not None else None
+        if getter is None:
+            raise web.HTTPNotFound(text="ym cover not configured")
+        found = getter(play_token)
+        if not found:
+            raise web.HTTPNotFound(text="cover not found")
         path, content_type = found
         return web.FileResponse(path, headers={"Content-Type": content_type})
 
@@ -226,6 +239,7 @@ class PlayerRoutes:
         track_id: Optional[str] = None,
         album_id: Optional[str] = None,
         audio_url: Optional[str] = None,
+        cover_url: Optional[str] = None,
     ) -> None:
         payload: dict = {
             "action": "play",
@@ -238,6 +252,7 @@ class PlayerRoutes:
             "trackId": track_id,
             "albumId": album_id or "",
             "audioUrl": audio_url,
+            "coverUrl": cover_url,
         }
         await self.broadcast(payload)
 

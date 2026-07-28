@@ -427,6 +427,7 @@ class PlaybackController:
                 track_id=track.video_id,
                 album_id=track.album_id or "",
                 audio_url=cached.audio_url,
+                cover_url=cached.cover_url or None,
             )
             return None
 
@@ -440,6 +441,7 @@ class PlaybackController:
             track_id=None,
             album_id="",
             audio_url=None,
+            cover_url=None,
         )
         return None
 
