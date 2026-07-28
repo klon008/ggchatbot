@@ -191,14 +191,6 @@ async def open_booster(
     )
 
 
-def _dup_phrase(n: int) -> str:
-    if n % 10 == 1 and n % 100 != 11:
-        return f"{n} дубль"
-    if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
-        return f"{n} дубля"
-    return f"{n} дублей"
-
-
 def format_open_start(user_name: str, result: OpenResult) -> str:
     """Шаг 1: анонс перед OBS-анимацией."""
     return (
@@ -207,47 +199,43 @@ def format_open_start(user_name: str, result: OpenResult) -> str:
     )
 
 
-def format_open_summary(user_name: str, result: OpenResult) -> str:
-    """Шаг 2: итог с группировкой дублей."""
-    groups: dict[str, dict[str, Any]] = {}
-    order: list[str] = []
-    for roll in result.rolls:
-        g = groups.get(roll.card_id)
-        if g is None:
-            g = {
-                "name": roll.card_name,
-                "rarity": roll.rarity,
-                "new": 0,
-                "dups": 0,
-                "refund": 0,
-            }
-            groups[roll.card_id] = g
-            order.append(roll.card_id)
-        if roll.is_duplicate:
-            g["dups"] += 1
-            g["refund"] += roll.refund
-        else:
-            g["new"] += 1
+def _dup_phrase(n: int) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        return f"{n} дубль"
+    if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return f"{n} дубля"
+    return f"{n} дублей"
 
-    lines = [
-        f"{user_name}, открытие завершено!",
-        "Внутри было:",
-    ]
-    for card_id in order:
-        g = groups[card_id]
-        label = RARITY_LABELS.get(g["rarity"], g["rarity"])
-        head = f"• {g['name']} ({label}) - "
-        parts: list[str] = []
-        if g["new"]:
-            parts.append("новая" if g["new"] == 1 else f"{g['new']} новых")
-        if g["dups"]:
-            part = _dup_phrase(g["dups"])
-            if g["refund"]:
-                part += f" (возврат: {g['refund']} принцессы)"
-            parts.append(part)
-        lines.append(head + " + ".join(parts))
-    lines.append("Загляни в альбом: !альбом")
-    return "\n".join(lines)
+
+def _join_ru(parts: list[str]) -> str:
+    if len(parts) <= 1:
+        return parts[0] if parts else ""
+    if len(parts) == 2:
+        return f"{parts[0]} и {parts[1]}"
+    return f"{', '.join(parts[:-1])} и {parts[-1]}"
+
+
+def format_open_summary(user_name: str, result: OpenResult) -> str:
+    """Шаг 2: короткий итог — новые карты, дубли и возмещение."""
+    new_cards: list[str] = []
+    dup_count = 0
+    for roll in result.rolls:
+        if roll.is_duplicate:
+            dup_count += 1
+            continue
+        label = RARITY_LABELS.get(roll.rarity, roll.rarity)
+        new_cards.append(f"{roll.card_name} ({label})")
+
+    inside_parts = list(new_cards)
+    if dup_count:
+        inside_parts.append(_dup_phrase(dup_count))
+    inside = _join_ru(inside_parts) or "ничего"
+
+    msg = f"{user_name}, открытие завершено! Внутри: {inside}."
+    if result.total_refund:
+        msg += f" Возмещение: {result.total_refund} принцесс."
+    msg += " !альбом"
+    return msg
 
 
 def opening_to_ws_payload(
