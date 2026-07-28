@@ -53,6 +53,12 @@
       width: 100%;
       height: 100%;
     }
+    #player.is-hidden {
+      display: none;
+    }
+    #ymAudio {
+      display: none;
+    }
     #nowPlaying {
       position: absolute;
       left: 0;
@@ -73,31 +79,44 @@
       opacity: 1;
       transform: translateY(0);
     }
-    .now-playing-line {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
+    .now-playing-marquee {
+      overflow: hidden;
+      width: 100%;
       min-width: 0;
       font-size: clamp(14px, 2.2vw, 20px);
       line-height: 1.35;
       text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
     }
-    .now-playing-user {
+    .now-playing-track {
+      display: inline-flex;
+      align-items: baseline;
+      white-space: nowrap;
+      width: max-content;
+      will-change: transform;
+    }
+    .now-playing-track.is-scrolling {
+      animation: np-marquee var(--np-marquee-duration, 18s) linear infinite;
+    }
+    .now-playing-chunk {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 8px;
+      padding-right: 48px;
       flex-shrink: 0;
+    }
+    .now-playing-user {
       font-weight: 700;
       color: #ffd966;
     }
     .now-playing-sep {
-      flex-shrink: 0;
       opacity: 0.55;
     }
     .now-playing-title {
-      flex: 1;
-      min-width: 0;
       font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    }
+    @keyframes np-marquee {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
     }
     #debugPanel {
       display: none;
@@ -157,6 +176,9 @@
       #nowPlaying {
         transition: none;
       }
+      .now-playing-track.is-scrolling {
+        animation: none;
+      }
     }
   </style>
 </head>
@@ -164,11 +186,21 @@
   <div id="playerWrap">
     <div id="playerInner">
       <div id="player"></div>
+      <audio id="ymAudio" preload="auto" playsinline></audio>
       <div id="nowPlaying" aria-hidden="true">
-        <div class="now-playing-line">
-          <span class="now-playing-user" id="npUser"></span>
-          <span class="now-playing-sep">—</span>
-          <span class="now-playing-title" id="npTitle"></span>
+        <div class="now-playing-marquee">
+          <div class="now-playing-track" id="npTrack">
+            <span class="now-playing-chunk" id="npChunkA">
+              <span class="now-playing-user" id="npUser"></span>
+              <span class="now-playing-sep">—</span>
+              <span class="now-playing-title" id="npTitle"></span>
+            </span>
+            <span class="now-playing-chunk" id="npChunkB" aria-hidden="true" hidden>
+              <span class="now-playing-user" id="npUserB"></span>
+              <span class="now-playing-sep">—</span>
+              <span class="now-playing-title" id="npTitleB"></span>
+            </span>
+          </div>
         </div>
       </div>
     </div>

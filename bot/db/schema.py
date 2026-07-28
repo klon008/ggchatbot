@@ -71,7 +71,9 @@ CREATE TABLE IF NOT EXISTS queue_items (
     url TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT '',
     added_at REAL NOT NULL,
-    paid_cost INTEGER NOT NULL DEFAULT 0
+    paid_cost INTEGER NOT NULL DEFAULT 0,
+    provider TEXT NOT NULL DEFAULT 'youtube',
+    album_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS prison (

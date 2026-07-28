@@ -1,22 +1,21 @@
-/* OBS Song Request — плеер на YouTube IFrame API.
+/* OBS Song Request — YouTube IFrame API + Яндекс Музыка <audio>.
  *
  * Раздаётся Python-сервером по http://127.0.0.1:PORT/player.html
  * (важно: НЕ открывать через file:// — YouTube вернёт error 153).
  *
  * Режим отладки: ?debug=1 — тёмная подложка и панель логов/ошибок на экране.
  *
- * В idle (очередь пуста) оверлей полностью прозрачен — iframe не создаётся
- * до первого play (lazy-init), после ENDED плеер скрывается и очищается.
+ * Инвариант: одновременно играет только один backend (youtube | yandex).
  *
  * Протокол с Python:
- *   Python -> плеер: {action:"play", videoId, token, maxDurationSec, requestedBy, title}
+ *   Python -> плеер: {action:"play", provider, videoId|trackId|audioUrl, token, …}
  *                    {action:"skip", token}
  *                    {action:"toggle_pause", token}
  *                    {action:"queue_state", playing, queueLength, current}
- *   плеер  -> Python: {status:"ready", youtubeApi, youtubeApiState, youtubeApiError?}
+ *   плеер  -> Python: {status:"ready", youtubeApi, youtubeApiState, yandexReady, …}
  *                     {status:"api_error", code, message}
- *                     {status:"ended",    token, videoId}
- *                     {status:"error",    token, videoId, code, message?}
+ *                     {status:"ended", token, provider, videoId|trackId}
+ *                     {status:"error", token, …}
  *                     {status:"too_long", token, videoId, durationSec}
  */
 (function () {
@@ -28,8 +27,13 @@
 
   var playerWrap = document.getElementById("playerWrap");
   var playerInner = document.getElementById("playerInner");
+  var ymAudio = document.getElementById("ymAudio");
+  var npTrack = document.getElementById("npTrack");
+  var npChunkB = document.getElementById("npChunkB");
   var npUser = document.getElementById("npUser");
   var npTitle = document.getElementById("npTitle");
+  var npUserB = document.getElementById("npUserB");
+  var npTitleB = document.getElementById("npTitleB");
   var debugPanel = document.getElementById("debugPanel");
   var debugStatus = document.getElementById("debugStatus");
   var debugLogEl = document.getElementById("debugLog");
@@ -49,6 +53,9 @@
   var apiLoadTimer = null;
   var apiErrorSent = false;
 
+  /** @type {"none"|"youtube"|"yandex"} */
+  var activeBackend = "none";
+
   var ws = null;
   var wsReconnectDelay = 1000;
   var wsState = "disconnected";
@@ -56,13 +63,18 @@
   var isDebug = false;
 
   var current = {
+    provider: "youtube",
     token: null,
     videoId: null,
+    trackId: null,
+    albumId: "",
+    audioUrl: null,
     maxDurationSec: 0,
     requestedBy: "",
     title: ""
   };
   var durationChecked = false;
+  var ymDurationChecked = false;
 
   var YT_ERROR_LABELS = {
     2: "неверный параметр запроса",
@@ -125,11 +137,15 @@
     if (!isDebug || !debugStatus) return;
     var lines = [
       "WebSocket: " + wsState,
+      "Backend: " + activeBackend,
       "YouTube API: " + apiState + (apiFailReason ? " — " + apiFailReason : ""),
-      "Плеер: " + (playerReady ? "готов" : playerCreating ? "создаётся" : "нет")
+      "Плеер YT: " + (playerReady ? "готов" : playerCreating ? "создаётся" : "нет")
     ];
-    if (current.videoId) {
-      lines.push("Трек: " + current.videoId + " (token " + (current.token || "—") + ")");
+    var id = current.provider === "yandex" ? current.trackId : current.videoId;
+    if (id) {
+      lines.push(
+        "Трек: " + current.provider + ":" + id + " (token " + (current.token || "—") + ")"
+      );
     }
     debugStatus.textContent = lines.join(" · ");
   }
@@ -162,12 +178,40 @@
   }
 
   function updateNowPlaying(requestedBy, title) {
-    if (npUser) {
-      npUser.textContent = requestedBy || "Зритель";
+    var user = requestedBy || "Зритель";
+    var song = title || "Загрузка…";
+    if (npUser) npUser.textContent = user;
+    if (npTitle) npTitle.textContent = song;
+    if (npUserB) npUserB.textContent = user;
+    if (npTitleB) npTitleB.textContent = song;
+
+    if (!npTrack) return;
+
+    // Сброс анимации перед измерением.
+    npTrack.classList.remove("is-scrolling");
+    npTrack.style.removeProperty("--np-marquee-duration");
+    if (npChunkB) {
+      npChunkB.hidden = true;
     }
-    if (npTitle) {
-      npTitle.textContent = title || "Загрузка…";
-    }
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        var marquee = npTrack.parentElement;
+        if (!marquee) return;
+        var needScroll = npTrack.scrollWidth > marquee.clientWidth + 2;
+        if (!needScroll) return;
+        if (npChunkB) {
+          npChunkB.hidden = false;
+        }
+        // ~40px/s, минимум 10с, максимум 45с на один цикл половины трека.
+        var halfWidth = npTrack.scrollWidth / 2;
+        var duration = Math.max(10, Math.min(45, halfWidth / 40));
+        npTrack.style.setProperty("--np-marquee-duration", duration.toFixed(1) + "s");
+        // Перезапуск keyframes.
+        void npTrack.offsetWidth;
+        npTrack.classList.add("is-scrolling");
+      });
+    });
   }
 
   function refreshTitleFromPlayer() {
@@ -204,6 +248,49 @@
     }
   }
 
+  function clearYmEndTimer() {
+    /* no-op: ended приходит от <audio> */
+  }
+
+  function stopYouTubePlayback() {
+    if (player) {
+      try {
+        player.stopVideo();
+        player.clearVideo();
+      } catch (e) {}
+    }
+    var el = document.getElementById("player");
+    if (el) {
+      el.classList.remove("is-hidden");
+    }
+  }
+
+  function stopYandexPlayback() {
+    ymDurationChecked = false;
+    if (ymAudio) {
+      try {
+        ymAudio.pause();
+        ymAudio.removeAttribute("src");
+        ymAudio.load();
+      } catch (e) {}
+    }
+  }
+
+  function stopOther(provider) {
+    if (provider !== "youtube") {
+      stopYouTubePlayback();
+    }
+    if (provider !== "yandex") {
+      stopYandexPlayback();
+    }
+  }
+
+  function stopAllBackends() {
+    stopYouTubePlayback();
+    stopYandexPlayback();
+    activeBackend = "none";
+  }
+
   function finishHide() {
     cancelHide();
     document.body.classList.remove("playing");
@@ -213,12 +300,7 @@
         playerWrap.style.visibility = "hidden";
       }
     }
-    if (player) {
-      try {
-        player.stopVideo();
-        player.clearVideo();
-      } catch (e) {}
-    }
+    stopAllBackends();
   }
 
   function hidePlayer(immediate) {
@@ -244,6 +326,8 @@
       youtubeApi: apiState === "ready",
       youtubeApiState: apiState,
       youtubeApiError: apiFailReason || null,
+      yandexReady: !!ymAudio,
+      activeBackend: activeBackend,
       debug: isDebug
     };
   }
@@ -317,10 +401,10 @@
   function handleCommand(data) {
     switch (data.action) {
       case "play":
-        playVideo(data);
+        playMedia(data);
         break;
       case "skip":
-        skipVideo();
+        skipMedia();
         break;
       case "toggle_pause":
         togglePause(data);
@@ -333,8 +417,10 @@
     }
   }
 
-  function startPlayback() {
+  function startYouTubePlayback() {
     updateNowPlaying(current.requestedBy, current.title || "Загрузка…");
+    var el = document.getElementById("player");
+    if (el) el.classList.remove("is-hidden");
     showPlayer();
     try {
       player.mute();
@@ -344,10 +430,114 @@
     }
   }
 
-  function playVideo(cmd) {
+  function absoluteAudioUrl(url) {
+    if (!url) return "";
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.charAt(0) === "/") return location.origin + url;
+    return location.origin + "/" + url;
+  }
+
+  function onYmEnded() {
+    if (activeBackend !== "yandex") return;
+    debugLog("info", "ЯМузыка: ended");
+    hidePlayer();
+    send({
+      status: "ended",
+      provider: "yandex",
+      token: current.token,
+      trackId: current.trackId,
+      videoId: current.trackId
+    });
+  }
+
+  function onYmError() {
+    if (activeBackend !== "yandex") return;
+    var mediaErr = ymAudio && ymAudio.error;
+    var code = mediaErr ? mediaErr.code : "ym_error";
+    var msg = "ошибка воспроизведения Яндекс Музыки";
+    if (mediaErr) {
+      msg += " (code " + mediaErr.code + ")";
+    }
+    reportError(code, msg);
+  }
+
+  function onYmLoadedMetadata() {
+    if (activeBackend !== "yandex" || ymDurationChecked || !ymAudio) return;
+    var dur = ymAudio.duration;
+    if (!dur || !isFinite(dur) || dur <= 0) return;
+    ymDurationChecked = true;
+    if (current.maxDurationSec > 0 && dur > current.maxDurationSec) {
+      var longMsg = "трек длиннее лимита (" + Math.round(dur) + "с)";
+      debugLog("warn", longMsg);
+      hidePlayer();
+      send({
+        status: "too_long",
+        provider: "yandex",
+        token: current.token,
+        trackId: current.trackId,
+        videoId: current.trackId,
+        durationSec: Math.round(dur),
+        message: longMsg
+      });
+    }
+  }
+
+  function startYandexPlayback() {
+    if (!ymAudio) {
+      reportError("ym_missing", "элемент <audio> не найден");
+      return;
+    }
+    if (!current.audioUrl) {
+      reportError("ym_no_url", "нет audioUrl для Яндекс Музыки");
+      return;
+    }
+    stopOther("yandex");
+    activeBackend = "yandex";
+    ymDurationChecked = false;
+    var el = document.getElementById("player");
+    if (el) el.classList.add("is-hidden");
+    updateNowPlaying(current.requestedBy, current.title || "Яндекс Музыка");
+    showPlayer();
+
+    var src = absoluteAudioUrl(current.audioUrl);
+    try {
+      ymAudio.onended = onYmEnded;
+      ymAudio.onerror = onYmError;
+      ymAudio.onloadedmetadata = onYmLoadedMetadata;
+      ymAudio.muted = true;
+      ymAudio.src = src;
+      ymAudio.load();
+      var playPromise = ymAudio.play();
+      if (playPromise && typeof playPromise.then === "function") {
+        playPromise
+          .then(function () {
+            ymAudio.muted = false;
+            debugLog("info", "ЯМузыка audio play: " + src);
+          })
+          .catch(function (err) {
+            reportError("ym_autoplay", (err && err.message) || String(err));
+          });
+      } else {
+        ymAudio.muted = false;
+      }
+    } catch (e) {
+      reportError("ym_audio", e.message || String(e));
+    }
+  }
+
+  function playMedia(cmd) {
+    var provider = (cmd.provider || "youtube").toLowerCase();
+    if (provider !== "yandex") {
+      provider = "youtube";
+    }
+
     current = {
+      provider: provider,
       token: cmd.token || null,
       videoId: cmd.videoId || null,
+      trackId: cmd.trackId || null,
+      albumId: cmd.albumId || "",
+      audioUrl: cmd.audioUrl || null,
       maxDurationSec: cmd.maxDurationSec || 0,
       requestedBy: cmd.requestedBy || "",
       title: cmd.title || ""
@@ -355,13 +545,21 @@
     durationChecked = false;
     updateDebugStatus();
 
+    stopOther(provider);
+
+    if (provider === "yandex") {
+      startYandexPlayback();
+      return;
+    }
+
+    activeBackend = "youtube";
     if (apiState === "failed") {
       reportApiUnavailableForPlay();
       return;
     }
 
     ensureYouTubeApi();
-    ensurePlayer(startPlayback);
+    ensurePlayer(startYouTubePlayback);
   }
 
   function reportApiUnavailableForPlay() {
@@ -369,6 +567,7 @@
     debugLog("error", "Заказ не открыт: " + msg);
     send({
       status: "error",
+      provider: "youtube",
       token: current.token,
       videoId: current.videoId,
       code: "youtube_api_unavailable",
@@ -376,18 +575,43 @@
     });
   }
 
-  function skipVideo() {
+  function skipMedia() {
+    var provider = activeBackend !== "none" ? activeBackend : current.provider;
+    var payload = {
+      status: "ended",
+      provider: provider,
+      token: current.token,
+      skipped: true,
+      videoId: current.videoId || current.trackId,
+      trackId: current.trackId
+    };
     hidePlayer();
-    send({ status: "ended", token: current.token, videoId: current.videoId, skipped: true });
+    send(payload);
   }
 
   function togglePause(cmd) {
-    if (!player || !playerReady) {
-      debugLog("warn", "toggle_pause: плеер не готов");
-      return;
-    }
     if (cmd.token && current.token && cmd.token !== current.token) {
       debugLog("warn", "toggle_pause: устаревший token " + cmd.token);
+      return;
+    }
+
+    if (activeBackend === "yandex") {
+      if (!ymAudio) return;
+      if (ymAudio.paused) {
+        ymAudio.play().catch(function (err) {
+          debugLog("warn", "ЯМузыка resume: " + ((err && err.message) || String(err)));
+        });
+        debugLog("info", "ЯМузыка: продолжение");
+      } else {
+        ymAudio.pause();
+        debugLog("info", "ЯМузыка: пауза");
+      }
+      updateDebugStatus();
+      return;
+    }
+
+    if (!player || !playerReady) {
+      debugLog("warn", "toggle_pause: плеер не готов");
       return;
     }
     var state;
@@ -414,7 +638,7 @@
   }
 
   function checkDuration(attempt) {
-    if (durationChecked || !player) return;
+    if (durationChecked || !player || activeBackend !== "youtube") return;
     var dur = 0;
     try { dur = player.getDuration(); } catch (e) { dur = 0; }
 
@@ -426,7 +650,14 @@
         var msg = "не удалось получить длительность (live или сеть)";
         debugLog("warn", msg);
         hidePlayer();
-        send({ status: "too_long", token: current.token, videoId: current.videoId, durationSec: 0, message: msg });
+        send({
+          status: "too_long",
+          provider: "youtube",
+          token: current.token,
+          videoId: current.videoId,
+          durationSec: 0,
+          message: msg
+        });
       }
       return;
     }
@@ -438,6 +669,7 @@
       hidePlayer();
       send({
         status: "too_long",
+        provider: "youtube",
         token: current.token,
         videoId: current.videoId,
         durationSec: Math.round(dur),
@@ -457,8 +689,10 @@
     hidePlayer();
     send({
       status: "error",
+      provider: current.provider,
       token: current.token,
-      videoId: current.videoId,
+      videoId: current.videoId || current.trackId,
+      trackId: current.trackId,
       code: code,
       message: msg
     });
@@ -523,7 +757,7 @@
       send({ status: "api_error", code: code, message: message });
     }
 
-    if (pendingPlay) {
+    if (pendingPlay && current.provider === "youtube") {
       reportApiUnavailableForPlay();
       pendingPlay = null;
     }
@@ -599,7 +833,9 @@
     playerReady = true;
     playerCreating = false;
     debugLog("info", "YT.Player готов.");
-    hidePlayer(true);
+    if (activeBackend !== "youtube") {
+      hidePlayer(true);
+    }
     if (pendingPlay) {
       var cb = pendingPlay;
       pendingPlay = null;
@@ -621,6 +857,9 @@
   }
 
   function onPlayerStateChange(evt) {
+    if (activeBackend !== "youtube") {
+      return;
+    }
     debugLog("info", "Состояние плеера: " + stateName(evt.data));
     switch (evt.data) {
       case YT.PlayerState.PLAYING:
@@ -637,13 +876,21 @@
         break;
       case YT.PlayerState.ENDED:
         hidePlayer();
-        send({ status: "ended", token: current.token, videoId: current.videoId });
+        send({
+          status: "ended",
+          provider: "youtube",
+          token: current.token,
+          videoId: current.videoId
+        });
         break;
     }
     updateDebugStatus();
   }
 
   function onPlayerError(evt) {
+    if (activeBackend !== "youtube") {
+      return;
+    }
     reportError(evt.data);
   }
 

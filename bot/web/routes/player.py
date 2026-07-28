@@ -15,13 +15,21 @@ StatusHandler = Callable[[dict], Awaitable[None]]
 
 
 class PlayerRoutes:
-    def __init__(self, on_status: StatusHandler) -> None:
+    def __init__(
+        self,
+        on_status: StatusHandler,
+        ym_stream: Optional[object] = None,
+    ) -> None:
         self._on_status = on_status
+        self._ym_stream = ym_stream
         self._extra_handlers: list[StatusHandler] = []
         self._clients: set[web.WebSocketResponse] = set()
         self._booster_clients: set[web.WebSocketResponse] = set()
         self._fishing_record_clients: set[web.WebSocketResponse] = set()
         self._races_clients: set[web.WebSocketResponse] = set()
+
+    def bind_ym_stream(self, ym_stream: object) -> None:
+        self._ym_stream = ym_stream
 
     def add_status_handler(self, handler: StatusHandler) -> None:
         self._extra_handlers.append(handler)
@@ -37,6 +45,7 @@ class PlayerRoutes:
                 web.get("/fishing-record.html", self._handle_fishing_record_html),
                 web.get("/fishing-record.js", self._handle_fishing_record_js),
                 web.get("/sfx.js", self._handle_sfx_js),
+                web.get("/ym/file/{play_token}", self._handle_ym_file),
                 web.get("/ws", self._handle_ws),
             ]
         )
@@ -50,6 +59,18 @@ class PlayerRoutes:
 
     async def _handle_player_js(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("player.js", "application/javascript; charset=utf-8")
+
+    async def _handle_ym_file(self, request: web.Request) -> web.StreamResponse:
+        play_token = str(request.match_info.get("play_token") or "")
+        stream = self._ym_stream
+        getter = getattr(stream, "get_file", None) if stream is not None else None
+        if getter is None:
+            raise web.HTTPNotFound(text="ym cache not configured")
+        found = getter(play_token)
+        if not found:
+            raise web.HTTPNotFound(text="file not found")
+        path, content_type = found
+        return web.FileResponse(path, headers={"Content-Type": content_type})
 
     async def _handle_booster_html(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("booster.html", "text/html; charset=utf-8")
@@ -195,22 +216,30 @@ class PlayerRoutes:
 
     async def send_play(
         self,
-        video_id: str,
+        *,
+        provider: str,
         token: str,
         max_duration_sec: int,
         requested_by_name: str = "",
         title: str = "",
+        video_id: Optional[str] = None,
+        track_id: Optional[str] = None,
+        album_id: Optional[str] = None,
+        audio_url: Optional[str] = None,
     ) -> None:
-        await self.broadcast(
-            {
-                "action": "play",
-                "videoId": video_id,
-                "token": token,
-                "maxDurationSec": max_duration_sec,
-                "requestedBy": requested_by_name,
-                "title": title,
-            }
-        )
+        payload: dict = {
+            "action": "play",
+            "provider": provider,
+            "token": token,
+            "maxDurationSec": max_duration_sec,
+            "requestedBy": requested_by_name,
+            "title": title,
+            "videoId": video_id,
+            "trackId": track_id,
+            "albumId": album_id or "",
+            "audioUrl": audio_url,
+        }
+        await self.broadcast(payload)
 
     async def send_skip(self, token: Optional[str]) -> None:
         await self.broadcast({"action": "skip", "token": token})

@@ -38,6 +38,7 @@ class Config:
     user_cooldown_sec: int
 
     youtube_api_key: str
+    yandex_music_token: str
 
     album_link_secret: str
     site_base_url: str
@@ -64,6 +65,7 @@ class Config:
             track_watchdog_extra_sec=_get_int("TRACK_WATCHDOG_EXTRA_SEC", 60),
             user_cooldown_sec=_get_int("USER_COOLDOWN_SEC", 0),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY", "").strip(),
+            yandex_music_token=os.getenv("YANDEX_MUSIC_TOKEN", "").strip(),
             album_link_secret=os.getenv("ALBUM_LINK_SECRET", "").strip(),
             site_base_url=os.getenv(
                 "SITE_BASE_URL",

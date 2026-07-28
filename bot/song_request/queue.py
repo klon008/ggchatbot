@@ -11,6 +11,9 @@ from bot.db import queue as queue_db
 
 log = logging.getLogger("song_request.queue")
 
+PROVIDER_YOUTUBE = "youtube"
+PROVIDER_YANDEX = "yandex"
+
 
 @dataclass
 class Track:
@@ -21,10 +24,27 @@ class Track:
     requested_by_name: str = ""
     added_at: float = field(default_factory=time.time)
     paid_cost: int = 0
+    provider: str = PROVIDER_YOUTUBE
+    album_id: str = ""
+
+    @property
+    def track_id(self) -> str:
+        """Для ЯМузыки video_id хранит track_id."""
+        return self.video_id
+
+    def short_label(self) -> str:
+        if self.provider == PROVIDER_YANDEX:
+            return f"ym:{self.video_id}"
+        return f"yt:{self.video_id}"
 
 
 def _track_from_dict(item: dict) -> Track:
-    return Track(**{k: item[k] for k in Track.__annotations__ if k in item})
+    data = {k: item[k] for k in Track.__annotations__ if k in item}
+    if "provider" not in data or not data.get("provider"):
+        data["provider"] = PROVIDER_YOUTUBE
+    if "album_id" not in data:
+        data["album_id"] = ""
+    return Track(**data)
 
 
 class QueueManager:
@@ -138,6 +158,19 @@ class QueueManager:
             tracks.insert(0, self.current)
         return tracks
 
+    async def take_waiting_by_provider(self, provider: str) -> list[Track]:
+        """Убрать из ожидания треки выбранного провайдера (current не трогаем)."""
+        kept: list[Track] = []
+        removed: list[Track] = []
+        for t in self._queue:
+            if t.provider == provider:
+                removed.append(t)
+            else:
+                kept.append(t)
+        self._queue = kept
+        await self._save()
+        return removed
+
     def list_waiting(self) -> list[dict]:
         return [
             {
@@ -148,6 +181,8 @@ class QueueManager:
                 "requested_by_name": t.requested_by_name,
                 "url": t.url,
                 "added_at": t.added_at,
+                "provider": t.provider,
+                "album_id": t.album_id,
             }
             for i, t in enumerate(self._queue)
         ]

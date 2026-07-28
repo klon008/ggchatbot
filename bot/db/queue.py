@@ -9,6 +9,7 @@ from .connection import Database
 
 
 def _track_from_row(row) -> dict[str, Any]:
+    keys = row.keys()
     return {
         "video_id": row["video_id"],
         "requested_by": row["requested_by"],
@@ -16,7 +17,9 @@ def _track_from_row(row) -> dict[str, Any]:
         "url": row["url"],
         "title": row["title"],
         "added_at": float(row["added_at"]),
-        "paid_cost": int(row["paid_cost"]) if "paid_cost" in row.keys() else 0,
+        "paid_cost": int(row["paid_cost"]) if "paid_cost" in keys else 0,
+        "provider": row["provider"] if "provider" in keys else "youtube",
+        "album_id": row["album_id"] if "album_id" in keys else "",
     }
 
 
@@ -48,7 +51,8 @@ async def load_meta(db: Database) -> tuple[Optional[dict], Optional[str], int]:
 
 async def load_items(db: Database) -> list[dict[str, Any]]:
     rows = await db.fetchall(
-        "SELECT video_id, requested_by, requested_by_name, url, title, added_at, paid_cost "
+        "SELECT video_id, requested_by, requested_by_name, url, title, added_at, "
+        "paid_cost, provider, album_id "
         "FROM queue_items ORDER BY position ASC"
     )
     return [_track_from_row(row) for row in rows]
@@ -66,8 +70,9 @@ async def persist_queue(
         for pos, item in enumerate(queue_items):
             await conn.execute(
                 "INSERT INTO queue_items "
-                "(position, video_id, requested_by, requested_by_name, url, title, added_at, paid_cost) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "(position, video_id, requested_by, requested_by_name, url, title, "
+                "added_at, paid_cost, provider, album_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     pos,
                     item["video_id"],
@@ -77,6 +82,8 @@ async def persist_queue(
                     item.get("title", ""),
                     float(item.get("added_at", 0)),
                     int(item.get("paid_cost", 0)),
+                    item.get("provider", "youtube") or "youtube",
+                    item.get("album_id", "") or "",
                 ),
             )
         current_json = json.dumps(current, ensure_ascii=False) if current else None

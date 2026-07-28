@@ -3,18 +3,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Literal, Optional
 
 from bot.economy import PointsStore, pluralize_princess
 from bot.web.routes.player import PlayerRoutes
 from config import Config
 
-from .queue import QueueManager, Track
+from .queue import PROVIDER_YANDEX, PROVIDER_YOUTUBE, QueueManager, Track
+from .yandex_stream import YandexStreamError, YandexStreamService
 
 log = logging.getLogger("song_request")
 
 SayFn = Callable[[str], Awaitable[None]]
 PointsGetter = Callable[[], Optional[PointsStore]]
+Backend = Literal["youtube", "yandex"]
 
 _YT_ERROR_LABELS: dict[int | str, str] = {
     2: "неверный параметр запроса",
@@ -35,17 +37,28 @@ class PlaybackController:
         player: PlayerRoutes,
         points_getter: PointsGetter,
         say: SayFn,
+        ym_stream: Optional[YandexStreamService] = None,
     ) -> None:
         self._cfg = cfg
         self._queue = queue
         self._player = player
         self._points_getter = points_getter
         self._say = say
+        self._ym = ym_stream
         self._advance_lock = asyncio.Lock()
         self._watchdog: Optional[asyncio.Task] = None
         self._youtube_api_warned = False
         self._youtube_available = True
+        self.active_backend: Optional[Backend] = None
         self.player_paused = False
+
+    @property
+    def yandex_configured(self) -> bool:
+        return self._ym is not None and self._ym.configured
+
+    def _cleanup_ym(self, play_token: Optional[str]) -> None:
+        if self._ym is not None:
+            self._ym.cleanup(play_token)
 
     @property
     def youtube_available(self) -> bool:
@@ -98,16 +111,24 @@ class PlaybackController:
                 self._youtube_available = True
                 if was_down:
                     self._youtube_api_warned = False
-                    log.info("YouTube IFrame API снова доступен — возобновляем очередь.")
+                    log.info("YouTube IFrame API снова доступен — возобновляем YouTube-очередь.")
             elif api_state in ("idle", "loading") and not self._youtube_available:
-                # OBS перезагрузил источник — даём снова принимать заказы.
+                # OBS перезагрузил источник — даём снова принимать заказы YouTube.
                 self._youtube_available = True
                 self._youtube_api_warned = False
                 log.info("Плеер переподключился (state=%s) — снимаем блок YouTube.", api_state)
 
             if self._queue.is_playing and self._queue.current:
-                await self._send_play(self._queue.current, self._queue.current_token or "")
-                self.arm_watchdog(self._queue.current_token)
+                err = await self._send_play(
+                    self._queue.current, self._queue.current_token or ""
+                )
+                if err:
+                    await self.advance(
+                        expected_token=self._queue.current_token,
+                        skip_reason=err,
+                    )
+                else:
+                    self.arm_watchdog(self._queue.current_token)
             else:
                 await self.advance(expected_token=None)
             return
@@ -118,15 +139,21 @@ class PlaybackController:
 
         token = data.get("token")
         if status == "ended":
-            log.info("Трек завершён: videoId=%s token=%s", data.get("videoId"), token)
+            log.info(
+                "Трек завершён: provider=%s id=%s token=%s",
+                data.get("provider"),
+                data.get("videoId") or data.get("trackId"),
+                token,
+            )
             await self.advance(expected_token=token)
             return
 
         if status == "error":
             reason = self._format_player_error(data)
             log.warning(
-                "Ошибка плеера: videoId=%s token=%s code=%s — %s",
-                data.get("videoId"),
+                "Ошибка плеера: provider=%s id=%s token=%s code=%s — %s",
+                data.get("provider"),
+                data.get("videoId") or data.get("trackId"),
                 token,
                 data.get("code"),
                 reason,
@@ -148,23 +175,57 @@ class PlaybackController:
             await self.advance(expected_token=token, skip_reason=reason)
 
     async def _handle_youtube_outage(self, data: dict) -> None:
-        """YouTube API недоступен: рефанд всей очереди, чтобы не терять экономику."""
+        """YouTube недоступен: рефанд только YouTube-треков, ЯМузыка продолжает."""
         self._youtube_available = False
         await self._warn_youtube_api_unavailable(data)
 
-        tracks = self._queue.all_tracks()
-        if not tracks:
-            return
+        async with self._advance_lock:
+            self.player_paused = False
+            refunded_tracks: list[Track] = []
 
-        count = len(tracks)
-        total_refunded = await self.clear_queue_with_refunds(reason="падение YouTube")
-        if total_refunded > 0:
-            await self._say(
-                f"YouTube недоступен — очередь очищена ({count}), "
-                f"возвращено {total_refunded} {pluralize_princess(total_refunded)}."
-            )
-        else:
-            await self._say(f"YouTube недоступен — очередь очищена ({count}).")
+            current = self._queue.current
+            if current is not None and current.provider == PROVIDER_YOUTUBE:
+                self.cancel_watchdog()
+                await self._player.send_skip(self._queue.current_token)
+                refunded_tracks.append(current)
+                await self._queue.force_skip()
+                if self.active_backend == PROVIDER_YOUTUBE:
+                    self.active_backend = None
+
+            waiting_yt = await self._queue.take_waiting_by_provider(PROVIDER_YOUTUBE)
+            refunded_tracks.extend(waiting_yt)
+
+            total_refunded = 0
+            for track in refunded_tracks:
+                total_refunded += await self._refund_track(track)
+
+            points = self._points_getter()
+            if points is not None and total_refunded > 0:
+                await points.flush_pending()
+
+            count = len(refunded_tracks)
+            if count > 0:
+                if total_refunded > 0:
+                    await self._say(
+                        f"YouTube недоступен — снято YouTube-треков: {count}, "
+                        f"возвращено {total_refunded} {pluralize_princess(total_refunded)}. "
+                        "Заказы Яндекс Музыки работают."
+                    )
+                else:
+                    await self._say(
+                        f"YouTube недоступен — снято YouTube-треков: {count}. "
+                        "Заказы Яндекс Музыки работают."
+                    )
+            else:
+                log.info("YouTube недоступен, в очереди не было YouTube-треков.")
+
+            # Продолжить очередь (ЯМузыка), если сейчас ничего не играет.
+            if not self._queue.is_playing:
+                # advance без повторного захвата lock — вызываем внутреннюю часть
+                pass
+
+        if not self._queue.is_playing:
+            await self.advance(expected_token=None)
 
     async def advance(
         self,
@@ -177,6 +238,7 @@ class PlaybackController:
             self.player_paused = False
             if self._queue.is_playing:
                 finished_track = self._queue.current
+                finished_token = self._queue.current_token
                 if expected_token is not None:
                     if not await self._queue.finish_current(expected_token):
                         return
@@ -184,32 +246,60 @@ class PlaybackController:
                         await self._notify_playback_failure(finished_track, skip_reason)
                     elif skip_reason:
                         await self._say(f"Пропуск: {skip_reason}")
+                    self._cleanup_ym(expected_token)
                 elif self._queue.current is not None:
                     await self._queue.force_skip()
+                    self._cleanup_ym(finished_token)
+                self.active_backend = None
 
             if not continue_queue:
                 await self._player.send_queue_state(self._queue.snapshot())
                 log.warning(
-                    "Очередь на паузе (YouTube недоступен), в ожидании: %d.",
+                    "Очередь на паузе, в ожидании: %d.",
                     len(self._queue),
                 )
                 return
 
-            if not self._youtube_available:
-                await self._player.send_queue_state(self._queue.snapshot())
-                log.warning("Пропуск старта очереди: YouTube API ещё недоступен.")
-                return
+            while True:
+                nxt = await self._queue.start_next()
+                if nxt is None:
+                    await self._player.send_queue_state(self._queue.snapshot())
+                    self.active_backend = None
+                    log.info("Очередь пуста — ожидание новых заказов.")
+                    return
 
-            nxt = await self._queue.start_next()
-            if nxt is None:
-                await self._player.send_queue_state(self._queue.snapshot())
-                log.info("Очередь пуста — ожидание новых заказов.")
-                return
+                track, token = nxt
+                if track.provider == PROVIDER_YOUTUBE and not self._youtube_available:
+                    await self._notify_playback_failure(
+                        track,
+                        "YouTube недоступен",
+                    )
+                    await self._queue.force_skip()
+                    continue
 
-            track, token = nxt
-            log.info("Воспроизведение: %s (token=%s)", track.video_id, token)
-            await self._send_play(track, token)
-            self.arm_watchdog(token)
+                if track.provider == PROVIDER_YANDEX and not self.yandex_configured:
+                    await self._notify_playback_failure(
+                        track,
+                        "Яндекс Музыка не настроена",
+                    )
+                    await self._queue.force_skip()
+                    continue
+
+                log.info(
+                    "Воспроизведение: provider=%s id=%s (token=%s)",
+                    track.provider,
+                    track.video_id,
+                    token,
+                )
+                err = await self._send_play(track, token)
+                if err:
+                    await self._notify_playback_failure(track, err)
+                    self._cleanup_ym(token)
+                    await self._queue.force_skip()
+                    continue
+
+                self.arm_watchdog(token)
+                return
 
     async def clear_queue_with_refunds(self, *, reason: str = "отключение заказов") -> int:
         async with self._advance_lock:
@@ -232,6 +322,9 @@ class PlaybackController:
                     )
                     total_refunded += refunded
             await self._queue.clear()
+            self.active_backend = None
+            if self._ym is not None:
+                self._ym.cleanup_all()
             await self._player.send_queue_state(self._queue.snapshot())
             points = self._points_getter()
             if points is not None and total_refunded > 0:
@@ -266,6 +359,7 @@ class PlaybackController:
         self._youtube_api_warned = True
         await self._say(
             "Плеер OBS не может подключиться к YouTube (Проблемы с сетью). "
+            "Заказы Яндекс Музыки по-прежнему доступны."
         )
 
     async def _notify_playback_failure(self, track: Track, reason: str) -> None:
@@ -289,14 +383,65 @@ class PlaybackController:
             return cost
         return 0
 
-    async def _send_play(self, track: Track, token: str) -> None:
+    async def _send_play(self, track: Track, token: str) -> Optional[str]:
+        """Старт трека. Возвращает текст ошибки или None при успехе."""
+        provider = track.provider if track.provider in (PROVIDER_YOUTUBE, PROVIDER_YANDEX) else PROVIDER_YOUTUBE
+        self.active_backend = provider  # type: ignore[assignment]
+
+        if provider == PROVIDER_YANDEX:
+            if self._ym is None or not self._ym.configured:
+                return "Яндекс Музыка не настроена"
+            try:
+                cached = await self._ym.resolve_and_cache(
+                    track.video_id,
+                    track.album_id or None,
+                    token,
+                    known_title=track.title,
+                )
+            except YandexStreamError as exc:
+                log.warning("YM resolve failed: %s", exc)
+                return str(exc) or "не удалось скачать трек"
+            except Exception as exc:  # noqa: BLE001
+                log.exception("YM resolve unexpected error")
+                return f"ошибка Яндекс Музыки: {exc}"
+
+            if (
+                cached.duration_sec > 0
+                and self._cfg.max_duration_sec > 0
+                and cached.duration_sec > self._cfg.max_duration_sec
+            ):
+                return (
+                    f"трек длиннее лимита ({int(cached.duration_sec)}с)"
+                )
+
+            if cached.title and not track.title:
+                track.title = cached.title
+
+            await self._player.send_play(
+                provider=PROVIDER_YANDEX,
+                token=token,
+                max_duration_sec=self._cfg.max_duration_sec,
+                requested_by_name=track.requested_by_name,
+                title=track.title or cached.title,
+                video_id=None,
+                track_id=track.video_id,
+                album_id=track.album_id or "",
+                audio_url=cached.audio_url,
+            )
+            return None
+
         await self._player.send_play(
-            track.video_id,
-            token,
-            self._cfg.max_duration_sec,
+            provider=PROVIDER_YOUTUBE,
+            token=token,
+            max_duration_sec=self._cfg.max_duration_sec,
             requested_by_name=track.requested_by_name,
             title=track.title,
+            video_id=track.video_id,
+            track_id=None,
+            album_id="",
+            audio_url=None,
         )
+        return None
 
     async def _watchdog_run(self, token: str, timeout: int) -> None:
         try:

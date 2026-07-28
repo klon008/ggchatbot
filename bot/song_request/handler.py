@@ -1,4 +1,4 @@
-"""Song-request: очередь YouTube, OBS-плеер, команды заказа музыки."""
+"""Song-request: очередь YouTube/ЯМузыка, OBS-плеер, команды заказа музыки."""
 from __future__ import annotations
 
 import logging
@@ -7,6 +7,7 @@ from typing import Awaitable, Callable, Optional
 
 from bot.db import Database
 from bot.db import queue as queue_db
+from bot.db.connection import DATA_DIR
 from bot.economy import PointsStore, pluralize_princess
 from bot.goodgame import ChatMessage
 from bot.web import LocalWebServer
@@ -14,9 +15,10 @@ from bot.web.routes.player import PlayerRoutes
 from config import Config
 
 from .playback import PlaybackController
-from .queue import QueueManager, Track
+from .queue import PROVIDER_YANDEX, PROVIDER_YOUTUBE, QueueManager, Track
 from .settings import SR_COST
-from .youtube import canonical_url, validate_request
+from .validate import validate_order
+from .yandex_stream import YandexStreamService
 
 log = logging.getLogger("song_request")
 
@@ -33,7 +35,11 @@ class SongRequestHandler:
         self.cfg = cfg
         self._db = db
         self.queue = QueueManager(db, max_size=cfg.max_queue_size)
-        self.player = PlayerRoutes(on_status=self._on_obs_status)
+        self.ym_stream = YandexStreamService(
+            cfg.yandex_music_token,
+            DATA_DIR / "ym_cache",
+        )
+        self.player = PlayerRoutes(on_status=self._on_obs_status, ym_stream=self.ym_stream)
         self.player.register(web.app)
         self.playback = PlaybackController(
             cfg=cfg,
@@ -41,6 +47,7 @@ class SongRequestHandler:
             player=self.player,
             points_getter=lambda: self._points,
             say=self._say,
+            ym_stream=self.ym_stream,
         )
         self._cooldowns: dict[str, float] = {}
         self._reply: Optional[ReplyFn] = None
@@ -50,11 +57,17 @@ class SongRequestHandler:
     async def start(self) -> None:
         await self.queue.load()
         self._orders_enabled = await queue_db.get_orders_enabled(self._db)
-        log.info("Song-request модуль запущен (заказы: %s).", "вкл" if self._orders_enabled else "выкл")
+        ym = "вкл" if self.ym_stream.configured else "выкл (нет YANDEX_MUSIC_TOKEN)"
+        log.info(
+            "Song-request модуль запущен (заказы: %s, ЯМузыка: %s).",
+            "вкл" if self._orders_enabled else "выкл",
+            ym,
+        )
 
     async def close(self) -> None:
         await self.playback.close()
         await self.player.close()
+        self.ym_stream.cleanup_all()
 
     def bind_reply(self, reply: ReplyFn) -> None:
         self._reply = reply
@@ -143,13 +156,6 @@ class SongRequestHandler:
             await self._say(f"{msg.user_name}, заказ песен временно отключён")
             return
 
-        if not self.playback.youtube_available:
-            await self._say(
-                f"{msg.user_name}, плеер не может подключиться к YouTube — "
-                "заказ сейчас недоступен"
-            )
-            return
-
         if self.cfg.user_cooldown_sec > 0:
             last = self._cooldowns.get(msg.user_id, 0.0)
             wait = self.cfg.user_cooldown_sec - (time.time() - last)
@@ -161,9 +167,23 @@ class SongRequestHandler:
             await self._say(f"{msg.user_name}, очередь заполнена ({self.cfg.max_queue_size})")
             return
 
-        result = validate_request(arg)
-        if not result.ok:
+        result = validate_order(arg)
+        if not result.ok or not result.provider or not result.media_id:
             await self._say(f"{msg.user_name}, {result.reason}")
+            return
+
+        if result.provider == PROVIDER_YOUTUBE and not self.playback.youtube_available:
+            await self._say(
+                f"{msg.user_name}, плеер не может подключиться к YouTube — "
+                "заказ YouTube сейчас недоступен (можно Яндекс Музыку)"
+            )
+            return
+
+        if result.provider == PROVIDER_YANDEX and not self.playback.yandex_configured:
+            await self._say(
+                f"{msg.user_name}, Яндекс Музыка не настроена "
+                "(нужен YANDEX_MUSIC_TOKEN, см. tools/yandex_music_token.py)"
+            )
             return
 
         if SR_COST > 0:
@@ -180,12 +200,14 @@ class SongRequestHandler:
             await self._points.add(msg.user_id, -SR_COST)
 
         track = Track(
-            video_id=result.video_id,
+            video_id=result.media_id,
             requested_by=msg.user_id,
             requested_by_name=msg.user_name,
-            url=canonical_url(result.video_id),
+            url=result.url,
             title="",
             paid_cost=SR_COST if SR_COST > 0 else 0,
+            provider=result.provider,
+            album_id=result.album_id or "",
         )
         position = await self.queue.add(track)
         self._cooldowns[msg.user_id] = time.time()
@@ -210,7 +232,9 @@ class SongRequestHandler:
         await self.player.send_skip(self.queue.current_token)
         await self._say(f"{msg.user_name} пропустил трек")
         if not self.player.has_clients:
+            token = self.queue.current_token
             await self.queue.force_skip()
+            self.ym_stream.cleanup(token)
             await self.advance(expected_token=None)
 
     async def _cmd_queue(self, msg: ChatMessage) -> None:
@@ -220,7 +244,7 @@ class SongRequestHandler:
             return
         parts = [f"в очереди: {len(self.queue)}"]
         if upcoming:
-            ids = ", ".join(t.video_id for t in upcoming)
+            ids = ", ".join(t.short_label() for t in upcoming)
             parts.append(f"далее: {ids}")
         await self._say(" • ".join(parts))
 

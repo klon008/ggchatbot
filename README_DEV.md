@@ -32,7 +32,7 @@
 
 | Модуль | Назначение |
 |--------|------------|
-| `song_request` | Очередь YouTube-треков, локальный HTTP/WS для OBS Browser Source |
+| `song_request` | Очередь YouTube / Яндекс Музыка, локальный HTTP/WS для OBS Browser Source |
 | `princess` | Игровая валюта «принцессы», кражи, daily, кубик и т.д. |
 | `roulette` | Мини-игра `!рулетка`: раунды, общая казна, ставки за баллы |
 | `races` | Мини-игра `!забег`: забеги принцесс, динамические коэффициенты |
@@ -120,7 +120,7 @@ botmsc/
 │   │   ├── __init__.py
 │   │   └── client.py            # GoodGameClient, ChatMessage
 │   │
-│   ├── song_request/            # YouTube + OBS
+│   ├── song_request/            # YouTube + Яндекс Музыка + OBS
 │   │   ├── __init__.py
 │   │   ├── handler.py           # chat-команды заказа музыки
 │   │   ├── playback.py          # advance, watchdog, refunds, WS status
@@ -310,10 +310,12 @@ Dataclass входящего сообщения:
 
 | Команда | Кто | Поведение |
 |---------|-----|-----------|
-| `!sr <url>` | все | Валидация YouTube → добавление в очередь → автостарт если idle |
-| `!skip` | модератор (`user_rights >= 10`) | WS `skip` плееру; если плеер offline — force skip |
-| `!queue`, `!q` | все | Показать длину очереди и до 3 следующих videoId |
-| `!song`, `!now` | все | Текущий трек (кто заказал + url/title) |
+| `!заказ` / `!зм` / `!sr <url>` | все | Валидация YouTube или Яндекс Музыки → очередь → автостарт если idle |
+| `!пропуск` / `!skip` | модератор (`user_rights >= 10`) | WS `skip` плееру; если плеер offline — force skip |
+| `!очередь` | все | Длина очереди и до 3 следующих (`yt:…` / `ym:…`) |
+| `!играет` / `!сейчас` | все | Текущий трек (кто заказал + url/title) |
+
+Провайдер определяется по ссылке (`validate.py`). Одновременно играет только один backend — см. [docs/song_request_providers.md](docs/song_request_providers.md).
 
 Проверка команд — **exact match** по первому слову (`text.split()[0].lower()`).
 
@@ -444,27 +446,31 @@ class Track:
 Превью в браузере: `?preview=1` или `?preview=shuka`.
 ---
 
-### 6.4. `youtube.py`
+### 6.4. `youtube.py` / `yandex.py` / `validate.py`
 
-Синхронная валидация аргумента `!sr` **без YouTube Data API**.
+Синхронная валидация аргумента `!заказ` **без** внешних Data API.
 
-#### Поддерживаемые форматы URL
+#### YouTube (`youtube.py`)
 
-- `youtube.com/watch?v=ID`
-- `youtu.be/ID`
-- `/shorts/ID`, `/embed/ID`, `/live/ID`, `/v/ID`
+- `youtube.com/watch?v=ID`, `youtu.be/ID`, `/shorts/`, `/embed/`, …
 - Хосты: youtube.com, m.youtube.com, music.youtube.com, youtu.be
 
-Из текста берётся **первое слово**, содержащее `youtu`. Если нет `http://` — добавляется `https://`.
+#### Яндекс Музыка (`yandex.py` + `yandex_stream.py`)
 
-#### API
+- URL: `/album/{albumId}/track/{trackId}`, `/track/{trackId}`, iframe-hash
+- Хосты: music.yandex.ru, music.yandex.com
+- Playback: скачивание по `YANDEX_MUSIC_TOKEN` → `/ym/file/{token}` → OBS `<audio>`
+- Токен: `python tools/yandex_music_token.py` (нужен Plus)
+
+#### Роутер (`validate.py`)
 
 ```python
-validate_request(raw: str) -> ValidationResult  # ok, video_id, reason
-canonical_url(video_id: str) -> str             # https://www.youtube.com/watch?v=...
+validate_order(raw: str) -> OrderValidation  # provider, media_id, album_id, url, reason
 ```
 
-Проверки длительности, live, embeddable, 18+ — **на стороне плеера** (`obs/player.js`, события `too_long` / `error`).
+Проверки длительности YouTube — на стороне плеера (`too_long` / `error`). Для ЯМузыки — таймер `maxDurationSec`.
+
+Дорожная карта провайдеров: [docs/song_request_providers.md](docs/song_request_providers.md).
 
 ---
 
@@ -858,6 +864,12 @@ python scripts/migrate_json_to_sqlite.py
 - Ключ: `YOUTUBE_API_KEY` в `.env`.
 - Точка расширения: `song_request/youtube.py` — pre-check до `queue.add()`.
 - Сейчас проверки embeddable/длины делает плеер post-factum.
+
+### Провайдеры song-request (этапы)
+
+См. [docs/song_request_providers.md](docs/song_request_providers.md): iframe (отклонён) → **`<audio>` (сейчас)** → API/Ynison.
+
+Токен ЯМузыки: `YANDEX_MUSIC_TOKEN` в `.env`, скрипт `tools/yandex_music_token.py`.
 
 ### SQLite
 
