@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from bot.db import fishing as fishing_db
 from bot.db.connection import Database
 
 from .settings import BITE_BOOST_CASTS
@@ -66,5 +67,7 @@ async def has_steal_safe(db: Database, user_id: str) -> bool:
     """Есть ли у игрока карманный сейф сегодня (с учётом дневного сброса)."""
     store = FishingStorage(db)
     await store.ensure_calendar()
-    player = await store.get_or_create_player(user_id, "")
+    player = await fishing_db.get_player(db, user_id)
+    if player is None:
+        return False
     return bool(player.get("steal_safe"))

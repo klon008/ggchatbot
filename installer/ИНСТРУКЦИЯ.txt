@@ -37,10 +37,11 @@
    - ggchatbot\bot\roulette\settings.py  — рулетка
    - ggchatbot\bot\minigames\settings.py  — общая казна мини-игр
    - ggchatbot\bot\races\settings.py  — забеги (!забег)
+   - ggchatbot\bot\fishing\settings.py  — рыбалка
    При install.cmd эти файлы создаются из *.example.py.
-   Они НЕ перезаписываются при update.cmd.
-   После обновления сравните *.example.py с вашим settings.py,
-   если в репозитории появились новые параметры.
+   При update.cmd они НЕ перезаписываются целиком: ваши значения сохраняются,
+   а недостающие параметры из *.example.py дописываются автоматически
+   (скрипт installer\sync_settings.py).
 
 7. Настройте OBS (один раз):
    - источник "Браузер"

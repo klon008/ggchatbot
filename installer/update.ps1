@@ -19,7 +19,8 @@
     Стример запускает update.cmd — скрипт сам подтягивает свежие копии из installer\.
     
     В папках bot\princess, bot\song_request, bot\roulette, bot\minigames, bot\races, bot\fishing
-    settings.py создаётся из settings.example.py, если его нет.
+    settings.py создаётся из settings.example.py, если его нет; при update недостающие
+    ключи из *.example.py дописываются (существующие значения не затираются).
 .PARAMETER AfterLauncherSync
     Внутренний флаг второго прохода после sync и перезапуска. Не передавать вручную.
 #>
@@ -275,9 +276,40 @@ Ensure-SettingsFile $projectDir "bot\fishing"
 Write-Host ""
 Write-Host "Настройки: bot\princess\settings.py, bot\song_request\settings.py, bot\roulette\settings.py," -ForegroundColor Yellow
 Write-Host "bot\minigames\settings.py, bot\races\settings.py, bot\fishing\settings.py сохраняются при обновлении." -ForegroundColor Yellow
-Write-Host "Сравните с *.example.py, если в репо появились новые параметры." -ForegroundColor Yellow
+Write-Host "Недостающие ключи из *.example.py дописываются автоматически (ваши значения не меняются)." -ForegroundColor Yellow
 
+$syncSettings = Join-Path $projectDir "installer\sync_settings.py"
 $venvPython = Join-Path $projectDir ".venv\Scripts\python.exe"
+$pythonForSync = $null
+if (Test-Path $venvPython) {
+    $pythonForSync = $venvPython
+}
+elseif (Get-Command python -ErrorAction SilentlyContinue) {
+    $pythonForSync = "python"
+}
+elseif (Get-Command py -ErrorAction SilentlyContinue) {
+    $pythonForSync = "py"
+}
+
+if ((Test-Path -LiteralPath $syncSettings) -and ($null -ne $pythonForSync)) {
+    Write-Step "Синхронизация settings.py (недостающие ключи)"
+    if ($pythonForSync -eq "py") {
+        & py -3 $syncSettings --project-root $projectDir
+    }
+    else {
+        & $pythonForSync $syncSettings --project-root $projectDir
+    }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "sync_settings завершился с ошибкой — проверьте settings.py вручную по *.example.py"
+    }
+}
+elseif (-not (Test-Path -LiteralPath $syncSettings)) {
+    Write-Warn "installer\sync_settings.py не найден — пропуск синхронизации ключей."
+}
+else {
+    Write-Warn "Python не найден — пропуск синхронизации ключей settings."
+}
+
 if (Test-Path $venvPython) {
     Write-Step "Обновление зависимостей Python"
     & $venvPython -m pip install --upgrade pip

@@ -78,7 +78,9 @@ class FishingStorage:
             player["day_key"] = today
             await fishing_db.upsert_player(self._db, player)
             return player
-        player["user_name"] = user_name
+        # Не затирать ник пустой строкой (grants / has_* часто вызывают без имени).
+        if user_name:
+            player["user_name"] = user_name
         apply_energy_regen(player, now_ts)
         if player.get("day_key") != today:
             # На случай если игрок пропустил глобальный ресет (не было в таблице)
@@ -86,6 +88,9 @@ class FishingStorage:
             player["energy_updated_at"] = now_ts
             player["worms"] = 0
             player["maggots"] = 0
+            player["mermaid_shields"] = 0
+            player["bite_boost_casts_left"] = 0
+            player["steal_safe"] = False
             player["day_key"] = today
         await fishing_db.upsert_player(self._db, player)
         return player
