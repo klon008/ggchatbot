@@ -2,15 +2,40 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Optional
 
 from bot.db import Database
 from bot.db import cooldowns as cooldowns_db
 from bot.db import daily as daily_db
+from bot.db import minigames_bank
 from bot.db import steal as steal_db
+from bot.db import steal_meta as steal_meta_db
 from bot.economy.points import PointsStore
 
+from .economy import is_steal_schedule_day, now_msk
+from .settings import STEAL_ALLOWED_WEEKDAYS
+
 _DATE_KEY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+_WEEKDAY_RU = {
+    0: "понедельник",
+    1: "вторник",
+    2: "среда",
+    3: "четверг",
+    4: "пятница",
+    5: "суббота",
+    6: "воскресенье",
+}
+
+
+def next_steal_weekday_label() -> str:
+    now = now_msk()
+    for i in range(1, 8):
+        day = (now.weekday() + i) % 7
+        if day in STEAL_ALLOWED_WEEKDAYS:
+            return _WEEKDAY_RU[day]
+    return "среда"
 
 
 class StealStore:
@@ -20,7 +45,7 @@ class StealStore:
         self._db = db
 
     async def load(self) -> None:
-        return None
+        await steal_meta_db.ensure_meta(self._db)
 
     async def flush(self) -> None:
         return None
@@ -42,9 +67,93 @@ class StealStore:
         await points.flush_pending()
         await steal_db.record_steal_success(self._db, thief_id, amount)
 
+    async def execute_bank_steal(
+        self,
+        points: PointsStore,
+        thief_id: str,
+        amount: int,
+        *,
+        min_required: int,
+    ) -> Optional[int]:
+        """Steal from minigames_bank. Returns taken amount or None on failure."""
+        if amount <= 0 or min_required <= 0:
+            return None
+        bank = await minigames_bank.get_bank(self._db)
+        if bank < min_required:
+            return None
+        take = min(amount, bank)
+        if not await minigames_bank.try_withdraw(self._db, take):
+            return None
+        await points.add(thief_id, take)
+        await points.flush_pending()
+        await steal_db.record_steal_success(self._db, thief_id, take)
+        return take
+
     async def increment_jail_count(self, user_id: str) -> None:
         await steal_db.increment_jail_count(self._db, user_id)
 
+    async def get_meta(self) -> dict[str, Any]:
+        return await steal_meta_db.get_meta(self._db)
+
+    async def is_allowed(self) -> bool:
+        if is_steal_schedule_day():
+            return True
+        meta = await self.get_meta()
+        if meta["override_enabled"]:
+            return True
+        until = meta["override_until"]
+        if until is not None and time.time() < until:
+            return True
+        return False
+
+    async def get_status(self) -> dict[str, Any]:
+        meta = await self.get_meta()
+        now = time.time()
+        until = meta["override_until"]
+        if until is not None and until <= now:
+            until = None
+        schedule_allowed = is_steal_schedule_day()
+        override_active = bool(meta["override_enabled"] or (until is not None and until > now))
+        return {
+            "schedule_allowed": schedule_allowed,
+            "override_enabled": bool(meta["override_enabled"]),
+            "override_until": until,
+            "effective_allowed": schedule_allowed or override_active,
+            "schedule_weekdays": list(STEAL_ALLOWED_WEEKDAYS),
+            "now_msk": now_msk().isoformat(),
+            "next_steal_day": next_steal_weekday_label(),
+        }
+
+    async def set_override(
+        self,
+        *,
+        enabled: bool = False,
+        until: Optional[float] = None,
+    ) -> dict[str, Any]:
+        return await steal_meta_db.set_meta(
+            self._db,
+            override_enabled=enabled,
+            override_until=until,
+        )
+
+    async def clear_override(self) -> dict[str, Any]:
+        return await steal_meta_db.set_meta(
+            self._db,
+            override_enabled=False,
+            override_until=None,
+        )
+
+    async def set_schedule_open_key(self, key: str) -> None:
+        await steal_meta_db.set_meta(self._db, last_schedule_open_key=key)
+
+    async def clear_expired_timer(self) -> bool:
+        """Clear override_until if expired. Returns True if cleared."""
+        meta = await self.get_meta()
+        until = meta["override_until"]
+        if until is None or until > time.time():
+            return False
+        await steal_meta_db.set_meta(self._db, override_until=None)
+        return True
 
 class _StealMutator:
     def __init__(self, db: Database, user_id: str) -> None:

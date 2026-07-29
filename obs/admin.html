@@ -207,6 +207,7 @@
       <button type="button" class="tab" data-tab="races">Скачки</button>
       <button type="button" class="tab" data-tab="polls">Опросы</button>
       <button type="button" class="tab" data-tab="fishing">Рыбалка</button>
+      <button type="button" class="tab" data-tab="steal">Кража</button>
       <a href="cards-admin.html" class="tab tab-link" title="Портрет 310×330 · рубашка 350×490">Карты</a>
     </div>
 
@@ -563,6 +564,28 @@
           </tbody>
         </table>
         <p id="fishingFowLine" style="margin-top: 10px">Рыба недели: —</p>
+      </div>
+    </section>
+
+    <section id="panel-steal" class="panel">
+      <div class="card">
+        <h3>Кража (!кража)</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          По расписанию — среда и пятница (МСК). Здесь можно открыть вне расписания:
+          бессрочно или на N часов. При открытии/закрытии бот пишет в чат.
+        </p>
+        <p id="stealStatusLine" class="orders-status">—</p>
+        <p id="stealDetailLine" style="margin: 0 0 10px; color: #8888a0; font-size: 13px">—</p>
+        <div class="toolbar">
+          <button type="button" id="stealOpen" class="primary">Открыть</button>
+          <button type="button" id="stealClose" class="danger">Закрыть</button>
+          <label style="display:flex;align-items:center;gap:6px;color:#b8b8d0">
+            часов
+            <input type="number" id="stealHours" min="0.5" step="0.5" value="2" style="width:80px" />
+          </label>
+          <button type="button" id="stealOpenTimed" class="primary">Открыть на N ч</button>
+          <button type="button" id="stealRefresh">Обновить</button>
+        </div>
       </div>
     </section>
 

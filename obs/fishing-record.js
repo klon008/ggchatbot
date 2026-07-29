@@ -1,12 +1,14 @@
 /**
- * OBS Browser Source — плашка недельного рекорда рыбалки.
+ * OBS Browser Source — плашка недельного рекорда / негативных событий рыбалки.
  *
  * URL: http://127.0.0.1:PORT/fishing-record.html
  * Рекомендуемый размер: 1200×450 (прозрачный фон).
  * Debug: ?debug=1
- * Превью: ?preview=1  (или ?preview=shuka)
+ * Превью: ?preview=1  (или ?preview=shuka / ?preview=rusalka)
  *
- * Python -> overlay: {action:"fishing_record", userName, species, weight, imageUrl}
+ * Python -> overlay:
+ *   {action:"fishing_record", kind:"record", userName, species, weight, imageUrl}
+ *   {action:"fishing_record", kind:"mermaid", userName, loss, imageUrl}
  * overlay -> Python: {status:"ready", overlay:"fishing_record"}
  */
 (function () {
@@ -107,11 +109,23 @@
     return n.toFixed(2);
   }
 
+  function formatLoss(n) {
+    var v = Math.abs(Math.round(Number(n) || 0));
+    return String(v);
+  }
+
   function speciesAccusative(species) {
     return SPECIES_ACCUSATIVE[species] || species;
   }
 
-  function setCaption(userName, weight, species) {
+  function isMermaidPayload(data) {
+    var kind = String(data.kind || data.event || "").toLowerCase();
+    if (kind === "mermaid" || kind === "rusalka") return true;
+    var img = String(data.imageUrl || data.image_url || "").toLowerCase();
+    return img.indexOf("rusalka") !== -1;
+  }
+
+  function setRecordCaption(userName, weight, species) {
     var fish = speciesAccusative(species);
     caption.innerHTML =
       '<div class="cap-nick">' +
@@ -127,6 +141,20 @@
       "!</span>" +
       "</div>" +
       '<div class="cap-record">Новый недельный рекорд</div>';
+  }
+
+  function setMermaidCaption(userName, loss) {
+    caption.innerHTML =
+      '<div class="cap-nick">' +
+      escapeHtml(userName) +
+      "</div>" +
+      '<div class="cap-verb-row"><span class="cap-verb">Похищение</span></div>' +
+      '<div class="cap-catch">' +
+      '<span class="cap-loss">−' +
+      escapeHtml(formatLoss(loss)) +
+      '</span><span class="cap-fish"> принцесс!</span>' +
+      "</div>" +
+      '<div class="cap-record is-bad">Русалка утащила добычу</div>';
   }
 
   function waitImage(url) {
@@ -156,22 +184,31 @@
 
   async function showAlert(data) {
     var userName = data.userName || data.user_name || "?";
-    var species = data.species || "";
-    var weight = data.weight;
+    var mermaid = isMermaidPayload(data);
     var imageUrl = data.imageUrl || data.image_url || "";
 
-    log(
-      "show " +
-        userName +
-        " / " +
-        species +
-        " / " +
-        formatWeight(weight) +
-        " → " +
-        imageUrl
-    );
+    if (mermaid) {
+      var loss = data.loss != null ? data.loss : data.penalty;
+      stage.classList.add("is-mermaid");
+      setMermaidCaption(userName, loss);
+      log("show mermaid " + userName + " / −" + formatLoss(loss) + " → " + imageUrl);
+    } else {
+      var species = data.species || "";
+      var weight = data.weight;
+      stage.classList.remove("is-mermaid");
+      setRecordCaption(userName, weight, species);
+      log(
+        "show " +
+          userName +
+          " / " +
+          species +
+          " / " +
+          formatWeight(weight) +
+          " → " +
+          imageUrl
+      );
+    }
 
-    setCaption(userName, weight, species);
     var ok = await waitImage(imageUrl);
     if (!ok) {
       log("image failed: " + imageUrl);
@@ -189,7 +226,7 @@
     stage.classList.add("is-leaving");
     await sleep(EXIT_MS);
 
-    stage.classList.remove("is-visible", "is-leaving");
+    stage.classList.remove("is-visible", "is-leaving", "is-mermaid");
     stage.setAttribute("aria-hidden", "true");
     fishArt.removeAttribute("src");
     caption.textContent = "";
@@ -242,7 +279,7 @@
         return;
       }
       if (!data || data.action !== "fishing_record") return;
-      log("fishing_record " + (data.species || ""));
+      log("fishing_record " + (data.kind || data.species || ""));
       enqueue(data);
     };
   }
@@ -250,11 +287,21 @@
   connectWs();
 
   if (previewSlug) {
-    enqueue({
-      userName: "RiverDragon",
-      species: "Щука",
-      weight: 3.42,
-      imageUrl: "/assets/fishing/" + previewSlug + ".png",
-    });
+    if (previewSlug === "rusalka" || previewSlug === "mermaid") {
+      enqueue({
+        kind: "mermaid",
+        userName: "RiverDragon",
+        loss: 3000,
+        imageUrl: "/assets/fishing/rusalka.png",
+      });
+    } else {
+      enqueue({
+        kind: "record",
+        userName: "RiverDragon",
+        species: "Щука",
+        weight: 3.42,
+        imageUrl: "/assets/fishing/" + previewSlug + ".png",
+      });
+    }
   }
 })();

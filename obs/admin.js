@@ -1275,6 +1275,104 @@
     }
   });
 
+  const stealStatusLine = document.getElementById("stealStatusLine");
+  const stealDetailLine = document.getElementById("stealDetailLine");
+  const stealOpen = document.getElementById("stealOpen");
+  const stealClose = document.getElementById("stealClose");
+  const stealOpenTimed = document.getElementById("stealOpenTimed");
+  const stealHours = document.getElementById("stealHours");
+
+  function formatStealRemaining(untilTs) {
+    const sec = Math.max(0, Math.floor(untilTs - Date.now() / 1000));
+    if (sec <= 0) return "0 мин";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (h > 0) return `${h} ч ${m} мин`;
+    return `${m} мин`;
+  }
+
+  function renderSteal(data) {
+    const schedule = !!data.schedule_allowed;
+    const enabled = !!data.override_enabled;
+    const until = data.override_until != null ? Number(data.override_until) : null;
+    const timed = until != null && until * 1000 > Date.now();
+    const effective = !!data.effective_allowed;
+
+    if (enabled) {
+      stealStatusLine.textContent = "Статус: открыта вручную (бессрочно)";
+      stealStatusLine.className = "orders-status on";
+    } else if (timed) {
+      stealStatusLine.textContent =
+        "Статус: открыта ещё " + formatStealRemaining(until);
+      stealStatusLine.className = "orders-status on";
+    } else if (schedule) {
+      stealStatusLine.textContent = "Статус: доступна по расписанию";
+      stealStatusLine.className = "orders-status on";
+    } else {
+      stealStatusLine.textContent = "Статус: закрыта";
+      stealStatusLine.className = "orders-status off";
+    }
+
+    const nextDay = data.next_steal_day || "—";
+    stealDetailLine.textContent = effective
+      ? `Эффективно: доступна · следующий день расписания после закрытия — ${nextDay}`
+      : `Эффективно: недоступна · следующий день расписания — ${nextDay}`;
+
+    stealClose.disabled = !enabled && !timed;
+  }
+
+  async function loadSteal(silent) {
+    if (!silent) setStatus("Загрузка кражи…");
+    try {
+      const data = await api("GET", "/api/steal");
+      renderSteal(data);
+      if (!silent) setStatus("Кража обновлена", "ok");
+    } catch (e) {
+      if (!silent) setStatus(e.message, "err");
+    }
+  }
+
+  document.getElementById("stealRefresh").addEventListener("click", () => loadSteal(false));
+
+  stealOpen.addEventListener("click", async () => {
+    setStatus("Открытие кражи…");
+    try {
+      const data = await api("PUT", "/api/steal", { override_enabled: true });
+      renderSteal(data);
+      setStatus("Кража открыта вручную", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  stealClose.addEventListener("click", async () => {
+    if (!confirm("Закрыть ручное окно кражи?")) return;
+    setStatus("Закрытие кражи…");
+    try {
+      const data = await api("PUT", "/api/steal", { override_enabled: false });
+      renderSteal(data);
+      setStatus("Ручное окно кражи закрыто", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  stealOpenTimed.addEventListener("click", async () => {
+    const hours = Number(stealHours.value);
+    if (!Number.isFinite(hours) || hours <= 0) {
+      setStatus("Укажите число часов > 0", "err");
+      return;
+    }
+    setStatus(`Открытие кражи на ${hours} ч…`);
+    try {
+      const data = await api("PUT", "/api/steal", { duration_hours: hours });
+      renderSteal(data);
+      setStatus(`Кража открыта на ${hours} ч`, "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
   document.querySelectorAll(".tab[data-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -1290,6 +1388,7 @@
       if (id === "polls") loadPolls(false);
       else stopPollsPoll();
       if (id === "fishing") loadFishing(false);
+      if (id === "steal") loadSteal(false);
     });
   });
 

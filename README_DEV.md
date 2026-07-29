@@ -438,12 +438,18 @@ class Track:
 Недельный рекорд рыбалки (`!рыбалка` → `week_species_record`):
 
 ```json
-{"action": "fishing_record", "userName": "Nick", "species": "Щука", "weight": 3.42, "imageUrl": "/assets/fishing/shuka.png"}
+{"action": "fishing_record", "kind": "record", "userName": "Nick", "species": "Щука", "weight": 3.42, "imageUrl": "/assets/fishing/shuka.png"}
+```
+
+Русалка (негатив, штраф принцесс):
+
+```json
+{"action": "fishing_record", "kind": "mermaid", "userName": "Nick", "loss": 3000, "imageUrl": "/assets/fishing/rusalka.png"}
 ```
 
 Обрабатывает только `fishing-record.html`. Готовность: `{status:"ready", overlay:"fishing_record"}`.
 Арты: `obs/assets/fishing/{slug}.png`, маппинг вида→slug в `bot/fishing/record_assets.py` (не в settings.py).
-Превью в браузере: `?preview=1` или `?preview=shuka`.
+Превью в браузере: `?preview=1`, `?preview=shuka` или `?preview=rusalka`.
 ---
 
 ### 6.4. `youtube.py` / `yandex.py` / `validate.py`

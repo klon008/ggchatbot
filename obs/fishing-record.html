@@ -98,7 +98,8 @@
       transition: opacity 0.3s ease, transform 0.3s ease;
     }
 
-    #sunGlow {
+    #sunGlow,
+    #murkGlow {
       position: absolute;
       left: 50%;
       top: 48%;
@@ -108,6 +109,10 @@
       pointer-events: none;
       z-index: 0;
     }
+    #murkGlow { display: none; }
+    #stage.is-mermaid #sunGlow { display: none; }
+    #stage.is-mermaid #murkGlow { display: block; }
+
     .sun-rays {
       position: absolute;
       inset: 0;
@@ -164,6 +169,59 @@
     .sun-spark:nth-child(5) { left: 78%; top: 58%; animation-delay: 1.4s; }
     .sun-spark:nth-child(6) { left: 30%; top: 70%; animation-delay: 2.1s; width: 3px; height: 3px; }
 
+    /* Негатив: глубинная муть вместо солнечных лучей */
+    .murk-haze {
+      position: absolute;
+      left: 50%;
+      top: 55%;
+      width: 95%;
+      height: 90%;
+      transform: translate(-50%, -50%);
+      background:
+        radial-gradient(
+          ellipse at 40% 60%,
+          rgba(48, 90, 110, 0.28) 0%,
+          transparent 62%
+        ),
+        radial-gradient(
+          ellipse at 70% 35%,
+          rgba(70, 40, 90, 0.22) 0%,
+          transparent 55%
+        ),
+        radial-gradient(
+          circle at 50% 50%,
+          rgba(20, 40, 55, 0.18) 0%,
+          transparent 70%
+        );
+      animation: murk-breathe 5.5s ease-in-out infinite;
+      will-change: opacity, transform;
+    }
+    .murk-veil {
+      position: absolute;
+      inset: 8% 5%;
+      background: linear-gradient(
+        180deg,
+        rgba(10, 18, 28, 0.08) 0%,
+        rgba(30, 55, 70, 0.14) 45%,
+        rgba(12, 22, 32, 0.22) 100%
+      );
+      animation: murk-drift 9s ease-in-out infinite alternate;
+      will-change: opacity;
+    }
+    .murk-bubble {
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid rgba(150, 210, 230, 0.35);
+      background: rgba(120, 180, 200, 0.12);
+      box-shadow: 0 0 6px rgba(80, 160, 180, 0.25);
+      animation: murk-rise 5.8s ease-in infinite;
+      opacity: 0;
+    }
+    .murk-bubble:nth-child(3) { left: 24%; bottom: 18%; width: 7px; height: 7px; animation-delay: 0s; }
+    .murk-bubble:nth-child(4) { left: 42%; bottom: 12%; width: 4px; height: 4px; animation-delay: 1.4s; }
+    .murk-bubble:nth-child(5) { left: 61%; bottom: 22%; width: 6px; height: 6px; animation-delay: 2.6s; }
+    .murk-bubble:nth-child(6) { left: 78%; bottom: 16%; width: 5px; height: 5px; animation-delay: 3.8s; }
+
     @keyframes sun-spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
@@ -175,6 +233,20 @@
     @keyframes sun-spark {
       0%, 100% { opacity: 0.15; transform: scale(0.6); }
       50% { opacity: 1; transform: scale(1.15); }
+    }
+    @keyframes murk-breathe {
+      0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.96); }
+      50% { opacity: 0.85; transform: translate(-50%, -50%) scale(1.04); }
+    }
+    @keyframes murk-drift {
+      from { opacity: 0.45; }
+      to { opacity: 0.8; }
+    }
+    @keyframes murk-rise {
+      0% { opacity: 0; transform: translateY(10px) scale(0.7); }
+      18% { opacity: 0.7; }
+      70% { opacity: 0.35; }
+      100% { opacity: 0; transform: translateY(-72px) scale(1.05); }
     }
 
     #caption {
@@ -206,6 +278,31 @@
       text-shadow:
         0 1px 0 #7a4a08,
         0 3px 8px rgba(0, 0, 0, 0.8);
+    }
+    #stage.is-mermaid .cap-nick {
+      color: #c5d8e8;
+      text-shadow:
+        0 1px 0 #1a3040,
+        0 3px 10px rgba(0, 0, 0, 0.85);
+    }
+    #stage.is-mermaid .cap-verb-row::before,
+    #stage.is-mermaid .cap-verb-row::after {
+      background: linear-gradient(90deg, transparent, rgba(140, 190, 210, 0.45), transparent);
+    }
+    #stage.is-mermaid .cap-verb {
+      color: #9eb8c8;
+      letter-spacing: 0.22em;
+    }
+    .cap-loss {
+      color: #e07070;
+      -webkit-text-stroke: 1.5px var(--stroke);
+      paint-order: stroke fill;
+      text-shadow:
+        0 1px 0 #4a1010,
+        0 3px 8px rgba(0, 0, 0, 0.85);
+    }
+    #stage.is-mermaid .cap-fish {
+      color: #d0d8e0;
     }
 
     .cap-verb-row {
@@ -290,6 +387,19 @@
       font-size: 0.85em;
       opacity: 0.9;
     }
+    .cap-record.is-bad {
+      color: #d8e4ec;
+      background: linear-gradient(180deg, #3a5568 0%, #243848 55%, #1a2a38 100%);
+      box-shadow:
+        0 2px 0 #0e1820,
+        0 4px 10px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(160, 200, 220, 0.22);
+    }
+    .cap-record.is-bad::before,
+    .cap-record.is-bad::after {
+      content: "✦";
+      opacity: 0.55;
+    }
 
     aside#debugPanel {
       display: none;
@@ -325,6 +435,14 @@
           <span class="sun-spark"></span>
           <span class="sun-spark"></span>
           <span class="sun-spark"></span>
+        </div>
+        <div id="murkGlow" aria-hidden="true">
+          <div class="murk-haze"></div>
+          <div class="murk-veil"></div>
+          <span class="murk-bubble"></span>
+          <span class="murk-bubble"></span>
+          <span class="murk-bubble"></span>
+          <span class="murk-bubble"></span>
         </div>
         <div id="caption"></div>
       </div>

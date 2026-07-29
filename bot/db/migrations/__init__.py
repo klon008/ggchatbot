@@ -28,6 +28,7 @@ from . import (
     m020_series_summer_2026,
     m021_fishing_week_rewards_v2,
     m022_queue_provider,
+    m023_steal_meta,
 )
 
 
@@ -60,4 +61,5 @@ MIGRATIONS: list[Migration] = [
     m020_series_summer_2026,
     m021_fishing_week_rewards_v2,
     m022_queue_provider,
+    m023_steal_meta,
 ]

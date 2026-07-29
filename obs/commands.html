@@ -461,13 +461,13 @@ flowchart TD
       <div class="card-head">
         <span class="tag princess">Princess</span>
         <h2><code style="color:var(--cmd)">!кража</code> — кража у зрителя</h2>
-        <p>Только среда и пятница, минимум 5 зрителей в чате, КД 10 минут</p>
+        <p>Среда/пятница (МСК) или ручное окно из админки; минимум 5 зрителей; КД 10 минут; редко — джекпот из казны (0.1%, x2)</p>
       </div>
       <div class="card-body flush">
         <div class="diagram">
           <pre class="mermaid">
 flowchart TD
-    START["!кража"] --> D1{"Среда или пятница?"}
+    START["!кража"] --> D1{"Ср/пт или admin override?"}
     D1 -->|нет| F0["Отказ"]
     D1 -->|да| D2{"≥ 5 зрителей?"}
     D2 -->|нет| F1["Отказ"]
@@ -475,18 +475,21 @@ flowchart TD
     D3 -->|нет| F2["Отказ"]
     D3 -->|да| ROLL["Бросок на шанс кражи"]
     ROLL -->|провал| F3["Ничего не украл"]
-    ROLL -->|успех| VICT["Случайный зритель — жертва"]
+    ROLL -->|успех| JP{"0.1% казна x2?"}
+    JP -->|да| BANK["Списать из minigames_bank"]
+    JP -->|нет| VICT["Случайный зритель — жертва"]
+    BANK --> D5{"Попал в тюрьму?"}
     VICT --> D4{"У жертвы ≥ 18к?"}
     D4 -->|нет| F4["Отказ с шуткой"]
     D4 -->|да| LOOT["Перевести принцессы"]
-    LOOT --> D5{"Попал в тюрьму?"}
+    LOOT --> D5
     D5 -->|да| JAIL["Блок на 30 минут"]
     D5 -->|нет| WIN["Успех"]
-    class START,ROLL,VICT action
-    class D1,D2,D3,D4,D5 cond
+    class START,ROLL,VICT,BANK action
+    class D1,D2,D3,D4,D5,JP cond
     class WIN ok
     class F0,F1,F2,F3,F4,JAIL fail
-    class LOOT eco
+    class LOOT,BANK eco
           </pre>
         </div>
       </div>

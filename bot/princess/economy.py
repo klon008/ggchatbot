@@ -59,8 +59,14 @@ def get_daily_bonus(day_number: int) -> int:
     return DAILY_BONUS_MAP.get(day_number, DAILY_BONUS_DEFAULT)
 
 
-def is_steal_allowed() -> bool:
+def is_steal_schedule_day() -> bool:
+    """True, если сегодня день кражи по расписанию (MSK)."""
     return now_msk().weekday() in STEAL_ALLOWED_WEEKDAYS
+
+
+def is_steal_allowed() -> bool:
+    """Только расписание. Полная проверка (с override) — StealStore.is_allowed()."""
+    return is_steal_schedule_day()
 
 
 def prison_chance_for_amount(stolen: int) -> int:

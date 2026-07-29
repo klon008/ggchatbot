@@ -23,6 +23,7 @@ from .settings import (
     FISHING_CMD,
     MAGGOT_COST,
     MAGGOT_GAIN,
+    MERMAID_PENALTY,
     ROD_COST,
     WEEK_REWARDS,
     WORMS_ENERGY_COST,
@@ -87,12 +88,27 @@ class FishingHandler:
         await self._player.broadcast_fishing_record(
             {
                 "action": "fishing_record",
+                "kind": "record",
                 "userName": user_name,
                 "species": species,
                 "weight": round(float(weight), 2),
                 "imageUrl": f"/assets/fishing/{slug}.png",
             }
         )
+
+    async def _push_mermaid_overlay(self, *, user_name: str, loss: int) -> None:
+        if self._player is None:
+            return
+        await self._player.broadcast_fishing_record(
+            {
+                "action": "fishing_record",
+                "kind": "mermaid",
+                "userName": user_name,
+                "loss": int(loss),
+                "imageUrl": "/assets/fishing/rusalka.png",
+            }
+        )
+
     async def get_status(self) -> dict:
         await self.store.ensure_calendar()
         meta = await self.store.meta()
@@ -431,6 +447,11 @@ class FishingHandler:
                     species=result.species,
                     weight=weight_s,
                 )
+        elif result.kind == "mermaid":
+            await self._push_mermaid_overlay(
+                user_name=msg.user_name,
+                loss=MERMAID_PENALTY,
+            )
 
         if delta != 0:
             await points.add(msg.user_id, delta)

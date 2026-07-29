@@ -68,7 +68,14 @@ class StreamBot:
         )
         DocsRoutes().register(self.web.app)
         self.admin = AdminRoutes(
-            self.db, self.sr.queue, self.sr, self.roulette, self.races, self.polls, self.fishing
+            self.db,
+            self.sr.queue,
+            self.sr,
+            self.roulette,
+            self.races,
+            self.polls,
+            self.fishing,
+            self.princess,
         )
         self.admin.register(self.web.app)
         CardsAdminRoutes(self.db).register(self.web.app)
@@ -110,6 +117,7 @@ class StreamBot:
         )
         self.princess.bind_viewers_fetch(self.gg.get_users_list)
         self.princess.bind_reply(self._princess_reply)
+        self.princess.bind_announce(self._reply)
         self.sr.bind_reply(self._reply)
         self.roulette.bind_reply(self._reply)
         self.races.bind_reply(self._reply)

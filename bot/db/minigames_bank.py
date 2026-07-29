@@ -22,6 +22,17 @@ async def add_bank(db: Database, amount: int) -> int:
     return await get_bank(db)
 
 
+async def try_withdraw(db: Database, amount: int) -> bool:
+    """Atomically subtract amount if bank has enough. False if insufficient."""
+    if amount <= 0:
+        return False
+    cursor = await db.execute(
+        "UPDATE minigames_bank SET bank = bank - ? WHERE id = 1 AND bank >= ?",
+        (amount, amount),
+    )
+    return cursor.rowcount > 0
+
+
 async def set_bank(db: Database, amount: int) -> None:
     await db.execute("UPDATE minigames_bank SET bank = ? WHERE id = 1", (amount,))
 

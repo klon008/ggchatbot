@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from bot.economy.points import PointsStore
     from bot.fishing.handler import FishingHandler
     from bot.polls.handler import PollsHandler
+    from bot.princess.handler import PrincessHandler
     from bot.races.handler import RacesHandler
     from bot.roulette.handler import RouletteHandler
     from bot.song_request.handler import SongRequestHandler
@@ -50,6 +51,7 @@ class AdminRoutes:
         races_handler: "RacesHandler",
         polls_handler: "PollsHandler",
         fishing_handler: "FishingHandler",
+        princess_handler: "PrincessHandler",
     ) -> None:
         self._db = db
         self._queue = queue
@@ -58,6 +60,7 @@ class AdminRoutes:
         self._races = races_handler
         self._polls = polls_handler
         self._fishing = fishing_handler
+        self._princess = princess_handler
         self._fetch_viewers: Optional[ViewersFetchFn] = None
         self._points: Optional["PointsStore"] = None
 
@@ -123,6 +126,8 @@ class AdminRoutes:
                 web.post("/api/fishing/restore-energy", self._api_fishing_restore_energy),
                 web.post("/api/fishing/rewards", self._api_fishing_rewards),
                 web.post("/api/fishing/pay-rewards", self._api_fishing_pay_rewards),
+                web.get("/api/steal", self._api_steal_get),
+                web.put("/api/steal", self._api_steal_put),
                 web.get("/card-templates/{path:.*}", self._handle_card_templates),
                 web.get("/test/{path:.*}", self._handle_test),
                 web.get("/assets/{path:.*}", self._handle_assets),
@@ -577,3 +582,39 @@ class AdminRoutes:
                 )
             raise
         return json_response(status)
+
+    async def _api_steal_get(self, request: web.Request) -> web.Response:
+        return json_response(await self._princess.get_steal_status())
+
+    async def _api_steal_put(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        if not isinstance(data, dict):
+            return error_response("Некорректный JSON")
+
+        if "duration_hours" in data and data["duration_hours"] is not None:
+            raw = data["duration_hours"]
+            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                return error_response("duration_hours должен быть числом > 0")
+            hours = float(raw)
+            if hours <= 0:
+                return error_response("duration_hours должен быть числом > 0")
+            try:
+                status = await self._princess.admin_steal_open(duration_hours=hours)
+            except ValueError as exc:
+                return error_response(str(exc), status=400)
+            return json_response(status)
+
+        if "override_enabled" in data:
+            enabled = bool(data["override_enabled"])
+            if enabled:
+                status = await self._princess.admin_steal_open()
+            else:
+                status = await self._princess.admin_steal_close()
+            return json_response(status)
+
+        return error_response(
+            "Укажите override_enabled или duration_hours",
+            status=400,
+        )

@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS steal_stats (
     times_in_jail INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS steal_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    override_enabled INTEGER NOT NULL DEFAULT 0,
+    override_until REAL,
+    last_schedule_open_key TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS daily_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     current_month TEXT NOT NULL DEFAULT ''
@@ -311,6 +318,11 @@ async def init_schema(
         (SCHEMA_VERSION,),
     )
     await conn.execute("INSERT OR IGNORE INTO daily_meta (id, current_month) VALUES (1, '')")
+    await conn.execute(
+        "INSERT OR IGNORE INTO steal_meta "
+        "(id, override_enabled, override_until, last_schedule_open_key) "
+        "VALUES (1, 0, NULL, '')"
+    )
     await conn.execute(
         "INSERT OR IGNORE INTO queue_meta (id, current_json, current_token, token_counter) "
         "VALUES (1, NULL, NULL, 1)"
