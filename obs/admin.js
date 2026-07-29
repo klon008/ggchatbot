@@ -7,6 +7,7 @@
   const queueBody = document.getElementById("queueBody");
   const queuePlaying = document.getElementById("queuePlaying");
   const queueTogglePause = document.getElementById("queueTogglePause");
+  const queueSkip = document.getElementById("queueSkip");
   const ordersStatus = document.getElementById("ordersStatus");
   const ordersToggle = document.getElementById("ordersToggle");
   const blockYmExplicit = document.getElementById("blockYmExplicit");
@@ -328,10 +329,12 @@
     if (!playing) {
       queueTogglePause.disabled = true;
       queueTogglePause.textContent = "Пауза";
+      queueSkip.disabled = true;
       return;
     }
     queueTogglePause.disabled = false;
     queueTogglePause.textContent = paused ? "Продолжить" : "Пауза";
+    queueSkip.disabled = false;
   }
 
   async function loadQueue() {
@@ -391,6 +394,17 @@
       const data = await api("POST", "/api/queue/toggle-pause");
       renderPauseButton(true, data.paused);
       setStatus(data.paused ? "Воспроизведение на паузе" : "Воспроизведение продолжено", "ok");
+    } catch (err) {
+      setStatus(err.message, "err");
+      await loadQueue();
+    }
+  });
+  queueSkip.addEventListener("click", async () => {
+    setStatus("Пропуск трека…");
+    try {
+      await api("POST", "/api/queue/skip");
+      await loadQueue();
+      setStatus("Трек пропущен", "ok");
     } catch (err) {
       setStatus(err.message, "err");
       await loadQueue();

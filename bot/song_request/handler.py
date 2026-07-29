@@ -102,6 +102,17 @@ class SongRequestHandler:
         await self.player.send_toggle_pause(self.queue.current_token)
         return self.playback.player_paused
 
+    async def skip_current(self) -> None:
+        """Пропуск текущего трека (аналог !пропуск)."""
+        if not self.queue.is_playing:
+            raise RuntimeError("nothing_playing")
+        await self.player.send_skip(self.queue.current_token)
+        if not self.player.has_clients:
+            token = self.queue.current_token
+            await self.queue.force_skip()
+            self.ym_stream.cleanup(token)
+            await self.advance(expected_token=None)
+
     async def set_orders_enabled(self, enabled: bool) -> None:
         if enabled == self._orders_enabled:
             return
@@ -245,13 +256,8 @@ class SongRequestHandler:
         if not self.queue.is_playing:
             await self._say("Сейчас ничего не играет")
             return
-        await self.player.send_skip(self.queue.current_token)
+        await self.skip_current()
         await self._say(f"{msg.user_name} пропустил трек")
-        if not self.player.has_clients:
-            token = self.queue.current_token
-            await self.queue.force_skip()
-            self.ym_stream.cleanup(token)
-            await self.advance(expected_token=None)
 
     async def _cmd_queue(self, msg: ChatMessage) -> None:
         upcoming = self.queue.upcoming(3)

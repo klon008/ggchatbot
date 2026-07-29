@@ -95,6 +95,7 @@ class AdminRoutes:
                 web.delete("/api/points/{user_id}", self._api_points_delete),
                 web.get("/api/queue", self._api_queue_get),
                 web.post("/api/queue/toggle-pause", self._api_queue_toggle_pause),
+                web.post("/api/queue/skip", self._api_queue_skip),
                 web.delete("/api/queue/waiting/{index}", self._api_queue_delete),
                 web.get("/api/song-request", self._api_sr_get),
                 web.put("/api/song-request", self._api_sr_put),
@@ -284,6 +285,15 @@ class AdminRoutes:
                 return error_response("Сейчас ничего не играет", status=409)
             raise
         return json_response({"paused": paused})
+
+    async def _api_queue_skip(self, request: web.Request) -> web.Response:
+        try:
+            await self._sr.skip_current()
+        except RuntimeError as exc:
+            if str(exc) == "nothing_playing":
+                return error_response("Сейчас ничего не играет", status=409)
+            raise
+        return json_response({"skipped": True})
 
     async def _api_queue_delete(self, request: web.Request) -> web.Response:
         try:
