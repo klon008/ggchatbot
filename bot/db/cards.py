@@ -236,6 +236,29 @@ async def count_series_progress_for_booster(
     return _series_progress_rows(rows)
 
 
+async def count_booster_pool_progress(
+    db: Database, user_id: str, booster_id: str
+) -> dict[str, int]:
+    """Сколько уникальных карт из пула бустера уже есть у игрока."""
+    async with db.transaction() as conn:
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM booster_pool WHERE booster_id = ?",
+            (booster_id,),
+        )
+        total_row = await cur.fetchone()
+        cur = await conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM user_cards uc
+            JOIN booster_pool bp ON bp.card_id = uc.card_id
+            WHERE uc.user_id = ? AND bp.booster_id = ?
+            """,
+            (user_id, booster_id),
+        )
+        owned_row = await cur.fetchone()
+    return {"owned": int(owned_row[0]), "total": int(total_row[0])}
+
+
 async def count_collection(db: Database, user_id: str) -> dict[str, int]:
     async with db.transaction() as conn:
         cur = await conn.execute("SELECT COUNT(*) FROM cards")

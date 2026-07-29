@@ -39,6 +39,7 @@ class OpenResult:
     collection: dict[str, int]
     cost_points: int = 0
     cards_per_open: int = 0
+    set_complete: bool = False
 
 
 def duplicate_refund(cost_points: int, cards_per_open: int, rarity: str) -> int:
@@ -111,6 +112,15 @@ async def open_booster(
             f"Недостаточно баллов. Нужно {draw.cost_points}, у тебя {balance}."
         )
 
+    pool_progress = await cards_db.count_booster_pool_progress(
+        db, user_id, draw.booster_id
+    )
+    if pool_progress["total"] > 0 and pool_progress["owned"] >= pool_progress["total"]:
+        return None, (
+            f"ты уже собрал все карты из «{draw.booster_name}». "
+            "Поздравляем! Жди следующий тираж."
+        )
+
     rolls: list[RollResult] = []
     total_refund = 0
     cards_rolled: list[dict[str, Any]] = []
@@ -173,6 +183,8 @@ async def open_booster(
     album_count = await cards_db.count_user_cards(db, user_id)
     series_progress = await cards_db.count_series_progress(db, user_id)
     collection = await cards_db.count_collection(db, user_id)
+    after = await cards_db.count_booster_pool_progress(db, user_id, draw.booster_id)
+    set_complete = after["total"] > 0 and after["owned"] >= after["total"]
 
     return (
         OpenResult(
@@ -186,6 +198,7 @@ async def open_booster(
             collection=collection,
             cost_points=draw.cost_points,
             cards_per_open=draw.cards_per_open,
+            set_complete=set_complete,
         ),
         None,
     )
@@ -234,6 +247,11 @@ def format_open_summary(user_name: str, result: OpenResult) -> str:
     msg = f"{user_name}, открытие завершено! Внутри: {inside}."
     if result.total_refund:
         msg += f" Возмещение: {result.total_refund} принцесс."
+    if result.set_complete:
+        msg += (
+            f" Поздравляем — набор «{result.booster_name}» собран полностью. "
+            "Дальше крутить этот бустер нельзя."
+        )
     msg += " !альбом"
     return msg
 
