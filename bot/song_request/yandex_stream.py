@@ -37,10 +37,18 @@ class YandexStreamService:
         self._client = None
         self._files: dict[str, Path] = {}
         self._covers: dict[str, Path] = {}
+        self._block_explicit = True
 
     @property
     def configured(self) -> bool:
         return bool(self._token)
+
+    @property
+    def block_explicit(self) -> bool:
+        return self._block_explicit
+
+    def set_block_explicit(self, enabled: bool) -> None:
+        self._block_explicit = bool(enabled)
 
     def _ensure_dir(self) -> None:
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -167,6 +175,10 @@ class YandexStreamService:
         track = tracks[0]
         if getattr(track, "error", None):
             raise YandexStreamError(f"трек недоступен ({track.error})")
+
+        warning = (getattr(track, "content_warning", None) or "").strip().lower()
+        if self._block_explicit and warning == "explicit":
+            raise YandexStreamError("трек с пометкой explicit (18+)")
 
         title = self._format_title(track)
         duration_ms = getattr(track, "duration_ms", None) or 0

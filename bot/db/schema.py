@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS queue_meta (
     current_json TEXT,
     current_token TEXT,
     token_counter INTEGER NOT NULL DEFAULT 1,
-    orders_enabled INTEGER NOT NULL DEFAULT 1
+    orders_enabled INTEGER NOT NULL DEFAULT 1,
+    block_ym_explicit INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS queue_items (

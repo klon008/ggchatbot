@@ -37,6 +37,23 @@ async def set_orders_enabled(db: Database, enabled: bool) -> None:
     )
 
 
+async def get_block_ym_explicit(db: Database) -> bool:
+    row = await db.fetchone("SELECT block_ym_explicit FROM queue_meta WHERE id = 1")
+    if row is None:
+        return True
+    keys = row.keys()
+    if "block_ym_explicit" not in keys:
+        return True
+    return bool(row["block_ym_explicit"])
+
+
+async def set_block_ym_explicit(db: Database, enabled: bool) -> None:
+    await db.execute(
+        "UPDATE queue_meta SET block_ym_explicit = ? WHERE id = 1",
+        (1 if enabled else 0,),
+    )
+
+
 async def load_meta(db: Database) -> tuple[Optional[dict], Optional[str], int]:
     row = await db.fetchone(
         "SELECT current_json, current_token, token_counter FROM queue_meta WHERE id = 1"

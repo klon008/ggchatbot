@@ -53,15 +53,19 @@ class SongRequestHandler:
         self._reply: Optional[ReplyFn] = None
         self._points: Optional[PointsStore] = None
         self._orders_enabled = True
+        self._block_ym_explicit = True
 
     async def start(self) -> None:
         await self.queue.load()
         self._orders_enabled = await queue_db.get_orders_enabled(self._db)
+        self._block_ym_explicit = await queue_db.get_block_ym_explicit(self._db)
+        self.ym_stream.set_block_explicit(self._block_ym_explicit)
         ym = "вкл" if self.ym_stream.configured else "выкл (нет YANDEX_MUSIC_TOKEN)"
         log.info(
-            "Song-request модуль запущен (заказы: %s, ЯМузыка: %s).",
+            "Song-request модуль запущен (заказы: %s, ЯМузыка: %s, block_explicit: %s).",
             "вкл" if self._orders_enabled else "выкл",
             ym,
+            "вкл" if self._block_ym_explicit else "выкл",
         )
 
     async def close(self) -> None:
@@ -78,6 +82,10 @@ class SongRequestHandler:
     @property
     def orders_enabled(self) -> bool:
         return self._orders_enabled
+
+    @property
+    def block_ym_explicit(self) -> bool:
+        return self._block_ym_explicit
 
     @property
     def player_paused(self) -> bool:
@@ -110,6 +118,14 @@ class SongRequestHandler:
         else:
             log.info("Заказы музыки включены.")
             await self._say("Заказы музыки снова доступны.")
+
+    async def set_block_ym_explicit(self, enabled: bool) -> None:
+        if enabled == self._block_ym_explicit:
+            return
+        await queue_db.set_block_ym_explicit(self._db, enabled)
+        self._block_ym_explicit = enabled
+        self.ym_stream.set_block_explicit(enabled)
+        log.info("Блокировка YM explicit: %s", "вкл" if enabled else "выкл")
 
     async def handle_message(self, msg: ChatMessage) -> bool:
         text = msg.text.strip()

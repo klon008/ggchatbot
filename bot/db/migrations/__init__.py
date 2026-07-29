@@ -29,6 +29,7 @@ from . import (
     m021_fishing_week_rewards_v2,
     m022_queue_provider,
     m023_steal_meta,
+    m024_block_ym_explicit,
 )
 
 
@@ -62,4 +63,5 @@ MIGRATIONS: list[Migration] = [
     m021_fishing_week_rewards_v2,
     m022_queue_provider,
     m023_steal_meta,
+    m024_block_ym_explicit,
 ]

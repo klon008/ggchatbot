@@ -369,11 +369,11 @@ class PlaybackController:
         if cost > 0 and points is not None:
             await points.add(track.requested_by, cost)
             await self._say(
-                f"@{name}, не удалось воспроизвести: {reason}. "
+                f"{name}, не удалось воспроизвести: {reason}. "
                 f"Возвращено {cost} {pluralize_princess(cost)}"
             )
         else:
-            await self._say(f"@{name}, не удалось воспроизвести: {reason}")
+            await self._say(f"{name}, не удалось воспроизвести: {reason}")
 
     async def _refund_track(self, track: Track) -> int:
         cost = track.paid_cost

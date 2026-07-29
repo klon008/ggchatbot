@@ -9,6 +9,7 @@
   const queueTogglePause = document.getElementById("queueTogglePause");
   const ordersStatus = document.getElementById("ordersStatus");
   const ordersToggle = document.getElementById("ordersToggle");
+  const blockYmExplicit = document.getElementById("blockYmExplicit");
   const rouletteAuto = document.getElementById("rouletteAuto");
   const rouletteCollectSec = document.getElementById("rouletteCollectSec");
   const rouletteCooldownSec = document.getElementById("rouletteCooldownSec");
@@ -54,6 +55,7 @@
 
   let allPoints = [];
   let ordersEnabled = true;
+  let blockYmExplicitEnabled = true;
   let queuePaused = false;
   let roulettePollTimer = null;
   let racesPollTimer = null;
@@ -245,11 +247,15 @@
       ordersToggle.textContent = "Включить заказы музыки";
       ordersToggle.className = "primary";
     }
+    if (blockYmExplicit) {
+      blockYmExplicit.checked = blockYmExplicitEnabled;
+    }
   }
 
   async function loadOrdersState() {
     const data = await api("GET", "/api/song-request");
     ordersEnabled = !!data.orders_enabled;
+    blockYmExplicitEnabled = data.block_ym_explicit !== false;
     renderOrdersControl();
   }
 
@@ -265,10 +271,33 @@
     try {
       const data = await api("PUT", "/api/song-request", { orders_enabled: next });
       ordersEnabled = !!data.orders_enabled;
+      if (typeof data.block_ym_explicit === "boolean") {
+        blockYmExplicitEnabled = data.block_ym_explicit;
+      }
       renderOrdersControl();
       await loadQueue();
       setStatus(ordersEnabled ? "Заказы включены" : "Заказы отключены, очередь очищена", "ok");
     } catch (e) {
+      setStatus(e.message, "err");
+    }
+  }
+
+  async function toggleBlockYmExplicit() {
+    if (!blockYmExplicit) return;
+    const next = !!blockYmExplicit.checked;
+    setStatus(next ? "Включение блокировки explicit…" : "Отключение блокировки explicit…");
+    try {
+      const data = await api("PUT", "/api/song-request", { block_ym_explicit: next });
+      blockYmExplicitEnabled = data.block_ym_explicit !== false;
+      renderOrdersControl();
+      setStatus(
+        blockYmExplicitEnabled
+          ? "Блокировка explicit включена"
+          : "Блокировка explicit отключена",
+        "ok"
+      );
+    } catch (e) {
+      blockYmExplicit.checked = blockYmExplicitEnabled;
       setStatus(e.message, "err");
     }
   }
@@ -369,6 +398,9 @@
   });
   document.getElementById("syncUserNames").addEventListener("click", syncUserNames);
   ordersToggle.addEventListener("click", toggleOrders);
+  if (blockYmExplicit) {
+    blockYmExplicit.addEventListener("change", toggleBlockYmExplicit);
+  }
 
   function formatLastResult(last) {
     if (!last) return '<span class="empty">ещё не было спинов</span>';

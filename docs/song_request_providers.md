@@ -14,6 +14,7 @@
 - Токен: двойной клик `tools/yandex_music_token.cmd` → `.env` → `YANDEX_MUSIC_TOKEN=...`
 - Заказы без токена отклоняются; YouTube работает отдельно.
 - Exclusive: `activeBackend` youtube | yandex.
+- Фильтр `content_warning=explicit`: по умолчанию вкл; галочка в админке (Заказы музыки → «Блокировать explicit»).
 
 ## Этап 3 — кастомный API / Ynison
 

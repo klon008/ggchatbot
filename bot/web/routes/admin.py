@@ -296,17 +296,38 @@ class AdminRoutes:
         return json_response({"deleted": True, "index": index})
 
     async def _api_sr_get(self, request: web.Request) -> web.Response:
-        return json_response({"orders_enabled": self._sr.orders_enabled})
+        return json_response(
+            {
+                "orders_enabled": self._sr.orders_enabled,
+                "block_ym_explicit": self._sr.block_ym_explicit,
+            }
+        )
 
     async def _api_sr_put(self, request: web.Request) -> web.Response:
         data = await read_json(request)
         if data is None:
             return error_response("Некорректный JSON")
-        raw = data.get("orders_enabled")
-        if not isinstance(raw, bool):
-            return error_response("orders_enabled должен быть true или false")
-        await self._sr.set_orders_enabled(raw)
-        return json_response({"orders_enabled": self._sr.orders_enabled})
+        if "orders_enabled" not in data and "block_ym_explicit" not in data:
+            return error_response("нужно orders_enabled и/или block_ym_explicit")
+
+        if "orders_enabled" in data:
+            raw = data.get("orders_enabled")
+            if not isinstance(raw, bool):
+                return error_response("orders_enabled должен быть true или false")
+            await self._sr.set_orders_enabled(raw)
+
+        if "block_ym_explicit" in data:
+            raw_ex = data.get("block_ym_explicit")
+            if not isinstance(raw_ex, bool):
+                return error_response("block_ym_explicit должен быть true или false")
+            await self._sr.set_block_ym_explicit(raw_ex)
+
+        return json_response(
+            {
+                "orders_enabled": self._sr.orders_enabled,
+                "block_ym_explicit": self._sr.block_ym_explicit,
+            }
+        )
 
     async def _api_user_names_sync(self, request: web.Request) -> web.Response:
         if self._fetch_viewers is None or self._points is None:
