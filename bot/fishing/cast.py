@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from .economy import sell_price
 from .settings import (
+    BITE_BOOST_MISS_TRASH_DIV,
     FISH_SPECIES,
     MERMAID_PENALTY,
     MISS_CHANCE,
@@ -16,13 +17,16 @@ from .settings import (
     SILT_ENERGY_LOSS,
     TRASH_CHANCE,
     TRASH_TYPES,
+    WORMS_DIG_BITE_CHANCE,
+    WORMS_DIG_SAFE_CHANCE,
+    WORMS_DIG_SHIELD_CHANCE,
 )
 from . import texts
 
 
 @dataclass
 class CastResult:
-    kind: str  # fish | miss | trash | mermaid | pike_break | seagull | silt | reeds
+    kind: str  # fish | miss | trash | mermaid | mermaid_blocked | pike_break | seagull | silt | reeds
     message: str
     sale: int = 0
     first_fish: bool = False
@@ -76,6 +80,23 @@ def bait_total(player: dict[str, Any]) -> int:
     return int(player["worms"]) + int(player["maggots"])
 
 
+def roll_worms_dig_outcome(*, steal_active: bool = False) -> str:
+    """Исход копания: shield | bite | safe | worms (взаимоисключающие).
+
+    safe только если steal_active (команда !кража сейчас доступна).
+    """
+    roll = random.random()
+    if roll < WORMS_DIG_SHIELD_CHANCE:
+        return "shield"
+    acc = WORMS_DIG_SHIELD_CHANCE
+    if roll < acc + WORMS_DIG_BITE_CHANCE:
+        return "bite"
+    acc += WORMS_DIG_BITE_CHANCE
+    if steal_active and roll < acc + WORMS_DIG_SAFE_CHANCE:
+        return "safe"
+    return "worms"
+
+
 def apply_cast_roll(
     player: dict[str, Any],
     *,
@@ -89,9 +110,25 @@ def apply_cast_roll(
     enabled_species: если задан — дроп только из этого множества (пусто → сход вместо рыбы).
     """
     prefix = (texts.pick(texts.CAST_PREFIX) + " ") if with_prefix else ""
+
+    boost_active = int(player.get("bite_boost_casts_left") or 0) > 0
+    if boost_active:
+        player["bite_boost_casts_left"] = int(player["bite_boost_casts_left"]) - 1
+        div = max(1, int(BITE_BOOST_MISS_TRASH_DIV))
+        miss_chance = MISS_CHANCE / div
+        trash_chance = TRASH_CHANCE / div
+    else:
+        miss_chance = MISS_CHANCE
+        trash_chance = TRASH_CHANCE
+
     event = _roll_neg_event()
 
     if event == "mermaid":
+        shields = int(player.get("mermaid_shields") or 0)
+        if shields > 0:
+            player["mermaid_shields"] = shields - 1
+            msg = prefix + texts.pick(texts.NEG_MERMAID_BLOCKED)
+            return CastResult(kind="mermaid_blocked", message=msg), 0
         loss = min(MERMAID_PENALTY, points_balance)
         msg = prefix + texts.pick(texts.NEG_MERMAID)
         return CastResult(kind="mermaid", message=msg), -loss
@@ -116,11 +153,11 @@ def apply_cast_roll(
         return CastResult(kind="reeds", message=msg), 0
 
     category = random.random()
-    if category < MISS_CHANCE:
+    if category < miss_chance:
         msg = prefix + texts.pick(texts.MISS)
         return CastResult(kind="miss", message=msg), 0
 
-    if category < MISS_CHANCE + TRASH_CHANCE:
+    if category < miss_chance + trash_chance:
         trash_key = random.choice(TRASH_TYPES)
         msg = prefix + texts.pick(texts.TRASH[trash_key])
         return CastResult(kind="trash", message=msg), 0

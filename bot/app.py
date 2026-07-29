@@ -130,6 +130,7 @@ class StreamBot:
         self.fishing.bind_points(self.princess.points)
         self.sr.bind_points(self.princess.points)
         self.cards.bind_points(self.princess.points)
+        self.fishing.bind_steal_allowed(self.princess.steal.is_allowed)
         self.roulette.bind_busy(self.busy)
         self.races.bind_busy(self.busy)
         self.cards.bind_busy(self.busy)

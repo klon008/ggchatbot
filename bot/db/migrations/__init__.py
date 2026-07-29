@@ -30,6 +30,8 @@ from . import (
     m022_queue_provider,
     m023_steal_meta,
     m024_block_ym_explicit,
+    m025_fishing_day_items,
+    m026_fishing_steal_safe,
 )
 
 
@@ -64,4 +66,6 @@ MIGRATIONS: list[Migration] = [
     m022_queue_provider,
     m023_steal_meta,
     m024_block_ym_explicit,
+    m025_fishing_day_items,
+    m026_fishing_steal_safe,
 ]

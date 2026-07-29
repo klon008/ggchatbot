@@ -12,9 +12,10 @@ from bot.economy.points import PointsStore
 from bot.goodgame import ChatMessage
 
 from . import texts
-from .cast import apply_cast_roll, bait_total, consume_bait
+from .cast import apply_cast_roll, bait_total, consume_bait, roll_worms_dig_outcome
 from .record_assets import FISH_RECORD_ASSETS
 from .settings import (
+    BITE_BOOST_CASTS,
     CAST_COOLDOWN_SEC,
     CAST_ENERGY_COST,
     FIRST_FISH_BONUS,
@@ -24,6 +25,8 @@ from .settings import (
     MAGGOT_COST,
     MAGGOT_GAIN,
     MERMAID_PENALTY,
+    MERMAID_SHIELD_BUY_MAX,
+    MERMAID_SHIELD_COST,
     ROD_COST,
     WEEK_REWARDS,
     WORMS_ENERGY_COST,
@@ -37,6 +40,7 @@ if TYPE_CHECKING:
 log = logging.getLogger("fishing")
 
 ReplyFn = Callable[[str], Awaitable[None]]
+StealAllowedFn = Callable[[], Awaitable[bool]]
 
 
 class FishingHandler:
@@ -46,6 +50,7 @@ class FishingHandler:
         self._reply: Optional[ReplyFn] = None
         self._points: Optional[PointsStore] = None
         self._player: Optional["PlayerRoutes"] = None
+        self._steal_allowed: Optional[StealAllowedFn] = None
 
     async def start(self) -> None:
         await fishing_db.ensure_meta(self._db)
@@ -70,6 +75,14 @@ class FishingHandler:
 
     def bind_obs(self, player: "PlayerRoutes") -> None:
         self._player = player
+
+    def bind_steal_allowed(self, fn: StealAllowedFn) -> None:
+        self._steal_allowed = fn
+
+    async def _is_steal_active(self) -> bool:
+        if self._steal_allowed is None:
+            return False
+        return bool(await self._steal_allowed())
 
     def _require_points(self) -> PointsStore:
         if self._points is None:
@@ -364,6 +377,9 @@ class FishingHandler:
         if sub == "удочка":
             await self._cmd_rod(msg, prefix_note)
             return True
+        if sub == "защита":
+            await self._cmd_shield(msg, prefix_note, rest)
+            return True
         if sub == "помощь":
             await self._say(
                 f"{msg.user_name}, "
@@ -450,7 +466,7 @@ class FishingHandler:
         elif result.kind == "mermaid":
             await self._push_mermaid_overlay(
                 user_name=msg.user_name,
-                loss=MERMAID_PENALTY,
+                loss=-delta if delta < 0 else MERMAID_PENALTY,
             )
 
         if delta != 0:
@@ -458,9 +474,7 @@ class FishingHandler:
             await points.flush()
 
         await self.store.save_player(player)
-        res_line = texts.format_resources(
-            player["energy"], player["worms"], player["maggots"], player["rod_state"]
-        )
+        res_line = texts.resources_from_player(player)
         await self._say(
             f"{msg.user_name}, {prefix_note}{result.message}\n{res_line}"
         )
@@ -472,14 +486,32 @@ class FishingHandler:
             await self._say(f"{msg.user_name}, {prefix_note}{body}")
             return
         player["energy"] -= WORMS_ENERGY_COST
-        player["worms"] += WORMS_GAIN
+        steal_active = await self._is_steal_active()
+        outcome = roll_worms_dig_outcome(steal_active=steal_active)
+        if outcome == "shield":
+            player["mermaid_shields"] = int(player.get("mermaid_shields") or 0) + 1
+            body = texts.pick(texts.WORMS_DIG_SHIELD).format(
+                S=player["mermaid_shields"]
+            )
+        elif outcome == "bite":
+            player["bite_boost_casts_left"] = (
+                int(player.get("bite_boost_casts_left") or 0) + BITE_BOOST_CASTS
+            )
+            body = texts.pick(texts.WORMS_DIG_BITE).format(
+                B=BITE_BOOST_CASTS,
+                T=player["bite_boost_casts_left"],
+            )
+        elif outcome == "safe":
+            already = bool(player.get("steal_safe"))
+            player["steal_safe"] = True
+            pool = texts.WORMS_DIG_SAFE_ALREADY if already else texts.WORMS_DIG_SAFE
+            body = texts.pick(pool)
+        else:
+            player["worms"] += WORMS_GAIN
+            body = texts.pick(texts.WORMS_OK)
         await self.store.save_player(player)
-        res = texts.format_resources(
-            player["energy"], player["worms"], player["maggots"], player["rod_state"]
-        )
-        await self._say(
-            f"{msg.user_name}, {prefix_note}{texts.pick(texts.WORMS_OK)}\n{res}"
-        )
+        res = texts.resources_from_player(player)
+        await self._say(f"{msg.user_name}, {prefix_note}{body}\n{res}")
 
     async def _cmd_maggot(self, msg: ChatMessage, prefix_note: str) -> None:
         points = self._require_points()
@@ -495,9 +527,7 @@ class FishingHandler:
         await points.flush()
         player["maggots"] += MAGGOT_GAIN
         await self.store.save_player(player)
-        res = texts.format_resources(
-            player["energy"], player["worms"], player["maggots"], player["rod_state"]
-        )
+        res = texts.resources_from_player(player)
         await self._say(
             f"{msg.user_name}, {prefix_note}"
             f"{texts.pick(texts.MAGGOT_OK).format(C=MAGGOT_COST, G=MAGGOT_GAIN)}\n{res}"
@@ -521,11 +551,50 @@ class FishingHandler:
         await points.flush()
         player["rod_state"] = fishing_db.ROD_OK
         await self.store.save_player(player)
-        res = texts.format_resources(
-            player["energy"], player["worms"], player["maggots"], player["rod_state"]
-        )
+        res = texts.resources_from_player(player)
         await self._say(
             f"{msg.user_name}, {prefix_note}{texts.pick(texts.ROD_OK)}\n{res}"
+        )
+
+    async def _cmd_shield(
+        self, msg: ChatMessage, prefix_note: str, rest: str
+    ) -> None:
+        points = self._require_points()
+        parts = rest.split()
+        qty = 1
+        if len(parts) >= 2:
+            try:
+                qty = int(parts[1])
+            except ValueError:
+                await self._say(
+                    f"{msg.user_name}, {prefix_note}"
+                    f"{texts.pick(texts.SHIELD_BAD_QTY).format(MAX=MERMAID_SHIELD_BUY_MAX)}"
+                )
+                return
+        if qty < 1 or qty > MERMAID_SHIELD_BUY_MAX:
+            await self._say(
+                f"{msg.user_name}, {prefix_note}"
+                f"{texts.pick(texts.SHIELD_BAD_QTY).format(MAX=MERMAID_SHIELD_BUY_MAX)}"
+            )
+            return
+
+        cost = MERMAID_SHIELD_COST * qty
+        player = await self.store.get_or_create_player(msg.user_id, msg.user_name)
+        balance = await points.get_balance(msg.user_id)
+        if balance < cost:
+            await self._say(
+                f"{msg.user_name}, {prefix_note}"
+                f"{texts.pick(texts.SHIELD_NO_POINTS).format(C=MERMAID_SHIELD_COST, N=qty)}"
+            )
+            return
+        await points.add(msg.user_id, -cost)
+        await points.flush()
+        player["mermaid_shields"] = int(player.get("mermaid_shields") or 0) + qty
+        await self.store.save_player(player)
+        res = texts.resources_from_player(player)
+        await self._say(
+            f"{msg.user_name}, {prefix_note}"
+            f"{texts.pick(texts.SHIELD_OK).format(N=qty, C=cost, S=player['mermaid_shields'])}\n{res}"
         )
 
     async def _cmd_energy(self, msg: ChatMessage) -> None:
@@ -536,16 +605,16 @@ class FishingHandler:
             M=player["maggots"],
             rod=texts.rod_label(player["rod_state"]),
             rod_hint=texts.rod_hint(player["rod_state"]),
+            S=int(player.get("mermaid_shields") or 0),
+            B=int(player.get("bite_boost_casts_left") or 0),
+            SAFE=texts.safe_label(bool(player.get("steal_safe"))),
         )
         await self._say(f"{msg.user_name}, {body}")
 
     async def _cmd_catch(self, msg: ChatMessage) -> None:
         player = await self.store.get_or_create_player(msg.user_id, msg.user_name)
         records = await self.store.list_records(msg.user_id)
-        res = (
-            f"Энергия: {player['energy']}/100, Черви: {player['worms']}, "
-            f"Опарыш: {player['maggots']}, Удочка: {texts.rod_label(player['rod_state'])}"
-        )
+        res = texts.resources_from_player(player)
         if not records:
             await self._say(
                 f"{msg.user_name}, Пока без рекордов по видам. Запасы: {res}."

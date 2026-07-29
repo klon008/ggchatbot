@@ -277,7 +277,10 @@ CREATE TABLE IF NOT EXISTS fishing_players (
     maggots INTEGER NOT NULL DEFAULT 0,
     rod_state TEXT NOT NULL DEFAULT 'none',
     last_cast_at REAL NOT NULL DEFAULT 0,
-    day_key TEXT NOT NULL DEFAULT ''
+    day_key TEXT NOT NULL DEFAULT '',
+    mermaid_shields INTEGER NOT NULL DEFAULT 0,
+    bite_boost_casts_left INTEGER NOT NULL DEFAULT 0,
+    steal_safe INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS fishing_records (

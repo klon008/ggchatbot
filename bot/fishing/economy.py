@@ -88,4 +88,7 @@ def new_player(user_id: str, user_name: str, now_ts: float | None = None) -> dic
         "rod_state": "none",
         "last_cast_at": 0.0,
         "day_key": day_key(),
+        "mermaid_shields": 0,
+        "bite_boost_casts_left": 0,
+        "steal_safe": False,
     }

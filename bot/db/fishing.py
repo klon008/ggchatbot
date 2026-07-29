@@ -131,7 +131,9 @@ async def set_week_rewards_override(
 async def get_player(db: Database, user_id: str) -> Optional[dict[str, Any]]:
     row = await db.fetchone(
         "SELECT user_id, user_name, energy, energy_updated_at, worms, maggots, "
-        "rod_state, last_cast_at, day_key FROM fishing_players WHERE user_id = ?",
+        "rod_state, last_cast_at, day_key, mermaid_shields, bite_boost_casts_left, "
+        "steal_safe "
+        "FROM fishing_players WHERE user_id = ?",
         (str(user_id),),
     )
     if row is None:
@@ -144,8 +146,9 @@ async def upsert_player(db: Database, player: dict[str, Any]) -> None:
         """
         INSERT INTO fishing_players (
             user_id, user_name, energy, energy_updated_at, worms, maggots,
-            rod_state, last_cast_at, day_key
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            rod_state, last_cast_at, day_key, mermaid_shields, bite_boost_casts_left,
+            steal_safe
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
             user_name = excluded.user_name,
             energy = excluded.energy,
@@ -154,7 +157,10 @@ async def upsert_player(db: Database, player: dict[str, Any]) -> None:
             maggots = excluded.maggots,
             rod_state = excluded.rod_state,
             last_cast_at = excluded.last_cast_at,
-            day_key = excluded.day_key
+            day_key = excluded.day_key,
+            mermaid_shields = excluded.mermaid_shields,
+            bite_boost_casts_left = excluded.bite_boost_casts_left,
+            steal_safe = excluded.steal_safe
         """,
         (
             str(player["user_id"]),
@@ -166,6 +172,9 @@ async def upsert_player(db: Database, player: dict[str, Any]) -> None:
             str(player["rod_state"]),
             float(player["last_cast_at"]),
             str(player.get("day_key") or ""),
+            int(player.get("mermaid_shields") or 0),
+            int(player.get("bite_boost_casts_left") or 0),
+            1 if player.get("steal_safe") else 0,
         ),
     )
 
@@ -179,7 +188,8 @@ async def reset_all_for_new_day(
 ) -> None:
     await db.execute(
         "UPDATE fishing_players SET energy = ?, energy_updated_at = ?, "
-        "worms = 0, maggots = 0, day_key = ?",
+        "worms = 0, maggots = 0, mermaid_shields = 0, bite_boost_casts_left = 0, "
+        "steal_safe = 0, day_key = ?",
         (energy, energy_updated_at, day_key),
     )
 
@@ -359,4 +369,7 @@ def _player_row(row: tuple) -> dict[str, Any]:
         "rod_state": str(row[6] or ROD_NONE),
         "last_cast_at": float(row[7]),
         "day_key": str(row[8] or ""),
+        "mermaid_shields": int(row[9] or 0) if len(row) > 9 else 0,
+        "bite_boost_casts_left": int(row[10] or 0) if len(row) > 10 else 0,
+        "steal_safe": bool(int(row[11] or 0)) if len(row) > 11 else False,
     }
