@@ -307,17 +307,28 @@ def format_resources(
     bite_boost_casts_left: int = 0,
     steal_safe: bool = False,
 ) -> str:
+    """Компактный хвост после заброса/покупок. Баффы — только если активны."""
     if rod_state == "ok":
         rod = "целая"
     elif rod_state == "broken":
         rod = "сломана — нужна новая"
     else:
         rod = "нет"
-    return (
-        f"Энергия: {energy}/100 | Черви: {worms} | Опарыш: {maggots} | "
-        f"Удочка: {rod} | Щиты: {mermaid_shields} | Буст клёва: {bite_boost_casts_left} | "
-        f"Сейф: {safe_label(steal_safe)}"
-    )
+    bait = int(worms) + int(maggots)
+    parts = [
+        f"Энергия: {energy}/100",
+        f"Наживка: {bait}",
+        f"Удочка: {rod}",
+    ]
+    shields = int(mermaid_shields or 0)
+    if shields > 0:
+        parts.append(f"Щиты: {shields}")
+    boost = int(bite_boost_casts_left or 0)
+    if boost > 0:
+        parts.append(f"Буст: {boost}")
+    if steal_safe:
+        parts.append("Сейф")
+    return " | ".join(parts)
 
 
 def resources_from_player(player: dict) -> str:

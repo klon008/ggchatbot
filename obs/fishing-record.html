@@ -301,6 +301,14 @@
         0 1px 0 #4a1010,
         0 3px 8px rgba(0, 0, 0, 0.85);
     }
+    .cap-saved {
+      color: #7ecf9a;
+      -webkit-text-stroke: 1.5px var(--stroke);
+      paint-order: stroke fill;
+      text-shadow:
+        0 1px 0 #12301c,
+        0 3px 8px rgba(0, 0, 0, 0.85);
+    }
     #stage.is-mermaid .cap-fish {
       color: #d0d8e0;
     }
@@ -397,6 +405,19 @@
     }
     .cap-record.is-bad::before,
     .cap-record.is-bad::after {
+      content: "✦";
+      opacity: 0.55;
+    }
+    .cap-record.is-ok {
+      color: #e8f5ec;
+      background: linear-gradient(180deg, #3a6850 0%, #244838 55%, #1a3028 100%);
+      box-shadow:
+        0 2px 0 #0e2018,
+        0 4px 10px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(160, 220, 180, 0.22);
+    }
+    .cap-record.is-ok::before,
+    .cap-record.is-ok::after {
       content: "✦";
       opacity: 0.55;
     }

@@ -4,11 +4,12 @@
  * URL: http://127.0.0.1:PORT/fishing-record.html
  * Рекомендуемый размер: 1200×450 (прозрачный фон).
  * Debug: ?debug=1
- * Превью: ?preview=1  (или ?preview=shuka / ?preview=rusalka)
+ * Превью: ?preview=1  (или ?preview=shuka / ?preview=rusalka / ?preview=mermaid_blocked)
  *
  * Python -> overlay:
  *   {action:"fishing_record", kind:"record", userName, species, weight, imageUrl}
  *   {action:"fishing_record", kind:"mermaid", userName, loss, imageUrl}
+ *   {action:"fishing_record", kind:"mermaid_blocked", userName, loss:0, imageUrl}
  * overlay -> Python: {status:"ready", overlay:"fishing_record"}
  */
 (function () {
@@ -120,9 +121,22 @@
 
   function isMermaidPayload(data) {
     var kind = String(data.kind || data.event || "").toLowerCase();
-    if (kind === "mermaid" || kind === "rusalka") return true;
+    if (
+      kind === "mermaid" ||
+      kind === "rusalka" ||
+      kind === "mermaid_blocked"
+    ) {
+      return true;
+    }
     var img = String(data.imageUrl || data.image_url || "").toLowerCase();
     return img.indexOf("rusalka") !== -1;
+  }
+
+  function isMermaidBlocked(data) {
+    var kind = String(data.kind || data.event || "").toLowerCase();
+    if (kind === "mermaid_blocked") return true;
+    var loss = data.loss != null ? data.loss : data.penalty;
+    return kind === "mermaid" && Number(loss) === 0;
   }
 
   function setRecordCaption(userName, weight, species) {
@@ -157,6 +171,18 @@
       '<div class="cap-record is-bad">Русалка утащила добычу</div>';
   }
 
+  function setMermaidBlockedCaption(userName) {
+    caption.innerHTML =
+      '<div class="cap-nick">' +
+      escapeHtml(userName) +
+      "</div>" +
+      '<div class="cap-verb-row"><span class="cap-verb">Щит</span></div>' +
+      '<div class="cap-catch">' +
+      '<span class="cap-saved">Спасён!</span>' +
+      "</div>" +
+      '<div class="cap-record is-ok">Русалка отражена</div>';
+  }
+
   function waitImage(url) {
     return new Promise(function (resolve) {
       if (!url) {
@@ -189,13 +215,21 @@
 
     if (mermaid) {
       var loss = data.loss != null ? data.loss : data.penalty;
+      var blocked = isMermaidBlocked(data);
       stage.classList.add("is-mermaid");
-      setMermaidCaption(userName, loss);
-      log("show mermaid " + userName + " / −" + formatLoss(loss) + " → " + imageUrl);
+      if (blocked) {
+        stage.classList.add("is-mermaid-blocked");
+        setMermaidBlockedCaption(userName);
+        log("show mermaid blocked " + userName + " → " + imageUrl);
+      } else {
+        stage.classList.remove("is-mermaid-blocked");
+        setMermaidCaption(userName, loss);
+        log("show mermaid " + userName + " / −" + formatLoss(loss) + " → " + imageUrl);
+      }
     } else {
       var species = data.species || "";
       var weight = data.weight;
-      stage.classList.remove("is-mermaid");
+      stage.classList.remove("is-mermaid", "is-mermaid-blocked");
       setRecordCaption(userName, weight, species);
       log(
         "show " +
@@ -226,7 +260,7 @@
     stage.classList.add("is-leaving");
     await sleep(EXIT_MS);
 
-    stage.classList.remove("is-visible", "is-leaving", "is-mermaid");
+    stage.classList.remove("is-visible", "is-leaving", "is-mermaid", "is-mermaid-blocked");
     stage.setAttribute("aria-hidden", "true");
     fishArt.removeAttribute("src");
     caption.textContent = "";
@@ -292,6 +326,16 @@
         kind: "mermaid",
         userName: "RiverDragon",
         loss: 3000,
+        imageUrl: "/assets/fishing/rusalka.png",
+      });
+    } else if (
+      previewSlug === "rusalka_blocked" ||
+      previewSlug === "mermaid_blocked"
+    ) {
+      enqueue({
+        kind: "mermaid_blocked",
+        userName: "RiverDragon",
+        loss: 0,
         imageUrl: "/assets/fishing/rusalka.png",
       });
     } else {

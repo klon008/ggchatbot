@@ -447,9 +447,15 @@ class Track:
 {"action": "fishing_record", "kind": "mermaid", "userName": "Nick", "loss": 3000, "imageUrl": "/assets/fishing/rusalka.png"}
 ```
 
+Русалка отражена щитом (тот же арт, другой текст):
+
+```json
+{"action": "fishing_record", "kind": "mermaid_blocked", "userName": "Nick", "loss": 0, "imageUrl": "/assets/fishing/rusalka.png"}
+```
+
 Обрабатывает только `fishing-record.html`. Готовность: `{status:"ready", overlay:"fishing_record"}`.
 Арты: `obs/assets/fishing/{slug}.png`, маппинг вида→slug в `bot/fishing/record_assets.py` (не в settings.py).
-Превью в браузере: `?preview=1`, `?preview=shuka` или `?preview=rusalka`.
+Превью в браузере: `?preview=1`, `?preview=shuka`, `?preview=rusalka` или `?preview=mermaid_blocked`.
 ---
 
 ### 6.4. `youtube.py` / `yandex.py` / `validate.py`

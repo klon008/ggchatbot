@@ -109,13 +109,15 @@ class FishingHandler:
             }
         )
 
-    async def _push_mermaid_overlay(self, *, user_name: str, loss: int) -> None:
+    async def _push_mermaid_overlay(
+        self, *, user_name: str, loss: int, kind: str = "mermaid"
+    ) -> None:
         if self._player is None:
             return
         await self._player.broadcast_fishing_record(
             {
                 "action": "fishing_record",
-                "kind": "mermaid",
+                "kind": kind,
                 "userName": user_name,
                 "loss": int(loss),
                 "imageUrl": "/assets/fishing/rusalka.png",
@@ -467,6 +469,13 @@ class FishingHandler:
             await self._push_mermaid_overlay(
                 user_name=msg.user_name,
                 loss=-delta if delta < 0 else MERMAID_PENALTY,
+                kind="mermaid",
+            )
+        elif result.kind == "mermaid_blocked":
+            await self._push_mermaid_overlay(
+                user_name=msg.user_name,
+                loss=0,
+                kind="mermaid_blocked",
             )
 
         if delta != 0:
