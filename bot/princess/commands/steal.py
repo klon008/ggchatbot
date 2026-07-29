@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import secrets
 import time
 from typing import TYPE_CHECKING
 
@@ -103,7 +104,7 @@ async def cmd_steal(handler: "PrincessHandler", msg: ChatMessage) -> None:
             await handler._say(msg.user_name, "К сожалению, никто не в сети для кражи.")
             return
 
-        victim_id = random.choice(candidates)
+        victim_id = secrets.choice(candidates)
         victim_name = handler._viewers[victim_id]["user_name"]
         victim_points = await handler.points.get_balance(victim_id)
 
