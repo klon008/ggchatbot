@@ -557,6 +557,7 @@
       <button type="button" class="tab" data-tab="series">Серии</button>
       <button type="button" class="tab" data-tab="boosters">Бустеры</button>
       <button type="button" class="tab" data-tab="draws">Тиражи</button>
+      <button type="button" class="tab" data-tab="stats">Статистика</button>
     </div>
 
     <section id="panel-settings" class="panel active">
@@ -810,6 +811,60 @@
             <tr><td colspan="7" class="empty">Загрузка…</td></tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="panel-stats" class="panel">
+      <p class="tab-help">
+        <strong>Статистика тиража</strong> - сколько принцесс потратили игроки на
+        <span class="mono">!бустер</span>, сколько повторов и компенсации, и как часто
+        выпадала каждая карта. Откройте из списка тиражей кнопкой «Стат».
+      </p>
+
+      <div class="card">
+        <div class="toolbar">
+          <h3 id="statsDrawTitle" style="margin: 0; flex: 1;">Тираж не выбран</h3>
+          <button type="button" id="statsRefresh" class="small">Обновить</button>
+          <button type="button" id="statsBackToDraws" class="small">К тиражам</button>
+        </div>
+        <p id="statsDrawMeta" class="hint">Выберите тираж кнопкой «Стат» во вкладке Тиражи.</p>
+        <div class="tabs" style="margin-bottom: 12px;">
+          <button type="button" class="tab active" data-stats-tab="players">Игроки</button>
+          <button type="button" class="tab" data-stats-tab="cards">Карточки</button>
+        </div>
+        <div id="statsPanelPlayers">
+          <table>
+            <thead>
+              <tr>
+                <th>игрок</th>
+                <th>потрачено</th>
+                <th>повторы</th>
+                <th>компенсация</th>
+                <th>открытий</th>
+                <th>новых</th>
+              </tr>
+            </thead>
+            <tbody id="statsPlayersBody">
+              <tr><td colspan="6" class="empty">Нет данных</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="statsPanelCards" style="display: none;">
+          <table>
+            <thead>
+              <tr>
+                <th>карточка</th>
+                <th>редкость</th>
+                <th>выпадений</th>
+                <th>повторов</th>
+                <th>новых</th>
+              </tr>
+            </thead>
+            <tbody id="statsCardsBody">
+              <tr><td colspan="5" class="empty">Нет данных</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   </div>

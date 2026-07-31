@@ -32,6 +32,7 @@ from . import (
     m024_block_ym_explicit,
     m025_fishing_day_items,
     m026_fishing_steal_safe,
+    m027_draw_stats,
 )
 
 
@@ -68,4 +69,5 @@ MIGRATIONS: list[Migration] = [
     m024_block_ym_explicit,
     m025_fishing_day_items,
     m026_fishing_steal_safe,
+    m027_draw_stats,
 ]

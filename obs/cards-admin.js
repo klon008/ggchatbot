@@ -57,6 +57,15 @@
   let selectedBoosterId = null;
   let boosterGalleryOpen = false;
   let openOddsDrawId = null;
+  let statsDrawId = null;
+  let statsSubTab = "players";
+
+  const statsDrawTitle = document.getElementById("statsDrawTitle");
+  const statsDrawMeta = document.getElementById("statsDrawMeta");
+  const statsPlayersBody = document.getElementById("statsPlayersBody");
+  const statsCardsBody = document.getElementById("statsCardsBody");
+  const statsPanelPlayers = document.getElementById("statsPanelPlayers");
+  const statsPanelCards = document.getElementById("statsPanelCards");
 
   function setStatus(text, kind) {
     statusBar.textContent = text;
@@ -251,6 +260,9 @@
       `<button type="button" class="small btn-draw-odds" data-id="${esc(d.id)}">${
         openOddsDrawId === d.id ? "Скрыть шансы" : "Шансы"
       }</button>`
+    );
+    parts.push(
+      `<button type="button" class="small btn-draw-stats" data-id="${esc(d.id)}">Стат</button>`
     );
     parts.push(
       `<button type="button" class="small btn-draw-copy" data-id="${esc(d.id)}">Копия</button>`
@@ -560,9 +572,9 @@
     }
   }
 
-  document.querySelectorAll(".tab").forEach((tab) => {
+  document.querySelectorAll(".tabs > .tab[data-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+      document.querySelectorAll(".tabs > .tab[data-tab]").forEach((t) => t.classList.remove("active"));
       document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
       tab.classList.add("active");
       document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
@@ -776,6 +788,84 @@
     }
   });
 
+  function showStatsSubTab(which) {
+    statsSubTab = which === "cards" ? "cards" : "players";
+    document.querySelectorAll("[data-stats-tab]").forEach((t) => {
+      t.classList.toggle("active", t.dataset.statsTab === statsSubTab);
+    });
+    statsPanelPlayers.style.display = statsSubTab === "players" ? "block" : "none";
+    statsPanelCards.style.display = statsSubTab === "cards" ? "block" : "none";
+  }
+
+  function renderStatsPlayers(items) {
+    if (!items.length) {
+      statsPlayersBody.innerHTML =
+        '<tr><td colspan="6" class="empty">Нет открытий</td></tr>';
+      return;
+    }
+    statsPlayersBody.innerHTML = items
+      .map(
+        (row) => `<tr>
+        <td>${esc(row.user_name || row.user_id)}</td>
+        <td>${esc(row.spent_points)}</td>
+        <td>${esc(row.dup_count)}</td>
+        <td>${esc(row.refund_points)}</td>
+        <td>${esc(row.opens)}</td>
+        <td>${esc(row.new_count)}</td>
+      </tr>`
+      )
+      .join("");
+  }
+
+  function renderStatsCards(items) {
+    if (!items.length) {
+      statsCardsBody.innerHTML =
+        '<tr><td colspan="5" class="empty">Нет выпадений</td></tr>';
+      return;
+    }
+    statsCardsBody.innerHTML = items
+      .map(
+        (row) => `<tr>
+        <td>${esc(row.name)} <span class="mono" style="color:#8888a0">${esc(row.card_id)}</span></td>
+        <td class="mono">${esc(row.rarity)}</td>
+        <td>${esc(row.appear_count)}</td>
+        <td>${esc(row.dup_count)}</td>
+        <td>${esc(row.new_count)}</td>
+      </tr>`
+      )
+      .join("");
+  }
+
+  async function loadDrawStats(drawId, silent) {
+    if (!drawId) return;
+    if (!silent) setStatus("Загрузка статистики…");
+    try {
+      const [players, cards] = await Promise.all([
+        api("GET", `/api/cards/draws/${encodeURIComponent(drawId)}/stats/players`),
+        api("GET", `/api/cards/draws/${encodeURIComponent(drawId)}/stats/cards`),
+      ]);
+      const draw = cardsDraws.find((d) => d.id === drawId);
+      statsDrawId = drawId;
+      statsDrawTitle.textContent = draw
+        ? `Тираж «${draw.name}»`
+        : `Тираж ${drawId}`;
+      statsDrawMeta.textContent = draw
+        ? `id: ${draw.id} · бустер: ${draw.booster_name} · статус: ${draw.status}`
+        : `id: ${drawId}`;
+      renderStatsPlayers(players.items || []);
+      renderStatsCards(cards.items || []);
+      showStatsSubTab(statsSubTab);
+      if (!silent) setStatus("Статистика загружена", "ok");
+    } catch (err) {
+      if (!silent) setStatus(err.message, "err");
+    }
+  }
+
+  function openDrawStats(drawId) {
+    document.querySelector('.tabs > .tab[data-tab="stats"]').click();
+    loadDrawStats(drawId);
+  }
+
   drawsBody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
@@ -784,6 +874,10 @@
     if (btn.classList.contains("btn-draw-odds")) {
       openOddsDrawId = openOddsDrawId === id ? null : id;
       renderDraws();
+      return;
+    }
+    if (btn.classList.contains("btn-draw-stats")) {
+      openDrawStats(id);
       return;
     }
     if (btn.classList.contains("btn-draw-copy")) {
@@ -820,6 +914,24 @@
         setStatus(err.message, "err");
       }
     }
+  });
+
+  document.querySelectorAll("[data-stats-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      showStatsSubTab(tab.dataset.statsTab);
+    });
+  });
+
+  document.getElementById("statsRefresh").addEventListener("click", () => {
+    if (!statsDrawId) {
+      setStatus("Сначала выберите тираж кнопкой «Стат»", "err");
+      return;
+    }
+    loadDrawStats(statsDrawId);
+  });
+
+  document.getElementById("statsBackToDraws").addEventListener("click", () => {
+    document.querySelector('.tabs > .tab[data-tab="draws"]').click();
   });
 
   renderWeightsEditor(DEFAULT_WEIGHTS);

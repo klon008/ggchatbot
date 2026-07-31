@@ -68,6 +68,8 @@ REQUIRED_TABLES = [
     "races_bets",
     "races_lineup",
     "races_princess_stats",
+    "draw_user_stats",
+    "draw_card_stats",
 ]
 
 

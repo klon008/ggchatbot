@@ -254,6 +254,26 @@ CREATE TABLE IF NOT EXISTS booster_openings (
     total_refund INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS draw_user_stats (
+    draw_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    opens INTEGER NOT NULL DEFAULT 0,
+    spent_points INTEGER NOT NULL DEFAULT 0,
+    refund_points INTEGER NOT NULL DEFAULT 0,
+    dup_count INTEGER NOT NULL DEFAULT 0,
+    new_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (draw_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS draw_card_stats (
+    draw_id TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    appear_count INTEGER NOT NULL DEFAULT 0,
+    dup_count INTEGER NOT NULL DEFAULT 0,
+    new_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (draw_id, card_id)
+);
+
 CREATE TABLE IF NOT EXISTS user_daily_opens (
     user_id TEXT NOT NULL,
     day TEXT NOT NULL,

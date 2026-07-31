@@ -92,6 +92,14 @@ class CardsAdminRoutes:
                 web.post("/api/cards/draws/{draw_id}/pause", self._draws_pause),
                 web.post("/api/cards/draws/{draw_id}/close", self._draws_close),
                 web.post("/api/cards/draws/{draw_id}/copy", self._draws_copy),
+                web.get(
+                    "/api/cards/draws/{draw_id}/stats/players",
+                    self._draws_stats_players,
+                ),
+                web.get(
+                    "/api/cards/draws/{draw_id}/stats/cards",
+                    self._draws_stats_cards,
+                ),
                 web.get("/api/cards/series-pack/config", self._series_pack_config),
                 web.post("/api/cards/series-pack/check", self._series_pack_check),
                 web.post("/api/cards/series-pack/build", self._series_pack_build),
@@ -368,6 +376,20 @@ class CardsAdminRoutes:
             return error_response("Исходный тираж не найден", status=404)
         item = await cards_db.get_draw(self._db, new_id)
         return json_response(item, status=201)
+
+    async def _draws_stats_players(self, request: web.Request) -> web.Response:
+        draw_id = request.match_info["draw_id"]
+        if await cards_db.get_draw(self._db, draw_id) is None:
+            return error_response("Тираж не найден", status=404)
+        items = await cards_db.list_draw_user_stats(self._db, draw_id)
+        return json_response({"items": items})
+
+    async def _draws_stats_cards(self, request: web.Request) -> web.Response:
+        draw_id = request.match_info["draw_id"]
+        if await cards_db.get_draw(self._db, draw_id) is None:
+            return error_response("Тираж не найден", status=404)
+        items = await cards_db.list_draw_card_stats(self._db, draw_id)
+        return json_response({"items": items})
 
     async def _series_pack_config(self, request: web.Request) -> web.Response:
         cfg = Config.load()

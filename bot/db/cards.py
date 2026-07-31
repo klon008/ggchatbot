@@ -371,6 +371,8 @@ async def log_opening(
     total_refund: int,
 ) -> str:
     opening_id = uuid.uuid4().hex
+    dup_count = sum(1 for c in cards_rolled if c.get("is_duplicate"))
+    new_count = len(cards_rolled) - dup_count
     async with db.transaction() as conn:
         await conn.execute(
             """
@@ -390,7 +392,113 @@ async def log_opening(
                 total_refund,
             ),
         )
+        await conn.execute(
+            """
+            INSERT INTO draw_user_stats (
+                draw_id, user_id, opens, spent_points, refund_points,
+                dup_count, new_count
+            ) VALUES (?, ?, 1, ?, ?, ?, ?)
+            ON CONFLICT(draw_id, user_id) DO UPDATE SET
+                opens = opens + 1,
+                spent_points = spent_points + excluded.spent_points,
+                refund_points = refund_points + excluded.refund_points,
+                dup_count = dup_count + excluded.dup_count,
+                new_count = new_count + excluded.new_count
+            """,
+            (
+                draw_id,
+                user_id,
+                cost_points,
+                total_refund,
+                dup_count,
+                new_count,
+            ),
+        )
+        for item in cards_rolled:
+            card_id = str(item.get("card_id") or "").strip()
+            if not card_id:
+                continue
+            is_dup = bool(item.get("is_duplicate"))
+            await conn.execute(
+                """
+                INSERT INTO draw_card_stats (
+                    draw_id, card_id, appear_count, dup_count, new_count
+                ) VALUES (?, ?, 1, ?, ?)
+                ON CONFLICT(draw_id, card_id) DO UPDATE SET
+                    appear_count = appear_count + 1,
+                    dup_count = dup_count + excluded.dup_count,
+                    new_count = new_count + excluded.new_count
+                """,
+                (
+                    draw_id,
+                    card_id,
+                    1 if is_dup else 0,
+                    0 if is_dup else 1,
+                ),
+            )
     return opening_id
+
+
+async def list_draw_user_stats(db: Database, draw_id: str) -> list[dict[str, Any]]:
+    rows = await db.fetchall(
+        """
+        SELECT
+            s.user_id,
+            COALESCE(u.user_name, '') AS user_name,
+            s.opens,
+            s.spent_points,
+            s.refund_points,
+            s.dup_count,
+            s.new_count
+        FROM draw_user_stats s
+        LEFT JOIN user_names u ON u.user_id = s.user_id
+        WHERE s.draw_id = ?
+        ORDER BY s.spent_points DESC, s.opens DESC, s.user_id ASC
+        """,
+        (draw_id,),
+    )
+    return [
+        {
+            "user_id": r["user_id"],
+            "user_name": r["user_name"] or r["user_id"],
+            "opens": int(r["opens"]),
+            "spent_points": int(r["spent_points"]),
+            "refund_points": int(r["refund_points"]),
+            "dup_count": int(r["dup_count"]),
+            "new_count": int(r["new_count"]),
+        }
+        for r in rows
+    ]
+
+
+async def list_draw_card_stats(db: Database, draw_id: str) -> list[dict[str, Any]]:
+    rows = await db.fetchall(
+        """
+        SELECT
+            s.card_id,
+            COALESCE(c.name, s.card_id) AS name,
+            COALESCE(c.rarity, '') AS rarity,
+            s.appear_count,
+            s.dup_count,
+            s.new_count
+        FROM draw_card_stats s
+        LEFT JOIN cards c ON c.id = s.card_id
+        WHERE s.draw_id = ?
+        ORDER BY s.appear_count DESC, s.card_id ASC
+        """,
+        (draw_id,),
+    )
+    return [
+        {
+            "card_id": r["card_id"],
+            "name": r["name"],
+            "rarity": r["rarity"],
+            "appear_count": int(r["appear_count"]),
+            "dup_count": int(r["dup_count"]),
+            "new_count": int(r["new_count"]),
+        }
+        for r in rows
+    ]
 
 
 async def get_booster_promo_url(db: Database, booster_id: str) -> Optional[str]:
