@@ -17,6 +17,8 @@ from ..settings import (
     PRISON_DURATION_SEC,
     STEAL_AMOUNT_MAX,
     STEAL_AMOUNT_MIN,
+    STEAL_BANK_AMOUNT_MULT,
+    STEAL_BANK_JACKPOT_CHANCE,
     STEAL_COOLDOWN_SEC,
     STEAL_MIN_VIEWERS,
     STEAL_ROLL_MAX,
@@ -25,9 +27,6 @@ from ..settings import (
 
 if TYPE_CHECKING:
     from bot.princess.handler import PrincessHandler
-
-_BANK_JACKPOT_CHANCE = 0.01  # 0.1%
-_BANK_AMOUNT_MULT = 2
 
 POOR_VICTIM_MESSAGES = [
     "У {name} недостаточно крупный кошелёк. Пусть сначала накопит немного",
@@ -83,9 +82,9 @@ async def cmd_steal(handler: "PrincessHandler", msg: ChatMessage) -> None:
     stolen = calculate_princess_amount(chance)
     bank_jackpot = False
 
-    if random.random() < _BANK_JACKPOT_CHANCE:
-        lo = STEAL_AMOUNT_MIN * _BANK_AMOUNT_MULT
-        hi = STEAL_AMOUNT_MAX * _BANK_AMOUNT_MULT
+    if random.random() < STEAL_BANK_JACKPOT_CHANCE:
+        lo = STEAL_AMOUNT_MIN * STEAL_BANK_AMOUNT_MULT
+        hi = STEAL_AMOUNT_MAX * STEAL_BANK_AMOUNT_MULT
         desired = random.randint(lo, hi)
         taken = await handler.steal.execute_bank_steal(
             handler.points, uid, desired, min_required=lo
