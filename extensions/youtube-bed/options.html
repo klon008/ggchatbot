@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>YouTube Bed — настройки</title>
+  <style>
+    :root {
+      --bg: #1a1a22;
+      --fg: #e8e8f0;
+      --muted: #9aa3b2;
+      --accent: #4caf50;
+      --border: #3d3d5c;
+    }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--fg);
+      min-width: 280px;
+    }
+    h1 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0 0 12px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #121218;
+      color: var(--fg);
+      font-size: 13px;
+    }
+    button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+    .hint {
+      margin-top: 12px;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--accent);
+      min-height: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <h1>WebSocket бота</h1>
+  <label for="host">Host (OBS_WS_HOST)</label>
+  <input id="host" type="text" autocomplete="off" spellcheck="false" />
+  <label for="port">Port (OBS_WS_PORT)</label>
+  <input id="port" type="number" min="1" max="65535" />
+  <button id="save" type="button">Сохранить</button>
+  <div id="status"></div>
+  <p class="hint">
+    Как в .env бота. По умолчанию 127.0.0.1:8765 → ws://127.0.0.1:8765/ws
+  </p>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -423,6 +423,17 @@ class Track:
 - Heartbeat 30 сек.
 - Входящие JSON → `PlaybackController.on_obs_status()`.
 
+Клиенты с `overlay` в `ready` **не** считаются OBS-плеером (нет `advance`/`play` при reconnect):
+
+| `overlay` | Клиент |
+|-----------|--------|
+| `booster` | `booster.html` |
+| `fishing_record` | `fishing-record.html` |
+| `races` | `races.html` |
+| `bed` | расширение [`extensions/youtube-bed/`](extensions/youtube-bed/) — пауза фонового YouTube |
+
+При `ready` + `overlay:"bed"` бот сразу шлёт `queue_state` (синхронизация, если заказ уже играет).
+
 #### Исходящие команды (Python → плеер)
 
 ```json
@@ -432,6 +443,8 @@ class Track:
 {"action": "queue_state", "playing": false, "queueLength": 0, "current": null}
 {"action": "booster_open", "openingId": "…", "userName": "nick", "cards": [{"id":"elsa","name":"…","rarity":"mythic","isDuplicate":false,"refund":0,"imageUrl":"/assets/cards/elsa.webp","cardBackUrl":"/assets/cards/card-back.svg"}]}
 ```
+
+`play` / `queue_state` также слушает youtube-bed: `play` или `playing:true` → pause вкладки; `playing:false` → resume (если паузу ставило расширение).
 
 `booster_open` обрабатывает только `booster.html` (плеер игнорирует). Ответ overlay: `{status:"ready", overlay:"booster"}` и `{status:"booster_done", openingId}`.
 

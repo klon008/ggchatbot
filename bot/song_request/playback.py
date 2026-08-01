@@ -91,8 +91,12 @@ class PlaybackController:
     async def on_obs_status(self, data: dict) -> None:
         status = data.get("status")
         if status == "ready":
-            # booster / races / fishing-record шлют свой ready на тот же /ws
-            if data.get("overlay"):
+            # booster / races / fishing-record / bed шлют свой ready на тот же /ws
+            overlay = data.get("overlay")
+            if overlay:
+                # youtube-bed extension: сразу синхронизировать hold/resume
+                if overlay == "bed":
+                    await self._player.send_queue_state(self._queue.snapshot())
                 return
             api_ok = data.get("youtubeApi") is True
             api_state = str(data.get("youtubeApiState") or "")

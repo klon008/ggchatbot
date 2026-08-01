@@ -29,6 +29,11 @@ oldbot/
 
 dist/
 
+# Chrome extension signing key (CRX); never commit
+
+extensions/*.pem
+extensions/*.crx
+
 
 
 # Python
