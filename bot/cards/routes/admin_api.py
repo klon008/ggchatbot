@@ -285,6 +285,19 @@ class CardsAdminRoutes:
         weights = _parse_weights(data.get("rarity_weights"))
         if weights is None:
             return error_response("rarity_weights: объект с редкостями common…secretRare (+ mythic)")
+        pool_cards = await cards_db.list_booster_pool_cards(self._db, booster_id)
+        rarity_counts: dict[str, int] = {r: 0 for r in cards_db.RARITIES}
+        for card in pool_cards:
+            r = card.get("rarity")
+            if r in rarity_counts:
+                rarity_counts[r] += 1
+        empty_with_weight = [
+            r for r in cards_db.RARITIES if weights.get(r, 0) > 0 and rarity_counts.get(r, 0) <= 0
+        ]
+        if empty_with_weight:
+            return error_response(
+                "вес > 0 для rarity без карт в бустере: " + ", ".join(empty_with_weight)
+            )
         if await cards_db.draw_exists(self._db, draw_id):
             return error_response("Тираж уже существует", status=409)
         activate = bool(data.get("activate", False))

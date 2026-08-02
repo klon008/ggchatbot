@@ -179,24 +179,86 @@
     return pct;
   }
 
+  function rarityCountsForBooster(boosterId) {
+    const counts = {};
+    RARITIES.forEach((k) => {
+      counts[k] = 0;
+    });
+    if (!boosterId) return counts;
+    const booster = cardsBoosters.find((b) => b.id === boosterId);
+    if (!booster) return counts;
+    (booster.card_ids || []).forEach((id) => {
+      const card = cardById(id);
+      if (!card) return;
+      const r = card.rarity;
+      if (Object.prototype.hasOwnProperty.call(counts, r)) {
+        counts[r] += 1;
+      }
+    });
+    return counts;
+  }
+
+  function perCardPctLabel(tierPctStr, count) {
+    if (!count || count <= 0) return "—";
+    const tier = parseFloat(tierPctStr);
+    if (!Number.isFinite(tier) || tier <= 0) return "0.0%";
+    return `${(tier / count).toFixed(2)}%`;
+  }
+
+  function clampWeightsToPool(weights, counts) {
+    const out = {};
+    RARITIES.forEach((k) => {
+      const n = counts[k] || 0;
+      const w = Number(weights[k]) || 0;
+      out[k] = n > 0 ? (w < 0 || Number.isNaN(w) ? 0 : w) : 0;
+    });
+    return out;
+  }
+
   function renderWeightsEditor(weights) {
-    const w = weights || DEFAULT_WEIGHTS;
+    const counts = rarityCountsForBooster(drawBooster.value);
+    const w = clampWeightsToPool(weights || DEFAULT_WEIGHTS, counts);
     const pct = weightsPercentMap(w);
-    drawWeightsEditor.innerHTML = RARITIES.map(
-      (k) => `<label>
-        ${esc(k)}
-        <input type="number" class="weight-input" data-rarity="${esc(k)}" min="0" step="0.1" value="${esc(w[k] ?? 0)}" />
-        <span class="pct" data-pct-for="${esc(k)}">${pct[k]}%</span>
-      </label>`
-    ).join("");
+    const rows = RARITIES.map((k) => {
+      const n = counts[k] || 0;
+      const empty = n <= 0;
+      const disabled = empty ? " disabled" : "";
+      return `<tr class="${empty ? "rarity-empty" : ""}">
+        <td class="mono">${esc(k)}</td>
+        <td>
+          <input type="number" class="weight-input" data-rarity="${esc(k)}" min="0" step="0.1"
+            value="${esc(w[k] ?? 0)}"${disabled} />
+        </td>
+        <td class="pct" data-pct-for="${esc(k)}">${pct[k]}%</td>
+        <td class="mono" data-count-for="${esc(k)}">${n}</td>
+        <td class="pct" data-per-card-for="${esc(k)}">${perCardPctLabel(pct[k], n)}</td>
+      </tr>`;
+    }).join("");
+    drawWeightsEditor.innerHTML = `<table class="weights-table">
+      <thead>
+        <tr>
+          <th>редкость</th>
+          <th>вес</th>
+          <th>шанс</th>
+          <th>карт</th>
+          <th>на 1 карту</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
     drawWeightsEditor.querySelectorAll(".weight-input").forEach((input) => {
       input.addEventListener("input", refreshWeightPercents);
     });
   }
 
   function readWeightsFromEditor() {
+    const counts = rarityCountsForBooster(drawBooster.value);
     const out = {};
     RARITIES.forEach((k) => {
+      if ((counts[k] || 0) <= 0) {
+        out[k] = 0;
+        return;
+      }
       const el = drawWeightsEditor.querySelector(`.weight-input[data-rarity="${k}"]`);
       out[k] = el ? parseFloat(el.value) : 0;
       if (Number.isNaN(out[k]) || out[k] < 0) out[k] = 0;
@@ -205,25 +267,42 @@
   }
 
   function refreshWeightPercents() {
+    const counts = rarityCountsForBooster(drawBooster.value);
     const pct = weightsPercentMap(readWeightsFromEditor());
     RARITIES.forEach((k) => {
+      const n = counts[k] || 0;
       const el = drawWeightsEditor.querySelector(`[data-pct-for="${k}"]`);
       if (el) el.textContent = `${pct[k]}%`;
+      const per = drawWeightsEditor.querySelector(`[data-per-card-for="${k}"]`);
+      if (per) per.textContent = perCardPctLabel(pct[k], n);
     });
   }
 
-  function weightsReadonlyHtml(weights) {
-    const pct = weightsPercentMap(weights || {});
-    const rows = RARITIES.map(
-      (k) => `<tr>
+  function weightsReadonlyHtml(weights, counts) {
+    const w = weights || {};
+    const c = counts || {};
+    const pct = weightsPercentMap(w);
+    const rows = RARITIES.map((k) => {
+      const n = c[k] || 0;
+      return `<tr>
         <td class="mono">${esc(k)}</td>
-        <td>${esc(weights[k] ?? 0)}</td>
+        <td>${esc(w[k] ?? 0)}</td>
         <td>${pct[k]}%</td>
-      </tr>`
-    ).join("");
+        <td class="mono">${n}</td>
+        <td>${perCardPctLabel(pct[k], n)}</td>
+      </tr>`;
+    }).join("");
     return `<div class="weights-readonly">
-      <table>
-        <thead><tr><th>редкость</th><th>вес</th><th>шанс</th></tr></thead>
+      <table class="weights-table">
+        <thead>
+          <tr>
+            <th>редкость</th>
+            <th>вес</th>
+            <th>шанс</th>
+            <th>карт</th>
+            <th>на 1 карту</th>
+          </tr>
+        </thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -372,9 +451,20 @@
   }
 
   function renderBoosters() {
+    const prevBooster = drawBooster.value;
     drawBooster.innerHTML = cardsBoosters
       .map((b) => `<option value="${esc(b.id)}">${esc(b.name)} (${esc(b.id)})</option>`)
       .join("");
+    if (prevBooster && cardsBoosters.some((b) => b.id === prevBooster)) {
+      drawBooster.value = prevBooster;
+    }
+    let currentWeights = DEFAULT_WEIGHTS;
+    if (drawWeightsEditor.querySelector(".weight-input")) {
+      const w = readWeightsFromEditor();
+      const sum = RARITIES.reduce((acc, k) => acc + (Number(w[k]) || 0), 0);
+      if (sum > 0) currentWeights = w;
+    }
+    renderWeightsEditor(currentWeights);
 
     if (!cardsBoosters.length) {
       boostersBody.innerHTML = '<tr><td colspan="5" class="empty">Нет бустеров</td></tr>';
@@ -441,7 +531,10 @@
         <td class="actions">${drawActionButtons(d)}</td>
       </tr>`;
         const odds = oddsOpen
-          ? `<tr class="odds-row"><td colspan="7">${weightsReadonlyHtml(d.rarity_weights || {})}</td></tr>`
+          ? `<tr class="odds-row"><td colspan="7">${weightsReadonlyHtml(
+              d.rarity_weights || {},
+              rarityCountsForBooster(d.booster_id)
+            )}</td></tr>`
           : "";
         return main + odds;
       })
@@ -528,6 +621,25 @@
     document.getElementById("drawId").focus();
     setStatus("Форма заполнена из тиража - поправьте id/шансы и создайте", "ok");
   }
+
+  drawBooster.addEventListener("change", () => {
+    const counts = rarityCountsForBooster(drawBooster.value);
+    const merged = {};
+    RARITIES.forEach((k) => {
+      if ((counts[k] || 0) <= 0) {
+        merged[k] = 0;
+        return;
+      }
+      const el = drawWeightsEditor.querySelector(`.weight-input[data-rarity="${k}"]`);
+      if (el && el.disabled) {
+        merged[k] = DEFAULT_WEIGHTS[k] ?? 0;
+        return;
+      }
+      const raw = el ? parseFloat(el.value) : NaN;
+      merged[k] = Number.isNaN(raw) || raw < 0 ? 0 : raw;
+    });
+    renderWeightsEditor(merged);
+  });
 
   async function loadAll() {
     setStatus("Загрузка…");
@@ -697,7 +809,13 @@
     const cards_per_open = parseInt(document.getElementById("drawCards").value, 10);
     const daily_limit = parseInt(document.getElementById("drawDailyLimit").value, 10);
     const activate = document.getElementById("drawActivate").checked;
+    const counts = rarityCountsForBooster(booster_id);
     const rarity_weights = readWeightsFromEditor();
+    const bad = RARITIES.filter((k) => (rarity_weights[k] || 0) > 0 && (counts[k] || 0) <= 0);
+    if (bad.length) {
+      setStatus(`Вес > 0 нельзя для редкости без карт в бустере: ${bad.join(", ")}`, "err");
+      return;
+    }
     try {
       await api("POST", "/api/cards/draws", {
         id,

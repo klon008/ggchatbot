@@ -499,27 +499,40 @@
     }
     .promo-cell .promo-link:hover { text-decoration: underline; }
     .weights-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 8px;
       margin-top: 8px;
+      overflow-x: auto;
     }
-    .weights-grid label {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
+    .weights-table {
+      width: 100%;
+      max-width: 640px;
+      border-collapse: collapse;
       font-size: 12px;
-      color: #b8b8d0;
     }
-    .weights-grid .pct {
+    .weights-table th,
+    .weights-table td {
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid #2a2a40;
+    }
+    .weights-table th {
+      color: #9ecbff;
+      font-weight: 600;
+    }
+    .weights-table .weight-input {
+      width: 88px;
+      padding: 4px 6px;
+    }
+    .weights-table .pct {
       color: #8888a0;
       font-size: 11px;
+    }
+    .weights-table tr.rarity-empty td {
+      color: #666680;
     }
     .weights-readonly {
       margin-top: 8px;
       font-size: 12px;
     }
-    .weights-readonly table { max-width: 420px; }
     .tab-help {
       margin: 0 0 14px;
       padding: 10px 12px;
@@ -788,7 +801,9 @@
           <button type="submit" class="primary">Создать тираж</button>
         </form>
         <p class="hint">
-          Шансы редкости: относительные веса (сумма не обязана быть 100). Проценты - для наглядности.
+          Шансы редкости: относительные веса (сумма не обязана быть 100).
+          «Шанс» — вероятность тира редкости; «на 1 карту» = шанс тира / число карт этой редкости в бустере.
+          Вес &gt; 0 нельзя задать, если в бустере 0 карт этой редкости (поле блокируется).
         </p>
         <div id="drawWeightsEditor" class="weights-grid"></div>
       </div>
