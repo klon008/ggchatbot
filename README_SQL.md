@@ -156,9 +156,10 @@ CREATE TABLE steal_stats (
     attempts INTEGER NOT NULL DEFAULT 0,
     success INTEGER NOT NULL DEFAULT 0,
     stolen_total INTEGER NOT NULL DEFAULT 0,
-    chance INTEGER NOT NULL DEFAULT 3,
+    chance INTEGER NOT NULL DEFAULT 5,
     last_time REAL NOT NULL DEFAULT 0,
-    times_in_jail INTEGER NOT NULL DEFAULT 0
+    times_in_jail INTEGER NOT NULL DEFAULT 0,
+    last_steal_day_key TEXT NOT NULL DEFAULT ''
 );
 
 -- Текущий месяц для !дейлик

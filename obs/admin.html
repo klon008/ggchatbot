@@ -595,6 +595,53 @@
           <button type="button" id="stealRefresh">Обновить</button>
         </div>
       </div>
+
+      <div class="card" style="margin-top: 16px">
+        <h3>Тиры добычи</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          Веса после успешного взлома. % считается от суммы весов. Сумма весов должна быть &gt; 0.
+        </p>
+        <p id="stealLootMeta" style="margin: 0 0 10px; color: #8888a0; font-size: 13px">—</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Тир</th>
+              <th>Вес</th>
+              <th>%</th>
+              <th>Мин</th>
+              <th>Макс</th>
+            </tr>
+          </thead>
+          <tbody id="stealLootBody">
+            <tr><td colspan="5" class="empty">—</td></tr>
+          </tbody>
+        </table>
+        <div class="toolbar" style="margin-top: 10px">
+          <button type="button" id="stealLootSave" class="primary">Сохранить</button>
+          <button type="button" id="stealLootReset">Сбросить к дефолту</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 16px">
+        <h3>Статистика игроков (steal_stats)</h3>
+        <p id="stealStatsMeta" style="margin: 0 0 10px; color: #8888a0; font-size: 13px">—</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Ник</th>
+              <th>Попытки</th>
+              <th>Успехи</th>
+              <th>Унесено</th>
+              <th>Шанс %</th>
+              <th>Отсидки</th>
+              <th>Последний день</th>
+            </tr>
+          </thead>
+          <tbody id="stealStatsBody">
+            <tr><td colspan="7" class="empty">—</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
   </div>

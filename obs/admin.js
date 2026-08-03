@@ -1327,6 +1327,18 @@
   const stealClose = document.getElementById("stealClose");
   const stealOpenTimed = document.getElementById("stealOpenTimed");
   const stealHours = document.getElementById("stealHours");
+  const stealLootBody = document.getElementById("stealLootBody");
+  const stealLootMeta = document.getElementById("stealLootMeta");
+  const stealStatsBody = document.getElementById("stealStatsBody");
+  const stealStatsMeta = document.getElementById("stealStatsMeta");
+
+  const STEAL_LOOT_LABELS = {
+    meloch: "Мелочь",
+    normal: "Норма",
+    zhir: "Жир",
+    kush: "Куш",
+  };
+  const STEAL_LOOT_KEYS = ["meloch", "normal", "zhir", "kush"];
 
   function formatStealRemaining(untilTs) {
     const sec = Math.max(0, Math.floor(untilTs - Date.now() / 1000));
@@ -1367,11 +1379,99 @@
     stealClose.disabled = !enabled && !timed;
   }
 
+  function refreshLootPercents() {
+    let total = 0;
+    STEAL_LOOT_KEYS.forEach((key) => {
+      const input = document.getElementById(`stealLootW_${key}`);
+      total += Math.max(0, Number(input && input.value) || 0);
+    });
+    STEAL_LOOT_KEYS.forEach((key) => {
+      const pctEl = document.getElementById(`stealLootPct_${key}`);
+      const input = document.getElementById(`stealLootW_${key}`);
+      if (!pctEl || !input) return;
+      const w = Math.max(0, Number(input.value) || 0);
+      pctEl.textContent = total > 0 ? ((100 * w) / total).toFixed(1) + "%" : "—";
+    });
+  }
+
+  function renderStealLoot(data) {
+    const tiers = (data && data.tiers) || {};
+    stealLootMeta.textContent = data && data.is_default
+      ? "Источник: дефолты settings"
+      : "Источник: override из БД";
+    stealLootBody.innerHTML = "";
+    STEAL_LOOT_KEYS.forEach((key) => {
+      const t = tiers[key] || { weight: 0, min: 0, max: 0, pct: 0 };
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        `<td>${STEAL_LOOT_LABELS[key] || key}</td>` +
+        `<td><input type="number" id="stealLootW_${key}" min="0" step="1" value="${Number(t.weight) || 0}" style="width:80px" /></td>` +
+        `<td id="stealLootPct_${key}">${t.pct != null ? Number(t.pct).toFixed(1) + "%" : "—"}</td>` +
+        `<td><input type="number" id="stealLootMin_${key}" step="1" value="${Number(t.min) || 0}" style="width:80px" /></td>` +
+        `<td><input type="number" id="stealLootMax_${key}" step="1" value="${Number(t.max) || 0}" style="width:80px" /></td>`;
+      stealLootBody.appendChild(tr);
+      const wInput = document.getElementById(`stealLootW_${key}`);
+      if (wInput) wInput.addEventListener("input", refreshLootPercents);
+    });
+    refreshLootPercents();
+  }
+
+  function readStealLootFromForm() {
+    const tiers = {};
+    STEAL_LOOT_KEYS.forEach((key) => {
+      tiers[key] = {
+        weight: Number(document.getElementById(`stealLootW_${key}`).value),
+        min: Number(document.getElementById(`stealLootMin_${key}`).value),
+        max: Number(document.getElementById(`stealLootMax_${key}`).value),
+      };
+    });
+    return tiers;
+  }
+
+  function renderStealStats(data) {
+    const players = (data && data.players) || [];
+    stealStatsMeta.textContent = `Игроков: ${players.length}`;
+    if (!players.length) {
+      stealStatsBody.innerHTML = `<tr><td colspan="7" class="empty">Пока пусто (после вайпа или никто не крал)</td></tr>`;
+      return;
+    }
+    stealStatsBody.innerHTML = players
+      .map((p) => {
+        const name = p.user_name || p.user_id || "—";
+        return (
+          `<tr>` +
+          `<td>${escapeHtml(name)}</td>` +
+          `<td class="mono">${p.attempts}</td>` +
+          `<td class="mono">${p.success}</td>` +
+          `<td class="mono">${p.stolen_total}</td>` +
+          `<td class="mono">${p.chance}%</td>` +
+          `<td class="mono">${p.times_in_jail}</td>` +
+          `<td class="mono">${p.last_steal_day_key || "—"}</td>` +
+          `</tr>`
+        );
+      })
+      .join("");
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   async function loadSteal(silent) {
     if (!silent) setStatus("Загрузка кражи…");
     try {
-      const data = await api("GET", "/api/steal");
-      renderSteal(data);
+      const [status, loot, stats] = await Promise.all([
+        api("GET", "/api/steal"),
+        api("GET", "/api/steal/loot-tiers"),
+        api("GET", "/api/steal/stats"),
+      ]);
+      renderSteal(status);
+      renderStealLoot(loot);
+      renderStealStats(stats);
       if (!silent) setStatus("Кража обновлена", "ok");
     } catch (e) {
       if (!silent) setStatus(e.message, "err");
@@ -1379,6 +1479,35 @@
   }
 
   document.getElementById("stealRefresh").addEventListener("click", () => loadSteal(false));
+
+  document.getElementById("stealLootSave").addEventListener("click", async () => {
+    const tiers = readStealLootFromForm();
+    const sum = STEAL_LOOT_KEYS.reduce((acc, k) => acc + Math.max(0, Number(tiers[k].weight) || 0), 0);
+    if (sum <= 0) {
+      setStatus("Сумма весов должна быть > 0", "err");
+      return;
+    }
+    setStatus("Сохранение тиров…");
+    try {
+      const data = await api("PUT", "/api/steal/loot-tiers", { tiers });
+      renderStealLoot(data);
+      setStatus("Тиры сохранены", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  document.getElementById("stealLootReset").addEventListener("click", async () => {
+    if (!confirm("Сбросить тиры к дефолтам settings?")) return;
+    setStatus("Сброс тиров…");
+    try {
+      const data = await api("POST", "/api/steal/loot-tiers/reset");
+      renderStealLoot(data);
+      setStatus("Тиры сброшены", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
 
   stealOpen.addEventListener("click", async () => {
     setStatus("Открытие кражи…");

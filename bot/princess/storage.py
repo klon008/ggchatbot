@@ -13,8 +13,15 @@ from bot.db import steal as steal_db
 from bot.db import steal_meta as steal_meta_db
 from bot.economy.points import PointsStore
 
-from .economy import is_steal_schedule_day, now_msk
-from .settings import STEAL_ALLOWED_WEEKDAYS
+from .economy import (
+    default_loot_tiers_dict,
+    effective_loot_tiers,
+    loot_tiers_from_dict,
+    loot_tiers_to_dict,
+    is_steal_schedule_day,
+    now_msk,
+)
+from .settings import STEAL_ALLOWED_WEEKDAYS, STEAL_LOOT_TIER_KEYS
 
 _DATE_KEY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -67,6 +74,18 @@ class StealStore:
         await points.flush_pending()
         await steal_db.record_steal_success(self._db, thief_id, amount)
 
+    async def revert_steal(
+        self,
+        points: PointsStore,
+        thief_id: str,
+        victim_id: str,
+        amount: int,
+    ) -> None:
+        """Return stolen points to victim after prison catch."""
+        points.transfer(thief_id, victim_id, amount)
+        await points.flush_pending()
+        await steal_db.record_steal_reverted(self._db, thief_id, amount)
+
     async def execute_bank_steal(
         self,
         points: PointsStore,
@@ -89,8 +108,69 @@ class StealStore:
         await steal_db.record_steal_success(self._db, thief_id, take)
         return take
 
+    async def revert_bank_steal(
+        self,
+        points: PointsStore,
+        thief_id: str,
+        amount: int,
+    ) -> None:
+        """Return jackpot to bank after prison catch."""
+        await points.add(thief_id, -amount)
+        await points.flush_pending()
+        await minigames_bank.add_bank(self._db, amount)
+        await steal_db.record_steal_reverted(self._db, thief_id, amount)
+
     async def increment_jail_count(self, user_id: str) -> None:
         await steal_db.increment_jail_count(self._db, user_id)
+
+    async def get_loot_tiers(self) -> list[tuple[int, int, int]]:
+        meta = await self.get_meta()
+        return effective_loot_tiers(meta.get("loot_tiers"))
+
+    async def get_loot_tiers_status(self) -> dict[str, Any]:
+        meta = await self.get_meta()
+        override = meta.get("loot_tiers")
+        is_default = override is None or loot_tiers_from_dict(override) is None
+        tiers = effective_loot_tiers(override)
+        named = loot_tiers_to_dict(tiers)
+        total_w = sum(t["weight"] for t in named.values()) or 1
+        for key in STEAL_LOOT_TIER_KEYS:
+            named[key]["pct"] = round(100.0 * named[key]["weight"] / total_w, 1)
+        return {
+            "is_default": is_default,
+            "tiers": named,
+            "defaults": default_loot_tiers_dict(),
+        }
+
+    async def set_loot_tiers(self, tiers_dict: dict[str, Any]) -> dict[str, Any]:
+        parsed = loot_tiers_from_dict(tiers_dict)
+        if parsed is None:
+            raise ValueError(
+                "Некорректные тиры: нужны ключи meloch/normal/zhir/kush, "
+                "weight ≥ 0, sum(weights) > 0, min ≤ max"
+            )
+        await steal_meta_db.set_meta(
+            self._db, loot_tiers=loot_tiers_to_dict(parsed)
+        )
+        return await self.get_loot_tiers_status()
+
+    async def reset_loot_tiers(self) -> dict[str, Any]:
+        await steal_meta_db.set_meta(self._db, loot_tiers=None)
+        return await self.get_loot_tiers_status()
+
+    async def list_stats(self) -> list[dict[str, Any]]:
+        return await steal_db.list_all_stats(self._db)
+
+    async def apply_missed_day_decay_for(self, day_key: str) -> int:
+        """Apply missed-day decay for a past steal day. Returns users changed."""
+        from .economy import apply_missed_day_decay
+
+        changed = 0
+        for uid, info in await steal_db.list_all_infos_for_decay(self._db):
+            if apply_missed_day_decay(info, day_key):
+                await steal_db.save_info(self._db, uid, info)
+                changed += 1
+        return changed
 
     async def get_meta(self) -> dict[str, Any]:
         return await steal_meta_db.get_meta(self._db)

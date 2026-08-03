@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import random
 from datetime import datetime
+from typing import Any, Optional, Sequence
 
 from .settings import (
     DAILY_BONUS_DEFAULT,
@@ -10,49 +11,120 @@ from .settings import (
     MSK,
     PRISON_CHANCE_TIERS,
     STEAL_ALLOWED_WEEKDAYS,
-    STEAL_CHANCE_ABSOLUTE_MAX,
-    STEAL_CHANCE_BASE,
-    STEAL_CHANCE_BEGINNER,
-    STEAL_CHANCE_BEGINNER_ATTEMPTS,
-    STEAL_CHANCE_INTERMEDIATE,
-    STEAL_CHANCE_INTERMEDIATE_ATTEMPTS,
-    STEAL_CHANCE_LINEAR_MAX,
-    STEAL_CHANCE_MIN_ATTEMPTS_FOR_BONUS,
-    STEAL_CHANCE_SUCCESS_LINEAR_CAP,
+    STEAL_CHANCE_ATTEMPTS_DIV,
+    STEAL_CHANCE_CAP,
+    STEAL_CHANCE_FLOOR,
+    STEAL_DECAY_MISSED_DAY_PCT,
+    STEAL_LOOT_TIER_KEYS,
     STEAL_LOOT_TIERS,
 )
+
+LootTier = tuple[int, int, int]  # weight, min, max
 
 
 def now_msk() -> datetime:
     return datetime.now(MSK)
 
 
-def update_chance(info: dict) -> None:
-    attempts = info["attempts"]
-    success = info["success"]
-    if attempts <= STEAL_CHANCE_BEGINNER_ATTEMPTS:
-        info["chance"] = STEAL_CHANCE_BEGINNER
-    elif attempts <= STEAL_CHANCE_INTERMEDIATE_ATTEMPTS:
-        info["chance"] = STEAL_CHANCE_INTERMEDIATE
-    elif attempts >= STEAL_CHANCE_MIN_ATTEMPTS_FOR_BONUS:
-        success_count = success
-        if success_count <= STEAL_CHANCE_SUCCESS_LINEAR_CAP:
-            chance = STEAL_CHANCE_BASE + success_count
-            info["chance"] = min(chance, STEAL_CHANCE_LINEAR_MAX)
-        else:
-            bonus = 0
-            bonus += (success_count - STEAL_CHANCE_SUCCESS_LINEAR_CAP) // 2
-            bonus += (success_count - STEAL_CHANCE_SUCCESS_LINEAR_CAP) // 4
-            bonus += (success_count - STEAL_CHANCE_SUCCESS_LINEAR_CAP) // 10
-            info["chance"] = min(STEAL_CHANCE_LINEAR_MAX + bonus, STEAL_CHANCE_ABSOLUTE_MAX)
+def apply_attempt_growth(info: dict) -> None:
+    """Вызывать после info['attempts'] += 1. +1% каждые N попыток, не выше капа."""
+    attempts = int(info["attempts"])
+    if attempts <= 0 or attempts % STEAL_CHANCE_ATTEMPTS_DIV != 0:
+        return
+    info["chance"] = min(
+        STEAL_CHANCE_CAP,
+        int(info.get("chance") or STEAL_CHANCE_FLOOR) + 1,
+    )
 
 
-def calculate_princess_amount(chance: int) -> int:
-    for max_chance, min_loot, max_loot in STEAL_LOOT_TIERS:
-        if chance <= max_chance:
-            return random.randint(min_loot, max_loot)
-    _, min_loot, max_loot = STEAL_LOOT_TIERS[-1]
-    return random.randint(min_loot, max_loot)
+def chance_ceiling_from_attempts(attempts: int) -> int:
+    """Потолок шанса от attempts (без учёта missed decay). Для тестов/отображения."""
+    return min(
+        STEAL_CHANCE_CAP,
+        STEAL_CHANCE_FLOOR + max(0, attempts) // STEAL_CHANCE_ATTEMPTS_DIV,
+    )
+
+
+def apply_missed_day_decay(info: dict, day_key: str) -> bool:
+    """
+    day_key — прошедший день кражи (ср/пт).
+    Если last_steal_day_key != day_key → −STEAL_DECAY_MISSED_DAY_PCT%, пол FLOOR.
+    """
+    if info.get("last_steal_day_key") == day_key:
+        return False
+    cur = int(info.get("chance") or STEAL_CHANCE_FLOOR)
+    if cur <= STEAL_CHANCE_FLOOR:
+        return False
+    info["chance"] = max(STEAL_CHANCE_FLOOR, cur - STEAL_DECAY_MISSED_DAY_PCT)
+    return True
+
+
+def default_loot_tiers() -> list[LootTier]:
+    return [(int(w), int(lo), int(hi)) for w, lo, hi in STEAL_LOOT_TIERS]
+
+
+def default_loot_tiers_dict() -> dict[str, dict[str, int]]:
+    out: dict[str, dict[str, int]] = {}
+    for key, (weight, lo, hi) in zip(STEAL_LOOT_TIER_KEYS, STEAL_LOOT_TIERS):
+        out[key] = {"weight": int(weight), "min": int(lo), "max": int(hi)}
+    return out
+
+
+def loot_tiers_from_dict(data: dict[str, Any]) -> Optional[list[LootTier]]:
+    """Parse named tiers dict → list of (weight, min, max). None if invalid."""
+    if not isinstance(data, dict):
+        return None
+    tiers: list[LootTier] = []
+    total_w = 0
+    for key in STEAL_LOOT_TIER_KEYS:
+        item = data.get(key)
+        if not isinstance(item, dict):
+            return None
+        try:
+            weight = int(item.get("weight", 0))
+            lo = int(item.get("min", 0))
+            hi = int(item.get("max", 0))
+        except (TypeError, ValueError):
+            return None
+        if weight < 0 or lo > hi:
+            return None
+        tiers.append((weight, lo, hi))
+        total_w += weight
+    if total_w <= 0:
+        return None
+    return tiers
+
+
+def loot_tiers_to_dict(tiers: Sequence[LootTier]) -> dict[str, dict[str, int]]:
+    out: dict[str, dict[str, int]] = {}
+    for key, (weight, lo, hi) in zip(STEAL_LOOT_TIER_KEYS, tiers):
+        out[key] = {"weight": int(weight), "min": int(lo), "max": int(hi)}
+    return out
+
+
+def effective_loot_tiers(override: Optional[dict[str, Any]]) -> list[LootTier]:
+    """Override из БД или дефолты settings."""
+    if override:
+        parsed = loot_tiers_from_dict(override)
+        if parsed is not None:
+            return parsed
+    return default_loot_tiers()
+
+
+def roll_steal_amount(tiers: Sequence[LootTier] | None = None) -> int:
+    pool = list(tiers) if tiers else default_loot_tiers()
+    total_w = sum(t[0] for t in pool)
+    if total_w <= 0:
+        pool = default_loot_tiers()
+        total_w = sum(t[0] for t in pool)
+    r = random.uniform(0, total_w)
+    acc = 0.0
+    for weight, lo, hi in pool:
+        acc += weight
+        if r <= acc:
+            return random.randint(lo, hi)
+    _, lo, hi = pool[-1]
+    return random.randint(lo, hi)
 
 
 def get_daily_bonus(day_number: int) -> int:

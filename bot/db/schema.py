@@ -32,16 +32,19 @@ CREATE TABLE IF NOT EXISTS steal_stats (
     attempts INTEGER NOT NULL DEFAULT 0,
     success INTEGER NOT NULL DEFAULT 0,
     stolen_total INTEGER NOT NULL DEFAULT 0,
-    chance INTEGER NOT NULL DEFAULT 3,
+    chance INTEGER NOT NULL DEFAULT 5,
     last_time REAL NOT NULL DEFAULT 0,
-    times_in_jail INTEGER NOT NULL DEFAULT 0
+    times_in_jail INTEGER NOT NULL DEFAULT 0,
+    last_steal_day_key TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS steal_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     override_enabled INTEGER NOT NULL DEFAULT 0,
     override_until REAL,
-    last_schedule_open_key TEXT NOT NULL DEFAULT ''
+    last_schedule_open_key TEXT NOT NULL DEFAULT '',
+    last_miss_decay_day_key TEXT NOT NULL DEFAULT '',
+    loot_tiers_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS daily_meta (
@@ -342,6 +345,8 @@ async def init_schema(
         (SCHEMA_VERSION,),
     )
     await conn.execute("INSERT OR IGNORE INTO daily_meta (id, current_month) VALUES (1, '')")
+    # Только старые колонки: на существующей БД CREATE IF NOT EXISTS не добавляет
+    # last_miss_decay_day_key / loot_tiers_json — их ставит m028 до первого SELECT.
     await conn.execute(
         "INSERT OR IGNORE INTO steal_meta "
         "(id, override_enabled, override_until, last_schedule_open_key) "

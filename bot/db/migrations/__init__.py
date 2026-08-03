@@ -33,6 +33,7 @@ from . import (
     m025_fishing_day_items,
     m026_fishing_steal_safe,
     m027_draw_stats,
+    m028_steal_rework,
 )
 
 
@@ -70,4 +71,5 @@ MIGRATIONS: list[Migration] = [
     m025_fishing_day_items,
     m026_fishing_steal_safe,
     m027_draw_stats,
+    m028_steal_rework,
 ]

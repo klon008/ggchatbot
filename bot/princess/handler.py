@@ -28,7 +28,12 @@ from .commands import (
 )
 from .economy import is_steal_schedule_day, now_msk
 from .prison import PrisonManager
-from .settings import MESSAGE_POINTS, PASSIVE_INCOME_INTERVAL_SEC, PASSIVE_INCOME_PER_MIN
+from .settings import (
+    MESSAGE_POINTS,
+    PASSIVE_INCOME_INTERVAL_SEC,
+    PASSIVE_INCOME_PER_MIN,
+    STEAL_ALLOWED_WEEKDAYS,
+)
 from .storage import DailyStore, DiceCooldownStore, StealStore, next_steal_weekday_label
 
 log = logging.getLogger("princess")
@@ -165,6 +170,18 @@ class PrincessHandler:
     async def get_steal_status(self) -> dict:
         return await self.steal.get_status()
 
+    async def get_steal_stats(self) -> list[dict]:
+        return await self.steal.list_stats()
+
+    async def get_steal_loot_tiers(self) -> dict:
+        return await self.steal.get_loot_tiers_status()
+
+    async def set_steal_loot_tiers(self, tiers: dict) -> dict:
+        return await self.steal.set_loot_tiers(tiers)
+
+    async def reset_steal_loot_tiers(self) -> dict:
+        return await self.steal.reset_loot_tiers()
+
     async def admin_steal_open(self, duration_hours: Optional[float] = None) -> dict:
         """Открыть кражу вручную. duration_hours=None — бессрочно до закрытия."""
         if duration_hours is not None:
@@ -240,7 +257,7 @@ class PrincessHandler:
     async def _steal_next_wake_delay(self) -> float:
         now = time.time()
         next_midnight = self._seconds_until_next_msk_midnight()
-        delays = [next_midnight]
+        delays = [next_midnight, 3600.0]  # hourly: miss-day decay check
         meta = await self.steal.get_meta()
         until = meta["override_until"]
         if until is not None and until > now:
@@ -256,6 +273,8 @@ class PrincessHandler:
         return max(1.0, (tomorrow - now).total_seconds())
 
     async def _steal_process_events(self) -> None:
+        await self._process_missed_day_decay()
+
         cleared = await self.steal.clear_expired_timer()
         if cleared:
             meta = await self.steal.get_meta()
@@ -284,6 +303,22 @@ class PrincessHandler:
             await self._announce_chat(f"День кражи закончился. Следующий — {nxt}.")
 
         self._last_schedule_was_open = schedule_open
+
+    async def _process_missed_day_decay(self) -> None:
+        """If yesterday was ср/пт and not yet processed — decay players who skipped."""
+        from bot.db import steal_meta as steal_meta_db
+
+        yesterday = now_msk().date() - timedelta(days=1)
+        if yesterday.weekday() not in STEAL_ALLOWED_WEEKDAYS:
+            return
+        day_key = yesterday.strftime("%Y-%m-%d")
+        meta = await self.steal.get_meta()
+        if meta.get("last_miss_decay_day_key") == day_key:
+            return
+        changed = await self.steal.apply_missed_day_decay_for(day_key)
+        await steal_meta_db.set_meta(self._db, last_miss_decay_day_key=day_key)
+        if changed:
+            log.info("Steal miss-day decay for %s: %d users", day_key, changed)
 
     async def _announce_chat(self, text: str) -> bool:
         if self._announce is None:

@@ -129,6 +129,10 @@ class AdminRoutes:
                 web.post("/api/fishing/pay-rewards", self._api_fishing_pay_rewards),
                 web.get("/api/steal", self._api_steal_get),
                 web.put("/api/steal", self._api_steal_put),
+                web.get("/api/steal/stats", self._api_steal_stats),
+                web.get("/api/steal/loot-tiers", self._api_steal_loot_tiers_get),
+                web.put("/api/steal/loot-tiers", self._api_steal_loot_tiers_put),
+                web.post("/api/steal/loot-tiers/reset", self._api_steal_loot_tiers_reset),
                 web.get("/card-templates/{path:.*}", self._handle_card_templates),
                 web.get("/test/{path:.*}", self._handle_test),
                 web.get("/assets/{path:.*}", self._handle_assets),
@@ -649,3 +653,27 @@ class AdminRoutes:
             "Укажите override_enabled или duration_hours",
             status=400,
         )
+
+    async def _api_steal_stats(self, request: web.Request) -> web.Response:
+        rows = await self._princess.get_steal_stats()
+        return json_response({"players": rows, "count": len(rows)})
+
+    async def _api_steal_loot_tiers_get(self, request: web.Request) -> web.Response:
+        return json_response(await self._princess.get_steal_loot_tiers())
+
+    async def _api_steal_loot_tiers_put(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None or not isinstance(data, dict):
+            return error_response("Некорректный JSON")
+        tiers = data.get("tiers", data)
+        if not isinstance(tiers, dict):
+            return error_response("Ожидается объект tiers")
+        try:
+            status = await self._princess.set_steal_loot_tiers(tiers)
+        except ValueError as exc:
+            return error_response(str(exc), status=400)
+        return json_response(status)
+
+    async def _api_steal_loot_tiers_reset(self, request: web.Request) -> web.Response:
+        return json_response(await self._princess.reset_steal_loot_tiers())
+
