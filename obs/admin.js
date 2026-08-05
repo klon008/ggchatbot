@@ -2033,6 +2033,29 @@
     setStatus(`Выбрано: ${eventsSelected.size}`, "ok");
   });
 
+  document.getElementById("eventsSelectOnline").addEventListener("click", async () => {
+    setStatus("Запрос онлайн-зрителей…");
+    try {
+      const data = await api("GET", "/api/events/online");
+      const online = new Set((data.user_ids || []).map(String));
+      let matched = 0;
+      for (const p of eventsUsers) {
+        const id = String(p.user_id);
+        if (online.has(id)) {
+          eventsSelected.add(id);
+          matched += 1;
+        }
+      }
+      renderEventsUsers();
+      setStatus(
+        `Онлайн: ${data.total ?? online.size}, в списке: ${matched}, выбрано: ${eventsSelected.size}`,
+        "ok"
+      );
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
   document.getElementById("eventsClearSelection").addEventListener("click", () => {
     eventsSelected.clear();
     document.getElementById("eventsSelectAll").checked = false;

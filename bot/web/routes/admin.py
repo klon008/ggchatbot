@@ -133,6 +133,7 @@ class AdminRoutes:
                 web.put("/api/events/schedule", self._api_events_schedule_put),
                 web.post("/api/events/grant", self._api_events_grant),
                 web.get("/api/events/log", self._api_events_log_get),
+                web.get("/api/events/online", self._api_events_online_get),
                 web.get("/api/steal", self._api_steal_get),
                 web.put("/api/steal", self._api_steal_put),
                 web.get("/api/steal/stats", self._api_steal_stats),
@@ -674,6 +675,30 @@ class AdminRoutes:
         return json_response(
             await self._fishing.admin_grant_log(page=page, limit=limit, q=q)
         )
+
+    async def _api_events_online_get(self, request: web.Request) -> web.Response:
+        """Актуальный список user_id зрителей в чате (get_users_list2)."""
+        if self._fetch_viewers is None:
+            return error_response("Список зрителей недоступен", status=503)
+        try:
+            users = await self._fetch_viewers()
+        except ConnectionError:
+            return error_response("Бот не подключён к чату GoodGame", status=503)
+        except RuntimeError as exc:
+            return error_response(str(exc), status=409)
+        except asyncio.TimeoutError:
+            return error_response("Таймаут запроса списка зрителей", status=504)
+
+        bot_uid = str(getattr(self._princess, "_bot_user_id", "") or "")
+        user_ids: list[str] = []
+        for user in users:
+            uid = str(user.get("id", ""))
+            if not uid or uid == "0":
+                continue
+            if bot_uid and uid == bot_uid:
+                continue
+            user_ids.append(uid)
+        return json_response({"user_ids": user_ids, "total": len(user_ids)})
 
     async def _api_events_schedule_put(self, request: web.Request) -> web.Response:
         data = await read_json(request)
