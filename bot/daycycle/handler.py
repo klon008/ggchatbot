@@ -121,18 +121,18 @@ class DaycycleHandler:
                 return
 
         await daycycle_db.set_announced_day_key(self._db, today)
+        for hook in self._hooks:
+            on_announced = getattr(hook, "on_day_announced", None)
+            if on_announced is None:
+                continue
+            try:
+                await on_announced(ctx)
+            except Exception:  # noqa: BLE001
+                log.exception(
+                    "Daycycle: on_day_announced failed for %s",
+                    type(hook).__name__,
+                )
         if message:
-            for hook in self._hooks:
-                on_announced = getattr(hook, "on_day_announced", None)
-                if on_announced is None:
-                    continue
-                try:
-                    await on_announced(ctx)
-                except Exception:  # noqa: BLE001
-                    log.exception(
-                        "Daycycle: on_day_announced failed for %s",
-                        type(hook).__name__,
-                    )
             log.info("Daycycle: анонс суток %s → %s", previous, today)
         else:
             log.info("Daycycle: смена суток %s → %s (пустой анонс)", previous, today)
