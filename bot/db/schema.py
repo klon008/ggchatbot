@@ -329,6 +329,14 @@ CREATE TABLE IF NOT EXISTS fishing_week_weights (
     PRIMARY KEY (week_id, user_id, species)
 );
 
+CREATE TABLE IF NOT EXISTS fishing_trophies (
+    species TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    weight REAL NOT NULL,
+    achieved_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS fishing_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     day_key TEXT NOT NULL DEFAULT '',

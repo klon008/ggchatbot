@@ -40,6 +40,7 @@ from . import (
     m032_fishing_events,
     m033_fishing_grant_log,
     m034_daycycle_meta,
+    m035_fishing_trophies,
 )
 
 
@@ -84,4 +85,5 @@ MIGRATIONS: list[Migration] = [
     m032_fishing_events,
     m033_fishing_grant_log,
     m034_daycycle_meta,
+    m035_fishing_trophies,
 ]

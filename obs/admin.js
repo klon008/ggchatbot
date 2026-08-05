@@ -1125,6 +1125,8 @@
   const fishingPendingLine = document.getElementById("fishingPendingLine");
   const fishingLeadersBody = document.getElementById("fishingLeadersBody");
   const fishingFowLine = document.getElementById("fishingFowLine");
+  const fishingTrophiesBody = document.getElementById("fishingTrophiesBody");
+  const fishingResetTrophies = document.getElementById("fishingResetTrophies");
   const fishingRestoreEnergy = document.getElementById("fishingRestoreEnergy");
   const fishingPayRewards = document.getElementById("fishingPayRewards");
   const fishingRewardsFields = document.getElementById("fishingRewardsFields");
@@ -1357,6 +1359,22 @@
     fishingFowLine.textContent = fow
       ? `Рыба недели: ${fow.user_name || fow.user_id} — ${fow.species} (${Number(fow.weight).toFixed(2)} кг), бонус +${cfg.fish_of_week_bonus}`
       : "Рыба недели: —";
+    const trophies = data.trophies || [];
+    if (fishingTrophiesBody) {
+      if (!trophies.length) {
+        fishingTrophiesBody.innerHTML =
+          '<tr><td colspan="3" class="empty">Пока пусто</td></tr>';
+      } else {
+        fishingTrophiesBody.innerHTML = trophies
+          .map(
+            (r) =>
+              `<tr><td>${escapeHtml(r.species || "")}</td>` +
+              `<td>${escapeHtml(r.user_name || r.user_id || "")}</td>` +
+              `<td>${Number(r.weight).toFixed(2)}</td></tr>`
+          )
+          .join("");
+      }
+    }
     fishingUpdatePreview(data);
   }
 
@@ -1385,6 +1403,29 @@
       setStatus(e.message, "err");
     }
   });
+
+  if (fishingResetTrophies) {
+    fishingResetTrophies.addEventListener("click", async () => {
+      if (
+        !confirm(
+          "Сбросить все трофеи канала (зал славы)? Это нельзя отменить."
+        )
+      ) {
+        return;
+      }
+      setStatus("Сброс трофеев…");
+      try {
+        const data = await api("POST", "/api/fishing/trophies/reset");
+        renderFishing(data);
+        setStatus(
+          `Трофеи сброшены (${data.cleared_trophies ?? 0})`,
+          "ok"
+        );
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    });
+  }
 
   if (fishingSaveSettings) {
     fishingSaveSettings.addEventListener("click", async () => {

@@ -4,10 +4,11 @@
  * URL: http://127.0.0.1:PORT/fishing-record.html
  * Рекомендуемый размер: 1200×450 (прозрачный фон).
  * Debug: ?debug=1
- * Превью: ?preview=1  (или ?preview=shuka / ?preview=rusalka / ?preview=mermaid_blocked)
+ * Превью: ?preview=1  (или ?preview=shuka / ?preview=rusalka / ?preview=trophy)
  *
  * Python -> overlay:
  *   {action:"fishing_record", kind:"record", userName, species, weight, imageUrl}
+ *   {action:"fishing_record", kind:"trophy", userName, species, weight, imageUrl}
  *   {action:"fishing_record", kind:"mermaid", userName, loss, imageUrl}
  *   {action:"fishing_record", kind:"mermaid_blocked", userName, loss:0, imageUrl}
  * overlay -> Python: {status:"ready", overlay:"fishing_record"}
@@ -157,6 +158,24 @@
       '<div class="cap-record">Новый недельный рекорд</div>';
   }
 
+  function setTrophyCaption(userName, weight, species) {
+    var fish = speciesAccusative(species);
+    caption.innerHTML =
+      '<div class="cap-nick">' +
+      escapeHtml(userName) +
+      "</div>" +
+      '<div class="cap-verb-row"><span class="cap-verb">Выловил</span></div>' +
+      '<div class="cap-catch">' +
+      '<span class="cap-weight">' +
+      escapeHtml(formatWeight(weight)) +
+      '</span><span class="cap-unit"> кг</span>' +
+      '<span class="cap-fish">' +
+      escapeHtml(fish) +
+      "!</span>" +
+      "</div>" +
+      '<div class="cap-record is-trophy">Трофей</div>';
+  }
+
   function setMermaidCaption(userName, loss) {
     caption.innerHTML =
       '<div class="cap-nick">' +
@@ -229,18 +248,33 @@
     } else {
       var species = data.species || "";
       var weight = data.weight;
+      var kind = String(data.kind || "").toLowerCase();
       stage.classList.remove("is-mermaid", "is-mermaid-blocked");
-      setRecordCaption(userName, weight, species);
-      log(
-        "show " +
-          userName +
-          " / " +
-          species +
-          " / " +
-          formatWeight(weight) +
-          " → " +
-          imageUrl
-      );
+      if (kind === "trophy") {
+        setTrophyCaption(userName, weight, species);
+        log(
+          "show trophy " +
+            userName +
+            " / " +
+            species +
+            " / " +
+            formatWeight(weight) +
+            " → " +
+            imageUrl
+        );
+      } else {
+        setRecordCaption(userName, weight, species);
+        log(
+          "show " +
+            userName +
+            " / " +
+            species +
+            " / " +
+            formatWeight(weight) +
+            " → " +
+            imageUrl
+        );
+      }
     }
 
     var ok = await waitImage(imageUrl);
@@ -337,6 +371,14 @@
         userName: "RiverDragon",
         loss: 0,
         imageUrl: "/assets/fishing/rusalka.png",
+      });
+    } else if (previewSlug === "trophy") {
+      enqueue({
+        kind: "trophy",
+        userName: "RiverDragon",
+        species: "Щука",
+        weight: 5.12,
+        imageUrl: "/assets/fishing/shuka.png",
       });
     } else {
       enqueue({

@@ -130,6 +130,26 @@ class FishingHandler:
             }
         )
 
+    async def _push_trophy_overlay(
+        self, *, user_name: str, species: str, weight: float
+    ) -> None:
+        if self._player is None:
+            return
+        slug = FISH_RECORD_ASSETS.get(species)
+        if not slug:
+            log.warning("Нет ассета плашки для вида %r", species)
+            return
+        await self._player.broadcast_fishing_record(
+            {
+                "action": "fishing_record",
+                "kind": "trophy",
+                "userName": user_name,
+                "species": species,
+                "weight": round(float(weight), 2),
+                "imageUrl": f"/assets/fishing/{slug}.png",
+            }
+        )
+
     async def _push_mermaid_overlay(
         self, *, user_name: str, loss: int, kind: str = "mermaid"
     ) -> None:
@@ -156,6 +176,7 @@ class FishingHandler:
             pending_leaders = await self.store.week_leaders(pending)
             pending_fow = await self.store.week_fish_of_week(pending)
         rewards = await self.get_reward_config()
+        trophies = await self.store.list_trophies()
         return {
             "day_key": meta["day_key"],
             "current_week_id": meta["current_week_id"],
@@ -167,6 +188,7 @@ class FishingHandler:
             "fish_of_week": fow,
             "pending_week_leaders": pending_leaders,
             "pending_fish_of_week": pending_fow,
+            "trophies": trophies,
             "week_rewards": rewards["species"],
             "fish_of_week_bonus": rewards["fish_of_week_bonus"],
             "species_enabled": rewards["enabled"],
@@ -408,6 +430,13 @@ class FishingHandler:
         status["restored"] = n
         return status
 
+    async def admin_clear_trophies(self) -> dict:
+        n = await self.store.clear_trophies()
+        log.info("Fishing: cleared %s all-time trophies", n)
+        status = await self.get_status()
+        status["cleared_trophies"] = n
+        return status
+
     async def admin_pay_week_rewards(
         self,
         *,
@@ -537,6 +566,9 @@ class FishingHandler:
         if sub == "топрыба":
             await self._cmd_top(msg)
             return True
+        if sub == "трофеи":
+            await self._cmd_trophies(msg)
+            return True
 
         await self._say(
             f"{msg.user_name}, неизвестная подкоманда. "
@@ -593,17 +625,35 @@ class FishingHandler:
                 weight=result.weight,
             )
             weight_s = f"{result.weight:.2f}"
+            if result.is_trophy:
+                result.message += " " + texts.pick(texts.FISH_TROPHY).format(
+                    species=result.species,
+                    species_lower=result.species.lower(),
+                    weight=weight_s,
+                )
+                await self._push_trophy_overlay(
+                    user_name=msg.user_name,
+                    species=result.species,
+                    weight=float(result.weight),
+                )
+            if flags.get("all_time_trophy"):
+                result.message += " " + texts.pick(texts.ALL_TIME_TROPHY).format(
+                    species=result.species,
+                    species_lower=result.species.lower(),
+                    weight=weight_s,
+                )
             if flags.get("week_species_record"):
                 result.message += " " + texts.pick(texts.WEEK_SPECIES_RECORD).format(
                     species=result.species,
                     species_lower=result.species.lower(),
                     weight=weight_s,
                 )
-                await self._push_week_record_overlay(
-                    user_name=msg.user_name,
-                    species=result.species,
-                    weight=float(result.weight),
-                )
+                if not result.is_trophy:
+                    await self._push_week_record_overlay(
+                        user_name=msg.user_name,
+                        species=result.species,
+                        weight=float(result.weight),
+                    )
             if flags.get("fish_of_week"):
                 result.message += " " + texts.pick(texts.WEEK_FISH_OF_WEEK).format(
                     species=result.species,
@@ -802,6 +852,24 @@ class FishingHandler:
             fow_name=fow_name,
             fow_weight=fow_weight,
         )
+        await self._say(f"{msg.user_name}, {body}")
+
+    async def _cmd_trophies(self, msg: ChatMessage) -> None:
+        trophies = await self.store.list_trophies()
+        if not trophies:
+            await self._say(
+                f"{msg.user_name}, {texts.pick(texts.TOP_TROPHIES_EMPTY)}"
+            )
+            return
+        order = {name: i for i, name in enumerate(FISH_SPECIES)}
+        trophies_sorted = sorted(
+            trophies, key=lambda r: order.get(str(r["species"]), 999)
+        )
+        leader_bits = [
+            f"{r['species']} — {r['user_name'] or r['user_id']} ({r['weight']:.2f} кг)"
+            for r in trophies_sorted
+        ]
+        body = texts.pick(texts.TOP_TROPHIES).format(leaders=", ".join(leader_bits))
         await self._say(f"{msg.user_name}, {body}")
 
     async def _say(self, text: str) -> None:

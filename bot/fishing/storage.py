@@ -159,7 +159,7 @@ class FishingStorage:
         species: str,
         weight: float,
     ) -> dict[str, bool]:
-        """Обновить личные и недельные рекорды. Возвращает флаги для чата."""
+        """Обновить личные, недельные и вечные трофеи. Возвращает флаги для чата."""
         personal_best = await fishing_db.set_record_if_better(
             self._db, user_id, species, weight
         )
@@ -169,6 +169,7 @@ class FishingStorage:
         week_species_record = prev_leader is None or float(weight) > float(
             prev_leader["weight"]
         )
+        now = time.time()
         await fishing_db.set_week_weight_if_better(
             self._db,
             week_id=week,
@@ -176,7 +177,7 @@ class FishingStorage:
             user_name=user_name,
             species=species,
             weight=weight,
-            achieved_at=time.time(),
+            achieved_at=now,
         )
         fow = await fishing_db.week_fish_of_week(self._db, week)
         fish_of_week = bool(
@@ -185,14 +186,29 @@ class FishingStorage:
             and fow["species"] == species
             and abs(float(fow["weight"]) - float(weight)) < 1e-9
         )
+        all_time_trophy = await fishing_db.set_trophy_if_better(
+            self._db,
+            species=species,
+            user_id=user_id,
+            user_name=user_name,
+            weight=weight,
+            achieved_at=now,
+        )
         return {
             "personal_best": personal_best,
             "week_species_record": week_species_record,
             "fish_of_week": fish_of_week,
+            "all_time_trophy": all_time_trophy,
         }
 
     async def list_records(self, user_id: str) -> list[tuple[str, float]]:
         return await fishing_db.list_records(self._db, user_id)
+
+    async def list_trophies(self) -> list[dict[str, Any]]:
+        return await fishing_db.list_trophies(self._db)
+
+    async def clear_trophies(self) -> int:
+        return await fishing_db.clear_trophies(self._db)
 
     async def week_top(self, week: Optional[str] = None) -> tuple[list[dict], Optional[dict]]:
         meta = await fishing_db.get_meta(self._db)

@@ -757,6 +757,29 @@
         </table>
         <p id="fishingFowLine" style="margin-top: 10px">Рыба недели: —</p>
       </div>
+
+      <div class="card">
+        <h3>Трофеи (все время)</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          Абсолютный максимум веса по виду. Не сбрасывается с неделей —
+          только кнопкой ниже.
+        </p>
+        <table class="sortable">
+          <thead>
+            <tr>
+              <th>вид</th>
+              <th>ник</th>
+              <th>вес (кг)</th>
+            </tr>
+          </thead>
+          <tbody id="fishingTrophiesBody">
+            <tr><td colspan="3" class="empty">—</td></tr>
+          </tbody>
+        </table>
+        <div class="toolbar" style="margin-top: 12px">
+          <button type="button" id="fishingResetTrophies">Сбросить трофеи</button>
+        </div>
+      </div>
     </section>
 
     <section id="panel-events" class="panel">

@@ -421,6 +421,20 @@
       content: "✦";
       opacity: 0.55;
     }
+    .cap-record.is-trophy {
+      color: #1a1004;
+      background: linear-gradient(180deg, #ffe08a 0%, #f0b020 40%, #d47808 100%);
+      box-shadow:
+        0 2px 0 #8a4a08,
+        0 4px 14px rgba(240, 160, 20, 0.55),
+        inset 0 1px 0 rgba(255, 255, 220, 0.7);
+      letter-spacing: 0.12em;
+    }
+    .cap-record.is-trophy::before,
+    .cap-record.is-trophy::after {
+      content: "◆";
+      opacity: 0.95;
+    }
 
     aside#debugPanel {
       display: none;

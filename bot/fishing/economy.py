@@ -70,6 +70,8 @@ def apply_energy_regen(
 
 
 def size_bucket(weight: float, w_min: float, w_max: float) -> tuple[str, float]:
+    if float(weight) > float(w_max):
+        return "трофейный", SIZE_LARGE_MULT
     span = w_max - w_min
     if span <= 0:
         t = 1.0

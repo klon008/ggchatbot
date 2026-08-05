@@ -330,6 +330,79 @@ async def set_record_if_better(
     return True
 
 
+async def get_trophy(db: Database, species: str) -> Optional[dict[str, Any]]:
+    row = await db.fetchone(
+        "SELECT species, user_id, user_name, weight, achieved_at "
+        "FROM fishing_trophies WHERE species = ?",
+        (species,),
+    )
+    if row is None:
+        return None
+    return {
+        "species": str(row[0]),
+        "user_id": str(row[1]),
+        "user_name": str(row[2] or ""),
+        "weight": float(row[3]),
+        "achieved_at": float(row[4]),
+    }
+
+
+async def list_trophies(db: Database) -> list[dict[str, Any]]:
+    rows = await db.fetchall(
+        "SELECT species, user_id, user_name, weight, achieved_at "
+        "FROM fishing_trophies ORDER BY species"
+    )
+    return [
+        {
+            "species": str(r[0]),
+            "user_id": str(r[1]),
+            "user_name": str(r[2] or ""),
+            "weight": float(r[3]),
+            "achieved_at": float(r[4]),
+        }
+        for r in rows
+    ]
+
+
+async def set_trophy_if_better(
+    db: Database,
+    *,
+    species: str,
+    user_id: str,
+    user_name: str,
+    weight: float,
+    achieved_at: float,
+) -> bool:
+    current = await get_trophy(db, species)
+    if current is not None and float(weight) <= float(current["weight"]):
+        return False
+    await db.execute(
+        """
+        INSERT INTO fishing_trophies
+            (species, user_id, user_name, weight, achieved_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(species) DO UPDATE SET
+            user_id = excluded.user_id,
+            user_name = excluded.user_name,
+            weight = excluded.weight,
+            achieved_at = excluded.achieved_at
+        """,
+        (
+            species,
+            str(user_id),
+            str(user_name or ""),
+            float(weight),
+            float(achieved_at),
+        ),
+    )
+    return True
+
+
+async def clear_trophies(db: Database) -> int:
+    cursor = await db.execute("DELETE FROM fishing_trophies")
+    return int(cursor.rowcount or 0)
+
+
 async def get_week_weight(
     db: Database,
     week_id: str,

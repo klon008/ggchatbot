@@ -129,6 +129,7 @@ class AdminRoutes:
                 web.post("/api/fishing/pay-rewards", self._api_fishing_pay_rewards),
                 web.put("/api/fishing/settings", self._api_fishing_settings_put),
                 web.post("/api/fishing/settings/reset", self._api_fishing_settings_reset),
+                web.post("/api/fishing/trophies/reset", self._api_fishing_trophies_reset),
                 web.get("/api/events", self._api_events_get),
                 web.put("/api/events/schedule", self._api_events_schedule_put),
                 web.post("/api/events/grant", self._api_events_grant),
@@ -658,6 +659,9 @@ class AdminRoutes:
 
     async def _api_fishing_settings_reset(self, request: web.Request) -> web.Response:
         return json_response(await self._fishing.admin_reset_runtime_settings())
+
+    async def _api_fishing_trophies_reset(self, request: web.Request) -> web.Response:
+        return json_response(await self._fishing.admin_clear_trophies())
 
     async def _api_events_get(self, request: web.Request) -> web.Response:
         return json_response(await self._fishing.admin_get_events())

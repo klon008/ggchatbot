@@ -17,6 +17,9 @@ from .settings import (
     SILT_ENERGY_LOSS,
     TRASH_CHANCE,
     TRASH_TYPES,
+    TROPHY_CHANCE,
+    TROPHY_EXCESS_CAP,
+    TROPHY_EXCESS_LAMBDA,
     WORMS_DIG_BITE_CHANCE,
     WORMS_DIG_SAFE_CHANCE,
     WORMS_DIG_SHIELD_CHANCE,
@@ -34,6 +37,7 @@ class CastResult:
     weight: Optional[float] = None
     size: Optional[str] = None
     bait_taken: int = 0
+    is_trophy: bool = False
 
 
 def _roll_neg_event() -> Optional[str]:
@@ -58,9 +62,14 @@ def _pick_species(enabled: Optional[set[str]] = None) -> Optional[str]:
     return random.choices(names, weights=weights, k=1)[0]
 
 
-def _roll_weight(species: str) -> float:
+def _roll_weight(species: str) -> tuple[float, bool]:
+    """Вес кг и флаг трофея (вес выше w_max)."""
     _, w_min, w_max, _ = FISH_SPECIES[species]
-    return round(random.uniform(w_min, w_max), 2)
+    if random.random() < TROPHY_CHANCE:
+        lam = max(1e-9, float(TROPHY_EXCESS_LAMBDA))
+        excess = min(float(TROPHY_EXCESS_CAP), random.expovariate(lam))
+        return round(float(w_max) * (1.0 + excess), 2), True
+    return round(random.uniform(w_min, w_max), 2), False
 
 
 def consume_bait(player: dict[str, Any], amount: int = 1) -> int:
@@ -189,7 +198,7 @@ def apply_cast_roll(
         msg = prefix + texts.pick(texts.MISS)
         return CastResult(kind="miss", message=msg), 0
 
-    weight = _roll_weight(species)
+    weight, is_trophy = _roll_weight(species)
     size, sale = sell_price(species, weight)
     catch = texts.pick(texts.FISH_CATCH).format(
         species=species,
@@ -210,6 +219,7 @@ def apply_cast_roll(
             species=species,
             weight=weight,
             size=size,
+            is_trophy=is_trophy,
         ),
         sale,
     )
