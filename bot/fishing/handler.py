@@ -624,30 +624,17 @@ class FishingHandler:
                 species=result.species,
                 weight=result.weight,
             )
-            weight_s = f"{result.weight:.2f}"
             if result.is_trophy:
-                result.message += " " + texts.pick(texts.FISH_TROPHY).format(
-                    species=result.species,
-                    species_lower=result.species.lower(),
-                    weight=weight_s,
-                )
+                result.message += " " + texts.pick(texts.FISH_TROPHY)
                 await self._push_trophy_overlay(
                     user_name=msg.user_name,
                     species=result.species,
                     weight=float(result.weight),
                 )
             if flags.get("all_time_trophy"):
-                result.message += " " + texts.pick(texts.ALL_TIME_TROPHY).format(
-                    species=result.species,
-                    species_lower=result.species.lower(),
-                    weight=weight_s,
-                )
+                result.message += " " + texts.pick(texts.ALL_TIME_TROPHY)
             if flags.get("week_species_record"):
-                result.message += " " + texts.pick(texts.WEEK_SPECIES_RECORD).format(
-                    species=result.species,
-                    species_lower=result.species.lower(),
-                    weight=weight_s,
-                )
+                result.message += " " + texts.pick(texts.WEEK_SPECIES_RECORD)
                 if not result.is_trophy:
                     await self._push_week_record_overlay(
                         user_name=msg.user_name,
@@ -655,10 +642,7 @@ class FishingHandler:
                         weight=float(result.weight),
                     )
             if flags.get("fish_of_week"):
-                result.message += " " + texts.pick(texts.WEEK_FISH_OF_WEEK).format(
-                    species=result.species,
-                    weight=weight_s,
-                )
+                result.message += " " + texts.pick(texts.WEEK_FISH_OF_WEEK)
         elif result.kind == "mermaid":
             await self._push_mermaid_overlay(
                 user_name=msg.user_name,

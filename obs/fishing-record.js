@@ -24,6 +24,8 @@
   var stage = document.getElementById("stage");
   var fishArt = document.getElementById("fishArt");
   var caption = document.getElementById("caption");
+  var trophyFlash = document.getElementById("trophyFlash");
+  var trophyGlow = document.getElementById("trophyGlow");
   var debugLogEl = document.getElementById("debugLog");
 
   var ws = null;
@@ -235,6 +237,7 @@
     if (mermaid) {
       var loss = data.loss != null ? data.loss : data.penalty;
       var blocked = isMermaidBlocked(data);
+      stage.classList.remove("is-trophy");
       stage.classList.add("is-mermaid");
       if (blocked) {
         stage.classList.add("is-mermaid-blocked");
@@ -251,6 +254,7 @@
       var kind = String(data.kind || "").toLowerCase();
       stage.classList.remove("is-mermaid", "is-mermaid-blocked");
       if (kind === "trophy") {
+        stage.classList.add("is-trophy");
         setTrophyCaption(userName, weight, species);
         log(
           "show trophy " +
@@ -263,6 +267,7 @@
             imageUrl
         );
       } else {
+        stage.classList.remove("is-trophy");
         setRecordCaption(userName, weight, species);
         log(
           "show " +
@@ -285,8 +290,30 @@
     stage.classList.remove("is-leaving");
     stage.classList.add("is-visible");
     stage.setAttribute("aria-hidden", "false");
+
+    // Glow-маска по силуэту fishArt, затем плавно снимается
+    if (stage.classList.contains("is-trophy") && trophyFlash) {
+      var src = fishArt.currentSrc || fishArt.src || "";
+      if (src) {
+        var maskUrl = 'url("' + String(src).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '")';
+        trophyFlash.style.webkitMaskImage = maskUrl;
+        trophyFlash.style.maskImage = maskUrl;
+      }
+      trophyFlash.style.animation = "none";
+      void trophyFlash.offsetWidth;
+      trophyFlash.style.animation = "";
+      if (trophyGlow) {
+        trophyGlow.style.display = "none";
+        void trophyGlow.offsetWidth;
+        trophyGlow.style.display = "";
+      }
+    }
+
     if (typeof window.playObsSfx === "function") {
-      window.playObsSfx("/assets/sounds/fish.mp3");
+      var sfx = stage.classList.contains("is-trophy")
+        ? "/assets/sounds/sound-effect-6101.mp3"
+        : "/assets/sounds/fish.mp3";
+      window.playObsSfx(sfx);
     }
 
     await sleep(ENTER_MS + HOLD_MS);
@@ -294,10 +321,21 @@
     stage.classList.add("is-leaving");
     await sleep(EXIT_MS);
 
-    stage.classList.remove("is-visible", "is-leaving", "is-mermaid", "is-mermaid-blocked");
+    stage.classList.remove(
+      "is-visible",
+      "is-leaving",
+      "is-mermaid",
+      "is-mermaid-blocked",
+      "is-trophy"
+    );
     stage.setAttribute("aria-hidden", "true");
     fishArt.removeAttribute("src");
     caption.textContent = "";
+    if (trophyFlash) {
+      trophyFlash.style.webkitMaskImage = "";
+      trophyFlash.style.maskImage = "";
+      trophyFlash.style.animation = "";
+    }
   }
 
   async function pump() {

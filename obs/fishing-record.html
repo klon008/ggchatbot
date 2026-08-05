@@ -69,8 +69,46 @@
       height: 100%;
       object-fit: contain;
       user-select: none;
+      position: relative;
+      z-index: 0;
       /* shadow только на картинке — иначе filter убивает FPS при анимации лучей */
       filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.55));
+    }
+
+    /* Glow-маска поверх fishArt: силуэт картинки → плавно исчезает */
+    #trophyFlash {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        radial-gradient(
+          circle at 40% 45%,
+          #ffffff 0%,
+          #b8ecff 28%,
+          #00acea 62%,
+          #007aa8 100%
+        );
+      opacity: 0;
+      -webkit-mask-size: contain;
+      mask-size: contain;
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      mask-position: center;
+      -webkit-mask-mode: alpha;
+      mask-mode: alpha;
+    }
+    #stage.is-trophy #trophyFlash {
+      display: block;
+    }
+    #stage.is-trophy.is-visible #trophyFlash {
+      animation: trophy-flash 1s ease-out 1 both;
+    }
+    #stage.is-leaving #trophyFlash {
+      opacity: 0 !important;
+      animation: none;
     }
 
     /* Зона текста: свечение + подпись */
@@ -80,6 +118,7 @@
       right: 6%;
       top: 6%;
       bottom: 8%;
+      z-index: 2;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -99,7 +138,8 @@
     }
 
     #sunGlow,
-    #murkGlow {
+    #murkGlow,
+    #trophyGlow {
       position: absolute;
       left: 50%;
       top: 48%;
@@ -109,9 +149,12 @@
       pointer-events: none;
       z-index: 0;
     }
-    #murkGlow { display: none; }
+    #murkGlow,
+    #trophyGlow { display: none; }
     #stage.is-mermaid #sunGlow { display: none; }
     #stage.is-mermaid #murkGlow { display: block; }
+    #stage.is-mermaid #trophyGlow { display: none; }
+    #stage.is-trophy #trophyGlow { display: block; }
 
     .sun-rays {
       position: absolute;
@@ -138,6 +181,28 @@
       );
       animation: sun-spin 18s linear infinite;
       will-change: transform;
+    }
+    #stage.is-trophy .sun-rays {
+      background: repeating-conic-gradient(
+        from 0deg,
+        rgba(0, 172, 234, 0.00) 0deg,
+        rgba(0, 172, 234, 0.00) 8deg,
+        rgba(90, 212, 245, 0.24) 10deg,
+        rgba(0, 172, 234, 0.00) 14deg,
+        rgba(0, 172, 234, 0.00) 22deg
+      );
+    }
+    #stage.is-trophy .sun-core {
+      background: radial-gradient(
+        circle,
+        rgba(180, 235, 255, 0.4) 0%,
+        rgba(0, 172, 234, 0.18) 35%,
+        transparent 70%
+      );
+    }
+    #stage.is-trophy .sun-spark {
+      background: rgba(180, 235, 255, 0.95);
+      box-shadow: 0 0 8px 2px rgba(0, 172, 234, 0.65);
     }
     .sun-core {
       position: absolute;
@@ -168,6 +233,60 @@
     .sun-spark:nth-child(4) { left: 68%; top: 22%; animation-delay: 0.7s; width: 4px; height: 4px; }
     .sun-spark:nth-child(5) { left: 78%; top: 58%; animation-delay: 1.4s; }
     .sun-spark:nth-child(6) { left: 30%; top: 70%; animation-delay: 2.1s; width: 3px; height: 3px; }
+
+    /* Трофей: золотая пыль из центра наружу */
+    .trophy-mote {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      opacity: 0;
+      will-change: transform, opacity;
+      width: var(--s, 4px);
+      height: var(--s, 4px);
+      margin: calc(var(--s, 4px) / -2) 0 0 calc(var(--s, 4px) / -2);
+      border-radius: 50%;
+      background: rgba(170, 252, 255, 0.95);
+      box-shadow: 0 0 6px 1px rgba(80, 214, 255, 0.7);
+      animation: trophy-fly var(--dur, 2.8s) ease-out infinite;
+      animation-delay: var(--delay, 0s);
+    }
+
+    .trophy-mote:nth-child(1)  { --dx:  22px; --dy: -110px; --s: 3px; --dur: 2.6s; --delay: 0s; }
+    .trophy-mote:nth-child(2)  { --dx:  86px; --dy: -70px;  --s: 5px; --dur: 3.0s; --delay: 0.18s; }
+    .trophy-mote:nth-child(3)  { --dx: 118px; --dy:  14px;  --s: 4px; --dur: 2.75s; --delay: 0.35s; }
+    .trophy-mote:nth-child(4)  { --dx:  76px; --dy:  94px;  --s: 3px; --dur: 3.15s; --delay: 0.12s; }
+    .trophy-mote:nth-child(5)  { --dx:  10px; --dy: 122px;  --s: 5px; --dur: 2.7s; --delay: 0.48s; }
+    .trophy-mote:nth-child(6)  { --dx: -70px; --dy: 102px;  --s: 4px; --dur: 2.9s; --delay: 0.25s; }
+    .trophy-mote:nth-child(7)  { --dx: -116px; --dy:  34px; --s: 3px; --dur: 2.65s; --delay: 0.6s; }
+    .trophy-mote:nth-child(8)  { --dx: -94px; --dy: -58px;  --s: 5px; --dur: 3.05s; --delay: 0.08s; }
+    .trophy-mote:nth-child(9)  { --dx: -34px; --dy: -106px; --s: 4px; --dur: 2.8s; --delay: 0.4s; }
+    .trophy-mote:nth-child(10) { --dx:  50px; --dy: -94px;  --s: 3px; --dur: 3.25s; --delay: 0.7s; }
+    .trophy-mote:nth-child(11) { --dx: 106px; --dy:  58px;  --s: 4px; --dur: 2.7s; --delay: 0.22s; }
+    .trophy-mote:nth-child(12) { --dx:  46px; --dy: 116px;  --s: 3px; --dur: 2.95s; --delay: 0.55s; }
+    .trophy-mote:nth-child(13) { --dx: -50px; --dy:  84px;  --s: 5px; --dur: 2.55s; --delay: 0.3s; }
+    .trophy-mote:nth-child(14) { --dx: -106px; --dy: -22px; --s: 3px; --dur: 3.1s; --delay: 0.45s; }
+    .trophy-mote:nth-child(15) { --dx: -62px; --dy: -86px;  --s: 4px; --dur: 2.85s; --delay: 0.78s; }
+    .trophy-mote:nth-child(16) { --dx:  24px; --dy:  70px;  --s: 3px; --dur: 2.5s; --delay: 0.9s; }
+    .trophy-mote:nth-child(17) { --dx: -16px; --dy: -66px;  --s: 2px; --dur: 2.4s; --delay: 0.15s; }
+    .trophy-mote:nth-child(18) { --dx: 130px; --dy: -26px;  --s: 4px; --dur: 3.35s; --delay: 0.52s; }
+    .trophy-mote:nth-child(19) { --dx: -130px; --dy:  62px; --s: 3px; --dur: 3.1s; --delay: 0.65s; }
+    .trophy-mote:nth-child(20) { --dx:  64px; --dy: -24px;  --s: 2px; --dur: 2.45s; --delay: 0.82s; }
+    .trophy-mote:nth-child(21) { --dx:  42px; --dy: -128px; --s: 4px; --dur: 2.9s; --delay: 0.05s; }
+    .trophy-mote:nth-child(22) { --dx: 122px; --dy: -48px;  --s: 3px; --dur: 3.2s; --delay: 0.28s; }
+    .trophy-mote:nth-child(23) { --dx: 108px; --dy:  82px;  --s: 5px; --dur: 2.85s; --delay: 0.5s; }
+    .trophy-mote:nth-child(24) { --dx: -24px; --dy: 132px;  --s: 3px; --dur: 3.05s; --delay: 0.2s; }
+    .trophy-mote:nth-child(25) { --dx: -124px; --dy:  40px; --s: 4px; --dur: 2.75s; --delay: 0.42s; }
+    .trophy-mote:nth-child(26) { --dx: -82px; --dy: -112px; --s: 3px; --dur: 3.15s; --delay: 0.62s; }
+    .trophy-mote:nth-child(27) { --dx:  82px; --dy:  24px;  --s: 4px; --dur: 2.6s; --delay: 0.75s; }
+    .trophy-mote:nth-child(28) { --dx: -48px; --dy: -36px;  --s: 2px; --dur: 2.55s; --delay: 0.35s; }
+
+    /* Трофей: баннер чуть быстрее; текст не перекрывается маской (z-index выше) */
+    #stage.is-trophy.is-visible #banner {
+      transition-duration: 0.28s, 0.35s;
+    }
+    #stage.is-trophy.is-visible #textArea {
+      transition: opacity 0.25s ease 0.15s, transform 0.3s ease 0.15s;
+    }
 
     /* Негатив: глубинная муть вместо солнечных лучей */
     .murk-haze {
@@ -234,6 +353,35 @@
       0%, 100% { opacity: 0.15; transform: scale(0.6); }
       50% { opacity: 1; transform: scale(1.15); }
     }
+    @keyframes trophy-fly {
+      0% {
+        opacity: 0;
+        transform: translate(0, 0) scale(0.4);
+      }
+      8% {
+        opacity: 1;
+        transform: translate(
+          calc(var(--dx) * 0.08),
+          calc(var(--dy) * 0.08)
+        ) scale(1.1);
+      }
+      70% {
+        opacity: 0.85;
+        transform: translate(
+          calc(var(--dx) * 0.72),
+          calc(var(--dy) * 0.72)
+        ) scale(0.85);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(var(--dx), var(--dy)) scale(0.3);
+      }
+    }
+    @keyframes trophy-flash {
+      0% { opacity: 1; }
+      30% { opacity: 1; }
+      100% { opacity: 0; }
+    }
     @keyframes murk-breathe {
       0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.96); }
       50% { opacity: 0.85; transform: translate(-50%, -50%) scale(1.04); }
@@ -251,7 +399,7 @@
 
     #caption {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       width: 100%;
       display: flex;
       flex-direction: column;
@@ -283,6 +431,12 @@
       color: #c5d8e8;
       text-shadow:
         0 1px 0 #1a3040,
+        0 3px 10px rgba(0, 0, 0, 0.85);
+    }
+    #stage.is-trophy .cap-nick {
+      color: #00acea;
+      text-shadow:
+        0 1px 0 #044a66,
         0 3px 10px rgba(0, 0, 0, 0.85);
     }
     #stage.is-mermaid .cap-verb-row::before,
@@ -356,6 +510,13 @@
         0 1px 0 #7a4a08,
         0 3px 8px rgba(0, 0, 0, 0.8);
     }
+    #stage.is-trophy .cap-weight,
+    #stage.is-trophy .cap-unit {
+      color: #00acea;
+      text-shadow:
+        0 1px 0 #044a66,
+        0 3px 8px rgba(0, 0, 0, 0.8);
+    }
     .cap-unit {
       font-size: 0.62em;
       margin-left: 0.12em;
@@ -422,12 +583,12 @@
       opacity: 0.55;
     }
     .cap-record.is-trophy {
-      color: #1a1004;
-      background: linear-gradient(180deg, #ffe08a 0%, #f0b020 40%, #d47808 100%);
+      color: #041820;
+      background: linear-gradient(180deg, #5ad4f5 0%, #00acea 45%, #0088bb 100%);
       box-shadow:
-        0 2px 0 #8a4a08,
-        0 4px 14px rgba(240, 160, 20, 0.55),
-        inset 0 1px 0 rgba(255, 255, 220, 0.7);
+        0 2px 0 #045a78,
+        0 4px 14px rgba(0, 172, 234, 0.55),
+        inset 0 1px 0 rgba(200, 245, 255, 0.65);
       letter-spacing: 0.12em;
     }
     .cap-record.is-trophy::before,
@@ -462,6 +623,7 @@
   <div id="stage" aria-hidden="true">
     <div id="banner">
       <img id="fishArt" alt="" draggable="false" />
+      <div id="trophyFlash" aria-hidden="true"></div>
       <div id="textArea">
         <div id="sunGlow" aria-hidden="true">
           <div class="sun-rays"></div>
@@ -470,6 +632,36 @@
           <span class="sun-spark"></span>
           <span class="sun-spark"></span>
           <span class="sun-spark"></span>
+        </div>
+        <div id="trophyGlow" aria-hidden="true">
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
+          <span class="trophy-mote"></span>
         </div>
         <div id="murkGlow" aria-hidden="true">
           <div class="murk-haze"></div>
