@@ -392,6 +392,9 @@ class FishingHandler:
             log_ids.append(lid)
 
         result = await self.admin_get_events()
+        # grant_log больше не в GET /api/events — оставляем в ответе выдачи
+        grant_rows, _ = await fishing_db.list_grant_log(self._db, limit=100)
+        result["grant_log"] = grant_rows
         result["granted"] = len(log_ids)
         result["log_ids"] = log_ids
         return result
