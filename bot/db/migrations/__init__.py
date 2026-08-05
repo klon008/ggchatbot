@@ -34,6 +34,11 @@ from . import (
     m026_fishing_steal_safe,
     m027_draw_stats,
     m028_steal_rework,
+    m029_queue_limits,
+    m030_sr_cost,
+    m031_fishing_settings,
+    m032_fishing_events,
+    m033_fishing_grant_log,
 )
 
 
@@ -72,4 +77,9 @@ MIGRATIONS: list[Migration] = [
     m026_fishing_steal_safe,
     m027_draw_stats,
     m028_steal_rework,
+    m029_queue_limits,
+    m030_sr_cost,
+    m031_fishing_settings,
+    m032_fishing_events,
+    m033_fishing_grant_log,
 ]

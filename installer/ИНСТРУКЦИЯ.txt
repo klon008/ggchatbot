@@ -33,7 +33,7 @@
 
 6. (Опционально) Настройка баланса под свой канал:
    - ggchatbot\bot\princess\settings.py  — принцессы, кража, дейлики, кубик
-   - ggchatbot\bot\song_request\settings.py  — стоимость !sr (SR_COST)
+   - ggchatbot\bot\song_request\settings.py  — bootstrap стоимости !sr (далее админка «Очередь»)
    - ggchatbot\bot\roulette\settings.py  — рулетка
    - ggchatbot\bot\minigames\settings.py  — общая казна мини-игр
    - ggchatbot\bot\races\settings.py  — забеги (!забег)

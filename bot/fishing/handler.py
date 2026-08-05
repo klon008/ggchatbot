@@ -8,29 +8,30 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 from bot.db import Database
 from bot.db import fishing as fishing_db
+from bot.db import users as users_db
 from bot.economy.points import PointsStore
 from bot.goodgame import ChatMessage
 
 from . import texts
 from .cast import apply_cast_roll, bait_total, consume_bait, roll_worms_dig_outcome
+from .events_settings import (
+    DEFAULT_BOOST_CASTS,
+    GRANT_ITEMS,
+    FishingEventsConfig,
+    validate_events_payload,
+)
+from .grants import grant_bite_boost, grant_mermaid_shields, grant_steal_safe
 from .record_assets import FISH_RECORD_ASSETS
+from .runtime_settings import FishingRuntimeSettings, validate
 from .settings import (
-    BITE_BOOST_CASTS,
-    CAST_COOLDOWN_SEC,
-    CAST_ENERGY_COST,
     FIRST_FISH_BONUS,
     FISH_OF_WEEK_BONUS,
     FISH_SPECIES,
     FISHING_CMD,
-    MAGGOT_COST,
-    MAGGOT_GAIN,
     MERMAID_PENALTY,
     MERMAID_SHIELD_BUY_MAX,
     MERMAID_SHIELD_COST,
-    ROD_COST,
     WEEK_REWARDS,
-    WORMS_ENERGY_COST,
-    WORMS_GAIN,
 )
 from .storage import FishingStorage
 
@@ -46,7 +47,9 @@ StealAllowedFn = Callable[[], Awaitable[bool]]
 class FishingHandler:
     def __init__(self, db: Database) -> None:
         self._db = db
-        self.store = FishingStorage(db)
+        self._rt = FishingRuntimeSettings.defaults()
+        self._rt_is_default = True
+        self.store = FishingStorage(db, lambda: self._rt)
         self._reply: Optional[ReplyFn] = None
         self._points: Optional[PointsStore] = None
         self._player: Optional["PlayerRoutes"] = None
@@ -54,15 +57,22 @@ class FishingHandler:
 
     async def start(self) -> None:
         await fishing_db.ensure_meta(self._db)
+        await self._reload_runtime()
         cal = await self.store.ensure_calendar()
         if await self.store.has_pending_rewards():
             pending = await self.store.pending_week_id()
             _warn_pending_rewards(pending)
         log.info(
-            "Fishing модуль запущен (day=%s week=%s).",
+            "Fishing модуль запущен (day=%s week=%s, energy_max=%s).",
             cal["meta"]["day_key"],
             cal["meta"]["current_week_id"],
+            self._rt.energy_max,
         )
+
+    async def _reload_runtime(self) -> None:
+        override = await fishing_db.get_settings_override(self._db)
+        self._rt_is_default = override is None
+        self._rt = FishingRuntimeSettings.from_override(override)
 
     async def close(self) -> None:
         pass
@@ -150,6 +160,10 @@ class FishingHandler:
             "fish_of_week_bonus": rewards["fish_of_week_bonus"],
             "species_enabled": rewards["enabled"],
             "week_rewards_defaults": rewards["defaults"],
+            "runtime_settings": self._rt.to_dict(),
+            "runtime_settings_defaults": FishingRuntimeSettings.defaults().to_dict(),
+            "runtime_settings_is_default": self._rt_is_default,
+            "events": (await self.store.load_events_config()).to_dict(),
         }
 
     def _default_enabled(self) -> dict[str, bool]:
@@ -259,6 +273,89 @@ class FishingHandler:
         status = await self.get_status()
         return status
 
+    async def admin_set_runtime_settings(self, payload: dict) -> dict:
+        validated = validate(payload)
+        await fishing_db.set_settings_override(self._db, validated.to_dict())
+        self._rt = validated
+        self._rt_is_default = False
+        log.info("Fishing runtime settings updated: %s", validated.to_dict())
+        return await self.get_status()
+
+    async def admin_reset_runtime_settings(self) -> dict:
+        await fishing_db.set_settings_override(self._db, None)
+        self._rt = FishingRuntimeSettings.defaults()
+        self._rt_is_default = True
+        log.info("Fishing runtime settings reset to defaults")
+        return await self.get_status()
+
+    async def admin_get_events(self) -> dict:
+        cfg = await self.store.load_events_config()
+        log_rows = await fishing_db.list_grant_log(self._db, limit=100)
+        return {
+            "schedule": cfg.to_dict(),
+            "schedule_defaults": FishingEventsConfig.defaults().to_dict(),
+            "grant_log": log_rows,
+        }
+
+    async def admin_set_events_schedule(self, payload: dict) -> dict:
+        validated = validate_events_payload(payload)
+        await fishing_db.set_events_override(self._db, validated)
+        log.info("Fishing events schedule updated: %s", validated)
+        return await self.admin_get_events()
+
+    async def admin_grant(
+        self,
+        *,
+        user_ids: list[str],
+        item: str,
+        amount: Optional[int] = None,
+    ) -> dict:
+        item_key = str(item or "").strip()
+        if item_key not in GRANT_ITEMS:
+            raise ValueError("item")
+        ids = [str(u).strip() for u in user_ids if str(u).strip()]
+        if not ids:
+            raise ValueError("user_ids")
+
+        if item_key == "mermaid_shield":
+            qty = 1 if amount is None else int(amount)
+            if qty < 1:
+                raise ValueError("amount")
+        elif item_key == "bite_boost":
+            qty = DEFAULT_BOOST_CASTS if amount is None else int(amount)
+            if qty < 0:
+                raise ValueError("amount")
+        else:
+            qty = 1
+
+        log_ids: list[int] = []
+        for uid in ids:
+            name = await users_db.get_user_name(self._db, uid)
+            if item_key == "mermaid_shield":
+                await grant_mermaid_shields(
+                    self._db, uid, amount=qty, user_name=name
+                )
+            elif item_key == "bite_boost":
+                await grant_bite_boost(
+                    self._db, uid, casts=qty, user_name=name
+                )
+            else:
+                await grant_steal_safe(self._db, uid, user_name=name)
+            lid = await fishing_db.insert_grant_log(
+                self._db,
+                user_id=uid,
+                user_name=name,
+                item=item_key,
+                amount=qty,
+                actor="admin",
+            )
+            log_ids.append(lid)
+
+        result = await self.admin_get_events()
+        result["granted"] = len(log_ids)
+        result["log_ids"] = log_ids
+        return result
+
     async def admin_restore_energy(self, *, announce: bool = True) -> dict:
         n = await self.store.restore_all_energy()
         log.info("Fishing: energy restored for %s players", n)
@@ -366,6 +463,15 @@ class FishingHandler:
         prefix_note = ""
         if cal["day_changed"]:
             prefix_note = texts.pick(texts.BAIT_SPOILED) + " "
+            events = await self.store.load_events_config()
+            if events.is_active_today():
+                prefix_note += (
+                    texts.pick(texts.EVENT_BOOST_DAY).format(N=events.boost_casts)
+                    + " "
+                )
+
+        # Любая !рыбалка* — ленивая выдача ивент-буста (тихо, 1 раз/сутки).
+        await self.store.get_or_create_player(msg.user_id, msg.user_name)
 
         if not rest:
             await self._cmd_cast(msg, prefix_note)
@@ -385,7 +491,7 @@ class FishingHandler:
         if sub == "помощь":
             await self._say(
                 f"{msg.user_name}, "
-                f"{texts.pick(texts.HELP).format(N=FIRST_FISH_BONUS, C=MAGGOT_COST)}"
+                f"{texts.pick(texts.HELP).format(N=FIRST_FISH_BONUS, C=self._rt.maggot_cost)}"
             )
             return True
         if sub == "энергия":
@@ -400,7 +506,7 @@ class FishingHandler:
 
         await self._say(
             f"{msg.user_name}, неизвестная подкоманда. "
-            f"{texts.pick(texts.HELP).format(N=FIRST_FISH_BONUS, C=MAGGOT_COST)}"
+            f"{texts.pick(texts.HELP).format(N=FIRST_FISH_BONUS, C=self._rt.maggot_cost)}"
         )
         return True
 
@@ -408,6 +514,7 @@ class FishingHandler:
         points = self._require_points()
         player = await self.store.get_or_create_player(msg.user_id, msg.user_name)
         now = time.time()
+        rt = self._rt
 
         if player["rod_state"] != fishing_db.ROD_OK:
             await self._say(f"{msg.user_name}, {prefix_note}{texts.pick(texts.DENY_NO_ROD)}")
@@ -415,15 +522,15 @@ class FishingHandler:
         if bait_total(player) < 1:
             await self._say(f"{msg.user_name}, {prefix_note}{texts.pick(texts.DENY_NO_BAIT)}")
             return
-        if player["energy"] < CAST_ENERGY_COST:
+        if player["energy"] < rt.cast_energy_cost:
             body = texts.pick(texts.DENY_NO_ENERGY).replace("{X}", str(player["energy"]))
             await self._say(f"{msg.user_name}, {prefix_note}{body}")
             return
-        if now - float(player["last_cast_at"]) < CAST_COOLDOWN_SEC:
+        if now - float(player["last_cast_at"]) < rt.cast_cooldown_sec:
             await self._say(f"{msg.user_name}, {prefix_note}{texts.pick(texts.DENY_COOLDOWN)}")
             return
 
-        player["energy"] -= CAST_ENERGY_COST
+        player["energy"] -= rt.cast_energy_cost
         consume_bait(player, 1)
         player["last_cast_at"] = now
 
@@ -433,6 +540,9 @@ class FishingHandler:
             player,
             points_balance=balance,
             enabled_species=enabled,
+            miss_chance=rt.miss_chance,
+            trash_chance=rt.trash_chance,
+            bite_boost_miss_trash_div=rt.bite_boost_miss_trash_div,
         )
 
         if result.kind == "fish" and result.species and result.weight is not None:
@@ -490,13 +600,19 @@ class FishingHandler:
 
     async def _cmd_worms(self, msg: ChatMessage, prefix_note: str) -> None:
         player = await self.store.get_or_create_player(msg.user_id, msg.user_name)
-        if player["energy"] < WORMS_ENERGY_COST:
+        rt = self._rt
+        if player["energy"] < rt.worms_energy_cost:
             body = texts.pick(texts.WORMS_NO_ENERGY).replace("{X}", str(player["energy"]))
             await self._say(f"{msg.user_name}, {prefix_note}{body}")
             return
-        player["energy"] -= WORMS_ENERGY_COST
+        player["energy"] -= rt.worms_energy_cost
         steal_active = await self._is_steal_active()
-        outcome = roll_worms_dig_outcome(steal_active=steal_active)
+        outcome = roll_worms_dig_outcome(
+            steal_active=steal_active,
+            shield_chance=rt.worms_dig_shield_chance,
+            bite_chance=rt.worms_dig_bite_chance,
+            safe_chance=rt.worms_dig_safe_chance,
+        )
         if outcome == "shield":
             player["mermaid_shields"] = int(player.get("mermaid_shields") or 0) + 1
             body = texts.pick(texts.WORMS_DIG_SHIELD).format(
@@ -504,10 +620,10 @@ class FishingHandler:
             )
         elif outcome == "bite":
             player["bite_boost_casts_left"] = (
-                int(player.get("bite_boost_casts_left") or 0) + BITE_BOOST_CASTS
+                int(player.get("bite_boost_casts_left") or 0) + rt.bite_boost_casts
             )
             body = texts.pick(texts.WORMS_DIG_BITE).format(
-                B=BITE_BOOST_CASTS,
+                B=rt.bite_boost_casts,
                 T=player["bite_boost_casts_left"],
             )
         elif outcome == "safe":
@@ -516,7 +632,7 @@ class FishingHandler:
             pool = texts.WORMS_DIG_SAFE_ALREADY if already else texts.WORMS_DIG_SAFE
             body = texts.pick(pool)
         else:
-            player["worms"] += WORMS_GAIN
+            player["worms"] += rt.worms_gain
             body = texts.pick(texts.WORMS_OK)
         await self.store.save_player(player)
         res = texts.resources_from_player(player)
@@ -525,21 +641,22 @@ class FishingHandler:
     async def _cmd_maggot(self, msg: ChatMessage, prefix_note: str) -> None:
         points = self._require_points()
         player = await self.store.get_or_create_player(msg.user_id, msg.user_name)
+        rt = self._rt
         balance = await points.get_balance(msg.user_id)
-        if balance < MAGGOT_COST:
+        if balance < rt.maggot_cost:
             await self._say(
                 f"{msg.user_name}, {prefix_note}"
-                f"{texts.pick(texts.MAGGOT_NO_POINTS).format(C=MAGGOT_COST)}"
+                f"{texts.pick(texts.MAGGOT_NO_POINTS).format(C=rt.maggot_cost)}"
             )
             return
-        await points.add(msg.user_id, -MAGGOT_COST)
+        await points.add(msg.user_id, -rt.maggot_cost)
         await points.flush()
-        player["maggots"] += MAGGOT_GAIN
+        player["maggots"] += rt.maggot_gain
         await self.store.save_player(player)
         res = texts.resources_from_player(player)
         await self._say(
             f"{msg.user_name}, {prefix_note}"
-            f"{texts.pick(texts.MAGGOT_OK).format(C=MAGGOT_COST, G=MAGGOT_GAIN)}\n{res}"
+            f"{texts.pick(texts.MAGGOT_OK).format(C=rt.maggot_cost, G=rt.maggot_gain)}\n{res}"
         )
 
     async def _cmd_rod(self, msg: ChatMessage, prefix_note: str) -> None:
@@ -551,12 +668,12 @@ class FishingHandler:
             )
             return
         balance = await points.get_balance(msg.user_id)
-        if balance < ROD_COST:
+        if balance < self._rt.rod_cost:
             await self._say(
                 f"{msg.user_name}, {prefix_note}{texts.pick(texts.ROD_NO_POINTS)}"
             )
             return
-        await points.add(msg.user_id, -ROD_COST)
+        await points.add(msg.user_id, -self._rt.rod_cost)
         await points.flush()
         player["rod_state"] = fishing_db.ROD_OK
         await self.store.save_player(player)

@@ -54,6 +54,43 @@ async def set_block_ym_explicit(db: Database, enabled: bool) -> None:
     )
 
 
+_QUEUE_LIMIT_KEYS = (
+    "max_queue_size",
+    "max_duration_sec",
+    "track_watchdog_extra_sec",
+    "user_cooldown_sec",
+    "sr_cost",
+)
+
+
+async def get_queue_limits(db: Database) -> dict[str, Optional[int]]:
+    row = await db.fetchone(
+        "SELECT max_queue_size, max_duration_sec, track_watchdog_extra_sec, "
+        "user_cooldown_sec, sr_cost FROM queue_meta WHERE id = 1"
+    )
+    if row is None:
+        return {k: None for k in _QUEUE_LIMIT_KEYS}
+    keys = row.keys()
+    result: dict[str, Optional[int]] = {}
+    for k in _QUEUE_LIMIT_KEYS:
+        if k not in keys or row[k] is None:
+            result[k] = None
+        else:
+            result[k] = int(row[k])
+    return result
+
+
+async def set_queue_limits(db: Database, **fields: int) -> None:
+    updates = {k: int(v) for k, v in fields.items() if k in _QUEUE_LIMIT_KEYS}
+    if not updates:
+        return
+    cols = ", ".join(f"{k} = ?" for k in updates)
+    await db.execute(
+        f"UPDATE queue_meta SET {cols} WHERE id = 1",
+        tuple(updates.values()),
+    )
+
+
 async def load_meta(db: Database) -> tuple[Optional[dict], Optional[str], int]:
     row = await db.fetchone(
         "SELECT current_json, current_token, token_counter FROM queue_meta WHERE id = 1"

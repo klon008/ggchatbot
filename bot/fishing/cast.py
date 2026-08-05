@@ -80,19 +80,30 @@ def bait_total(player: dict[str, Any]) -> int:
     return int(player["worms"]) + int(player["maggots"])
 
 
-def roll_worms_dig_outcome(*, steal_active: bool = False) -> str:
+def roll_worms_dig_outcome(
+    *,
+    steal_active: bool = False,
+    shield_chance: float | None = None,
+    bite_chance: float | None = None,
+    safe_chance: float | None = None,
+) -> str:
     """Исход копания: shield | bite | safe | worms (взаимоисключающие).
 
     safe только если steal_active (команда !кража сейчас доступна).
     """
+    dig_shield = (
+        WORMS_DIG_SHIELD_CHANCE if shield_chance is None else float(shield_chance)
+    )
+    dig_bite = WORMS_DIG_BITE_CHANCE if bite_chance is None else float(bite_chance)
+    dig_safe = WORMS_DIG_SAFE_CHANCE if safe_chance is None else float(safe_chance)
     roll = random.random()
-    if roll < WORMS_DIG_SHIELD_CHANCE:
+    if roll < dig_shield:
         return "shield"
-    acc = WORMS_DIG_SHIELD_CHANCE
-    if roll < acc + WORMS_DIG_BITE_CHANCE:
+    acc = dig_shield
+    if roll < acc + dig_bite:
         return "bite"
-    acc += WORMS_DIG_BITE_CHANCE
-    if steal_active and roll < acc + WORMS_DIG_SAFE_CHANCE:
+    acc += dig_bite
+    if steal_active and roll < acc + dig_safe:
         return "safe"
     return "worms"
 
@@ -103,6 +114,9 @@ def apply_cast_roll(
     points_balance: int,
     with_prefix: bool = True,
     enabled_species: Optional[set[str]] = None,
+    miss_chance: float | None = None,
+    trash_chance: float | None = None,
+    bite_boost_miss_trash_div: int | None = None,
 ) -> tuple[CastResult, int]:
     """
     Ресурсы заброса уже списаны.
@@ -111,15 +125,23 @@ def apply_cast_roll(
     """
     prefix = (texts.pick(texts.CAST_PREFIX) + " ") if with_prefix else ""
 
+    base_miss = MISS_CHANCE if miss_chance is None else float(miss_chance)
+    base_trash = TRASH_CHANCE if trash_chance is None else float(trash_chance)
+    boost_div = (
+        BITE_BOOST_MISS_TRASH_DIV
+        if bite_boost_miss_trash_div is None
+        else int(bite_boost_miss_trash_div)
+    )
+
     boost_active = int(player.get("bite_boost_casts_left") or 0) > 0
     if boost_active:
         player["bite_boost_casts_left"] = int(player["bite_boost_casts_left"]) - 1
-        div = max(1, int(BITE_BOOST_MISS_TRASH_DIV))
-        miss_chance = MISS_CHANCE / div
-        trash_chance = TRASH_CHANCE / div
+        div = max(1, boost_div)
+        roll_miss = base_miss / div
+        roll_trash = base_trash / div
     else:
-        miss_chance = MISS_CHANCE
-        trash_chance = TRASH_CHANCE
+        roll_miss = base_miss
+        roll_trash = base_trash
 
     event = _roll_neg_event()
 
@@ -153,11 +175,11 @@ def apply_cast_roll(
         return CastResult(kind="reeds", message=msg), 0
 
     category = random.random()
-    if category < miss_chance:
+    if category < roll_miss:
         msg = prefix + texts.pick(texts.MISS)
         return CastResult(kind="miss", message=msg), 0
 
-    if category < miss_chance + trash_chance:
+    if category < roll_miss + roll_trash:
         trash_key = random.choice(TRASH_TYPES)
         msg = prefix + texts.pick(texts.TRASH[trash_key])
         return CastResult(kind="trash", message=msg), 0

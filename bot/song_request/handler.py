@@ -54,19 +54,107 @@ class SongRequestHandler:
         self._points: Optional[PointsStore] = None
         self._orders_enabled = True
         self._block_ym_explicit = True
+        self._sr_cost = SR_COST
 
     async def start(self) -> None:
         await self.queue.load()
         self._orders_enabled = await queue_db.get_orders_enabled(self._db)
         self._block_ym_explicit = await queue_db.get_block_ym_explicit(self._db)
         self.ym_stream.set_block_explicit(self._block_ym_explicit)
+        await self._load_queue_limits()
         ym = "вкл" if self.ym_stream.configured else "выкл (нет YANDEX_MUSIC_TOKEN)"
         log.info(
-            "Song-request модуль запущен (заказы: %s, ЯМузыка: %s, block_explicit: %s).",
+            "Song-request модуль запущен (заказы: %s, ЯМузыка: %s, block_explicit: %s, "
+            "queue=%s, max_dur=%ss, watchdog_extra=%ss, cooldown=%ss, sr_cost=%s).",
             "вкл" if self._orders_enabled else "выкл",
             ym,
             "вкл" if self._block_ym_explicit else "выкл",
+            self.cfg.max_queue_size,
+            self.cfg.max_duration_sec,
+            self.cfg.track_watchdog_extra_sec,
+            self.cfg.user_cooldown_sec,
+            self._sr_cost,
         )
+
+    async def _load_queue_limits(self) -> None:
+        stored = await queue_db.get_queue_limits(self._db)
+        seed: dict[str, int] = {}
+        defaults = {
+            "max_queue_size": self.cfg.max_queue_size,
+            "max_duration_sec": self.cfg.max_duration_sec,
+            "track_watchdog_extra_sec": self.cfg.track_watchdog_extra_sec,
+            "user_cooldown_sec": self.cfg.user_cooldown_sec,
+            "sr_cost": self._sr_cost,
+        }
+        effective: dict[str, int] = {}
+        for key, default in defaults.items():
+            value = stored.get(key)
+            if value is None:
+                seed[key] = default
+                effective[key] = default
+            else:
+                effective[key] = value
+        if seed:
+            await queue_db.set_queue_limits(self._db, **seed)
+        self._apply_queue_limits(effective)
+
+    def _apply_queue_limits(self, limits: dict[str, int]) -> None:
+        if "max_queue_size" in limits:
+            self.cfg.max_queue_size = limits["max_queue_size"]
+            self.queue.max_size = limits["max_queue_size"]
+        if "max_duration_sec" in limits:
+            self.cfg.max_duration_sec = limits["max_duration_sec"]
+        if "track_watchdog_extra_sec" in limits:
+            self.cfg.track_watchdog_extra_sec = limits["track_watchdog_extra_sec"]
+        if "user_cooldown_sec" in limits:
+            self.cfg.user_cooldown_sec = limits["user_cooldown_sec"]
+        if "sr_cost" in limits:
+            self._sr_cost = limits["sr_cost"]
+
+    def queue_limits(self) -> dict[str, int]:
+        return {
+            "max_queue_size": self.cfg.max_queue_size,
+            "max_duration_sec": self.cfg.max_duration_sec,
+            "track_watchdog_extra_sec": self.cfg.track_watchdog_extra_sec,
+            "user_cooldown_sec": self.cfg.user_cooldown_sec,
+            "sr_cost": self._sr_cost,
+        }
+
+    async def set_queue_limits(
+        self,
+        *,
+        max_queue_size: Optional[int] = None,
+        max_duration_sec: Optional[int] = None,
+        track_watchdog_extra_sec: Optional[int] = None,
+        user_cooldown_sec: Optional[int] = None,
+        sr_cost: Optional[int] = None,
+    ) -> dict[str, int]:
+        updates: dict[str, int] = {}
+        if max_queue_size is not None:
+            if not isinstance(max_queue_size, int) or max_queue_size < 1:
+                raise ValueError("max_queue_size")
+            updates["max_queue_size"] = max_queue_size
+        if max_duration_sec is not None:
+            if not isinstance(max_duration_sec, int) or max_duration_sec < 1:
+                raise ValueError("max_duration_sec")
+            updates["max_duration_sec"] = max_duration_sec
+        if track_watchdog_extra_sec is not None:
+            if not isinstance(track_watchdog_extra_sec, int) or track_watchdog_extra_sec < 0:
+                raise ValueError("track_watchdog_extra_sec")
+            updates["track_watchdog_extra_sec"] = track_watchdog_extra_sec
+        if user_cooldown_sec is not None:
+            if not isinstance(user_cooldown_sec, int) or user_cooldown_sec < 0:
+                raise ValueError("user_cooldown_sec")
+            updates["user_cooldown_sec"] = user_cooldown_sec
+        if sr_cost is not None:
+            if not isinstance(sr_cost, int) or sr_cost < 0:
+                raise ValueError("sr_cost")
+            updates["sr_cost"] = sr_cost
+        if updates:
+            await queue_db.set_queue_limits(self._db, **updates)
+            self._apply_queue_limits(updates)
+            log.info("Лимиты очереди обновлены: %s", updates)
+        return self.queue_limits()
 
     async def close(self) -> None:
         await self.playback.close()
@@ -213,18 +301,18 @@ class SongRequestHandler:
             )
             return
 
-        if SR_COST > 0:
+        if self._sr_cost > 0:
             if self._points is None:
                 await self._say(f"{msg.user_name}, заказ песен временно недоступен")
                 return
             balance = await self._points.get_balance(msg.user_id)
-            if balance < SR_COST:
+            if balance < self._sr_cost:
                 await self._say(
                     f"{msg.user_name}, недостаточно принцесс: "
-                    f"нужно {SR_COST}, у тебя {balance} {pluralize_princess(balance)}"
+                    f"нужно {self._sr_cost}, у тебя {balance} {pluralize_princess(balance)}"
                 )
                 return
-            await self._points.add(msg.user_id, -SR_COST)
+            await self._points.add(msg.user_id, -self._sr_cost)
 
         track = Track(
             video_id=result.media_id,
@@ -232,16 +320,16 @@ class SongRequestHandler:
             requested_by_name=msg.user_name,
             url=result.url,
             title="",
-            paid_cost=SR_COST if SR_COST > 0 else 0,
+            paid_cost=self._sr_cost if self._sr_cost > 0 else 0,
             provider=result.provider,
             album_id=result.album_id or "",
         )
         position = await self.queue.add(track)
         self._cooldowns[msg.user_id] = time.time()
-        if SR_COST > 0:
+        if self._sr_cost > 0:
             await self._say(
                 f"{msg.user_name}, добавлено в очередь (#{position}), "
-                f"списано {SR_COST} {pluralize_princess(SR_COST)}"
+                f"списано {self._sr_cost} {pluralize_princess(self._sr_cost)}"
             )
         else:
             await self._say(f"{msg.user_name}, добавлено в очередь (#{position})")

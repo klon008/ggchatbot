@@ -34,7 +34,7 @@
 
 **Не переносилось в SQLite (by design):**
 
-- кулдаун `!sr` между заказами (`USER_COOLDOWN_SEC`) — по-прежнему in-memory в `SongRequestHandler`;
+- кулдаун `!sr` между заказами (`user_cooldown_sec` в `queue_meta` / админка) — таймстемпы по-прежнему in-memory в `SongRequestHandler`;
 - после рестарта бота этот кулдаун сбрасывается.
 
 **Убрано:**
@@ -204,7 +204,14 @@ CREATE TABLE queue_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     current_json TEXT,           -- JSON текущего Track или NULL
     current_token TEXT,          -- 't-1', 't-2', ...
-    token_counter INTEGER NOT NULL DEFAULT 1
+    token_counter INTEGER NOT NULL DEFAULT 1,
+    orders_enabled INTEGER NOT NULL DEFAULT 1,
+    block_ym_explicit INTEGER NOT NULL DEFAULT 1,
+    max_queue_size INTEGER,              -- runtime из админки (NULL → seed из .env)
+    max_duration_sec INTEGER,
+    track_watchdog_extra_sec INTEGER,
+    user_cooldown_sec INTEGER,
+    sr_cost INTEGER                   -- стоимость !sr (NULL → seed из settings.SR_COST)
 );
 
 -- Ожидающие треки (0-based position)
@@ -426,6 +433,16 @@ sqlite3 data\bot.db "SELECT user_id, balance FROM points ORDER BY balance DESC L
 | Очередь «залипла» | Незавершённый `current` при краше | При рестарте трек вернётся в очередь автоматически; или очистить `queue_items` / `queue_meta` |
 | Тюрьма «висит» после истечения срока | Запись не удалена до первой проверки | Любая команда от пользователя вызовет `is_in_prison()` и очистит просрочку |
 | `no such table` | Старая/битая `bot.db` | Удалить `bot.db`, перезапустить бота (создаст схему) или прогнать миграцию |
+
+### Рыбалка: ивенты (m032–m033)
+
+| Таблица / колонка | Назначение |
+|------------------|------------|
+| `fishing_meta.events_json` | Расписание буста: `boost_enabled`, `boost_weekdays`, `boost_casts` |
+| `fishing_players.event_boost_day_key` | Идемпотентность ленивой выдачи ивент-буста за сутки |
+| `fishing_grant_log` | Лог **ручных** выдач из админки «Ивенты» |
+
+API: `GET /api/events`, `PUT /api/events/schedule`, `POST /api/events/grant`.
 
 ---
 

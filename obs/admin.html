@@ -129,6 +129,24 @@
     }
     tr:last-child td { border-bottom: none; }
     tr:hover { background: #1a1a28; }
+    table.sortable th.sortable-th {
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    table.sortable th.sortable-th:hover {
+      color: #c8e0ff;
+    }
+    table.sortable th.sortable-th[data-sort="asc"]::after {
+      content: " ▲";
+      font-size: 10px;
+      color: #8fd48f;
+    }
+    table.sortable th.sortable-th[data-sort="desc"]::after {
+      content: " ▼";
+      font-size: 10px;
+      color: #8fd48f;
+    }
     .mono { font-family: Consolas, "Cascadia Mono", monospace; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     #statusBar {
@@ -207,6 +225,7 @@
       <button type="button" class="tab" data-tab="races">Скачки</button>
       <button type="button" class="tab" data-tab="polls">Опросы</button>
       <button type="button" class="tab" data-tab="fishing">Рыбалка</button>
+      <button type="button" class="tab" data-tab="events">Ивенты</button>
       <button type="button" class="tab" data-tab="steal">Кража</button>
       <a href="cards-admin.html" class="tab tab-link" title="Портрет 310×330 · рубашка 350×490">Карты</a>
     </div>
@@ -225,13 +244,13 @@
         <button type="submit" class="primary">Добавить</button>
       </form>
 
-      <table>
+      <table class="sortable">
         <thead>
           <tr>
             <th>user_id</th>
             <th>user_name</th>
             <th>balance</th>
-            <th>действия</th>
+            <th data-nosort>действия</th>
           </tr>
         </thead>
         <tbody id="pointsBody">
@@ -251,6 +270,36 @@
         </label>
         <p style="margin:6px 0 0;font-size:12px;color:#8888a0;line-height:1.4">
           Отклоняет треки с пометкой content_warning=explicit (грубый мат / 18+).
+        </p>
+      </div>
+
+      <div class="card" id="queueSettingsCard">
+        <h3>Настройки</h3>
+        <div class="toolbar">
+          <label>
+            Макс. очередь
+            <input type="number" id="queueMaxSize" min="1" value="50" />
+          </label>
+          <label>
+            Макс. длительность (сек)
+            <input type="number" id="queueMaxDurationSec" min="1" value="300" />
+          </label>
+          <label>
+            Watchdog запас (сек)
+            <input type="number" id="queueWatchdogExtraSec" min="0" value="60" />
+          </label>
+          <label>
+            Кулдаун !sr (сек)
+            <input type="number" id="queueUserCooldownSec" min="0" value="0" />
+          </label>
+          <label>
+            Стоимость !sr
+            <input type="number" id="queueSrCost" min="0" value="100" />
+          </label>
+          <button type="button" id="queueSaveSettings" class="primary">Сохранить</button>
+        </div>
+        <p style="margin:8px 0 0;font-size:12px;color:#8888a0;line-height:1.4">
+          Кулдаун 0 — без ограничений. Стоимость 0 — бесплатно. Watchdog = макс. длительность + запас.
         </p>
       </div>
 
@@ -318,7 +367,7 @@
 
       <div class="card">
         <h3>Ставки текущего раунда</h3>
-        <table>
+        <table class="sortable">
           <thead>
             <tr>
               <th>ник</th>
@@ -377,7 +426,7 @@
 
       <div class="card">
         <h3>Состав раунда</h3>
-        <table>
+        <table class="sortable">
           <thead>
             <tr>
               <th>№</th>
@@ -394,7 +443,7 @@
 
       <div class="card">
         <h3>Ставки текущего раунда</h3>
-        <table>
+        <table class="sortable">
           <thead>
             <tr>
               <th>ник</th>
@@ -417,8 +466,9 @@
         <h3>Статистика принцесс</h3>
         <p class="empty" style="margin: 0 0 10px; font-size: 13px">
           Справочник всех участниц (не привязано к текущему забегу). Только просмотр.
+          Клик по заголовку — сортировка.
         </p>
-        <table>
+        <table class="sortable">
           <thead>
             <tr>
               <th>принцесса</th>
@@ -479,7 +529,7 @@
 
       <div class="card">
         <h3>Варианты</h3>
-        <table>
+        <table class="sortable">
           <thead>
             <tr>
               <th>№</th>
@@ -497,7 +547,7 @@
 
       <div class="card">
         <h3>Ставки</h3>
-        <table>
+        <table class="sortable">
           <thead>
             <tr>
               <th>ник</th>
@@ -537,6 +587,112 @@
         </div>
       </div>
 
+      <div class="card" id="fishingSettingsCard">
+        <h3>Настройки</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          Энергия, цены, шансы копания и miss/trash. Сохраняется в БД; сброс — значения из
+          <code>settings.py</code>.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Параметр</th>
+              <th>Значение</th>
+              <th>Примечание</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="3" style="color:#9ecbff;font-weight:600;background:#1c1c2e">Энергия и цены</td></tr>
+            <tr>
+              <td>Макс. энергия</td>
+              <td><input type="number" id="fishEnergyMax" min="1" value="100" style="width:100px" /></td>
+              <td class="empty">потолок энергии игрока</td>
+            </tr>
+            <tr>
+              <td>Реген (сек/+1)</td>
+              <td><input type="number" id="fishRegenSec" min="1" value="36" style="width:100px" /></td>
+              <td class="empty">секунд на +1 энергию</td>
+            </tr>
+            <tr>
+              <td>Заброс (энергия)</td>
+              <td><input type="number" id="fishCastEnergy" min="0" value="15" style="width:100px" /></td>
+              <td class="empty">стоимость <code>!рыбалка</code></td>
+            </tr>
+            <tr>
+              <td>Черви (энергия)</td>
+              <td><input type="number" id="fishWormsEnergy" min="0" value="15" style="width:100px" /></td>
+              <td class="empty">стоимость <code>!рыбалка черви</code></td>
+            </tr>
+            <tr>
+              <td>Черви (+шт)</td>
+              <td><input type="number" id="fishWormsGain" min="0" value="5" style="width:100px" /></td>
+              <td class="empty">сколько червей за копание</td>
+            </tr>
+            <tr>
+              <td>Опарыш цена</td>
+              <td><input type="number" id="fishMaggotCost" min="0" value="20" style="width:100px" /></td>
+              <td class="empty">принцессы за пачку</td>
+            </tr>
+            <tr>
+              <td>Опарыш (+шт)</td>
+              <td><input type="number" id="fishMaggotGain" min="0" value="10" style="width:100px" /></td>
+              <td class="empty">сколько в пачке</td>
+            </tr>
+            <tr>
+              <td>Удочка цена</td>
+              <td><input type="number" id="fishRodCost" min="0" value="1000" style="width:100px" /></td>
+              <td class="empty">покупка / починка</td>
+            </tr>
+            <tr>
+              <td>Кулдаун заброса (сек)</td>
+              <td><input type="number" id="fishCastCooldown" min="0" value="20" style="width:100px" /></td>
+              <td class="empty">пауза между забросами</td>
+            </tr>
+            <tr><td colspan="3" style="color:#9ecbff;font-weight:600;background:#1c1c2e">Копание и исходы</td></tr>
+            <tr>
+              <td>Копание: щит</td>
+              <td><input type="number" id="fishDigShield" min="0" max="1" step="0.01" value="0.03" style="width:100px" /></td>
+              <td class="empty">шанс 0–1</td>
+            </tr>
+            <tr>
+              <td>Копание: активатор клёва</td>
+              <td><input type="number" id="fishDigBite" min="0" max="1" step="0.01" value="0.03" style="width:100px" /></td>
+              <td class="empty">шанс 0–1</td>
+            </tr>
+            <tr>
+              <td>Копание: сейф</td>
+              <td><input type="number" id="fishDigSafe" min="0" max="1" step="0.01" value="0.01" style="width:100px" /></td>
+              <td class="empty">шанс 0–1 (если !кража активна)</td>
+            </tr>
+            <tr>
+              <td>Буст клёва (забросов)</td>
+              <td><input type="number" id="fishBiteBoostCasts" min="0" value="10" style="width:100px" /></td>
+              <td class="empty">зарядов на активатор</td>
+            </tr>
+            <tr>
+              <td>Буст ÷ miss/trash</td>
+              <td><input type="number" id="fishBiteBoostDiv" min="1" value="3" style="width:100px" /></td>
+              <td class="empty">во сколько раз меньше miss/trash</td>
+            </tr>
+            <tr>
+              <td>Miss chance</td>
+              <td><input type="number" id="fishMissChance" min="0" max="1" step="0.01" value="0.20" style="width:100px" /></td>
+              <td class="empty">сход, 0–1</td>
+            </tr>
+            <tr>
+              <td>Trash chance</td>
+              <td><input type="number" id="fishTrashChance" min="0" max="1" step="0.01" value="0.18" style="width:100px" /></td>
+              <td class="empty">мусор, 0–1</td>
+            </tr>
+          </tbody>
+        </table>
+        <p id="fishingSettingsHint" class="empty" style="margin: 8px 0 0; font-size: 12px">—</p>
+        <div class="toolbar" style="margin-top: 10px">
+          <button type="button" id="fishingSaveSettings" class="primary">Сохранить настройки</button>
+          <button type="button" id="fishingResetSettings">Сбросить к defaults</button>
+        </div>
+      </div>
+
       <div class="card">
         <h3>Награды недели (принцессы)</h3>
         <p class="empty" style="margin: 0 0 10px; font-size: 13px">
@@ -558,7 +714,7 @@
 
       <div class="card">
         <h3>Топ текущей недели</h3>
-        <table>
+        <table class="sortable">
           <thead>
             <tr>
               <th>вид</th>
@@ -572,6 +728,94 @@
           </tbody>
         </table>
         <p id="fishingFowLine" style="margin-top: 10px">Рыба недели: —</p>
+      </div>
+    </section>
+
+    <section id="panel-events" class="panel">
+      <div class="card">
+        <h3>Расписание: буст клёва</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          В выбранные дни (МСК) при первой команде <code>!рыбалка*</code> игроку тихо
+          начисляется N зарядов буста. В полночь заряды сгорают. Анонс — вместе с
+          сообщением о смене суток.
+        </p>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;color:#b8b8d0;cursor:pointer">
+          <input type="checkbox" id="eventsBoostEnabled" checked />
+          Включено
+        </label>
+        <div class="toolbar" style="flex-wrap:wrap;gap:10px;margin-bottom:12px" id="eventsWeekdays">
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="0" /> Пн</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="1" /> Вт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="2" /> Ср</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="3" checked /> Чт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="4" /> Пт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="5" /> Сб</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="6" /> Вс</label>
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:8px;margin-right:12px;color:#b8b8d0">
+          Зарядов
+          <input type="number" id="eventsBoostCasts" min="0" value="30" style="width:90px" />
+        </label>
+        <button type="button" id="eventsScheduleSave" class="primary">Сохранить расписание</button>
+      </div>
+
+      <div class="card" style="margin-top: 16px">
+        <h3>Ручная выдача</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          Щит от русалки, буст клёва или карманный сейф. Без сообщений в чат.
+        </p>
+        <div class="toolbar" style="flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <label style="color:#b8b8d0">
+            Предмет
+            <select id="eventsGrantItem">
+              <option value="bite_boost">Буст клёва</option>
+              <option value="mermaid_shield">Щит от русалки</option>
+              <option value="steal_safe">Карманный сейф</option>
+            </select>
+          </label>
+          <label style="color:#b8b8d0">
+            Кол-во
+            <input type="number" id="eventsGrantAmount" min="0" value="30" style="width:90px" />
+          </label>
+          <button type="button" id="eventsGrantSelected" class="primary">Выдать выбранным</button>
+          <button type="button" id="eventsClearSelection">Снять выделение</button>
+          <button type="button" id="eventsUsersRefresh">Обновить список</button>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="eventsUsersFilter" placeholder="Поиск по user_id или нику…" style="min-width:240px" />
+        </div>
+        <table class="sortable" id="eventsUsersTable">
+          <thead>
+            <tr>
+              <th data-nosort>
+                <input type="checkbox" id="eventsSelectAll" title="Выбрать все видимые" />
+              </th>
+              <th>user_id</th>
+              <th>user_name</th>
+            </tr>
+          </thead>
+          <tbody id="eventsUsersBody">
+            <tr><td colspan="3" class="empty">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card" style="margin-top: 16px">
+        <h3>Лог ручных выдач</h3>
+        <table class="sortable">
+          <thead>
+            <tr>
+              <th>Время</th>
+              <th>user_id</th>
+              <th>user_name</th>
+              <th>Предмет</th>
+              <th>Кол-во</th>
+            </tr>
+          </thead>
+          <tbody id="eventsLogBody">
+            <tr><td colspan="5" class="empty">—</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
@@ -625,7 +869,7 @@
       <div class="card" style="margin-top: 16px">
         <h3>Статистика игроков (steal_stats)</h3>
         <p id="stealStatsMeta" style="margin: 0 0 10px; color: #8888a0; font-size: 13px">—</p>
-        <table>
+        <table class="sortable">
           <thead>
             <tr>
               <th>Ник</th>

@@ -71,7 +71,12 @@ CREATE TABLE IF NOT EXISTS queue_meta (
     current_token TEXT,
     token_counter INTEGER NOT NULL DEFAULT 1,
     orders_enabled INTEGER NOT NULL DEFAULT 1,
-    block_ym_explicit INTEGER NOT NULL DEFAULT 1
+    block_ym_explicit INTEGER NOT NULL DEFAULT 1,
+    max_queue_size INTEGER,
+    max_duration_sec INTEGER,
+    track_watchdog_extra_sec INTEGER,
+    user_cooldown_sec INTEGER,
+    sr_cost INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS queue_items (
@@ -303,7 +308,8 @@ CREATE TABLE IF NOT EXISTS fishing_players (
     day_key TEXT NOT NULL DEFAULT '',
     mermaid_shields INTEGER NOT NULL DEFAULT 0,
     bite_boost_casts_left INTEGER NOT NULL DEFAULT 0,
-    steal_safe INTEGER NOT NULL DEFAULT 0
+    steal_safe INTEGER NOT NULL DEFAULT 0,
+    event_boost_day_key TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS fishing_records (
@@ -329,7 +335,20 @@ CREATE TABLE IF NOT EXISTS fishing_meta (
     first_fish_claimed INTEGER NOT NULL DEFAULT 0,
     current_week_id TEXT NOT NULL DEFAULT '',
     pending_rewards_week_id TEXT NOT NULL DEFAULT '',
-    week_rewards_json TEXT NOT NULL DEFAULT ''
+    week_rewards_json TEXT NOT NULL DEFAULT '',
+    settings_json TEXT NOT NULL DEFAULT '',
+    events_json TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS fishing_grant_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at REAL NOT NULL,
+    actor TEXT NOT NULL DEFAULT 'admin',
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    item TEXT NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0,
+    note TEXT NOT NULL DEFAULT ''
 );
 """
 

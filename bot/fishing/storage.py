@@ -4,20 +4,33 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from bot.db import Database
 from bot.db import fishing as fishing_db
 
 from .economy import apply_energy_regen, day_key, new_player, week_id
-from .settings import ENERGY_MAX
+from .events_settings import FishingEventsConfig, parse_events_override
+from .runtime_settings import FishingRuntimeSettings
 
 log = logging.getLogger("fishing")
 
 
 class FishingStorage:
-    def __init__(self, db: Database) -> None:
+    def __init__(
+        self,
+        db: Database,
+        settings_provider: Callable[[], FishingRuntimeSettings] | None = None,
+    ) -> None:
         self._db = db
+        self._settings = settings_provider or FishingRuntimeSettings.defaults
+
+    def _rt(self) -> FishingRuntimeSettings:
+        return self._settings()
+
+    async def load_events_config(self) -> FishingEventsConfig:
+        override = await fishing_db.get_events_override(self._db)
+        return parse_events_override(override)
 
     async def ensure_calendar(self) -> dict[str, Any]:
         """Синхронизировать сутки/неделю. Возвращает флаги day_changed / week_changed."""
@@ -27,13 +40,14 @@ class FishingStorage:
         day_changed = False
         week_changed = False
         now_ts = time.time()
+        energy_max = self._rt().energy_max
 
         if meta["day_key"] != today:
             if meta["day_key"]:
                 day_changed = True
                 await fishing_db.reset_all_for_new_day(
                     self._db,
-                    energy=ENERGY_MAX,
+                    energy=energy_max,
                     energy_updated_at=now_ts,
                     day_key=today,
                 )
@@ -68,30 +82,62 @@ class FishingStorage:
             "week_changed": week_changed,
         }
 
+    def _apply_schedule_boost(
+        self,
+        player: dict[str, Any],
+        *,
+        today: str,
+        events: FishingEventsConfig,
+    ) -> bool:
+        """Тихо начислить ивент-буст один раз за сутки. True если начислили."""
+        if not events.is_active_today():
+            return False
+        if str(player.get("event_boost_day_key") or "") == today:
+            return False
+        add = max(0, int(events.boost_casts))
+        if add > 0:
+            player["bite_boost_casts_left"] = (
+                int(player.get("bite_boost_casts_left") or 0) + add
+            )
+        player["event_boost_day_key"] = today
+        return True
+
     async def get_or_create_player(self, user_id: str, user_name: str) -> dict[str, Any]:
         await self.ensure_calendar()
         player = await fishing_db.get_player(self._db, user_id)
         now_ts = time.time()
         today = day_key()
+        rt = self._rt()
+        events = await self.load_events_config()
         if player is None:
-            player = new_player(user_id, user_name, now_ts)
+            player = new_player(
+                user_id, user_name, now_ts, energy_max=rt.energy_max
+            )
             player["day_key"] = today
+            self._apply_schedule_boost(player, today=today, events=events)
             await fishing_db.upsert_player(self._db, player)
             return player
         # Не затирать ник пустой строкой (grants / has_* часто вызывают без имени).
         if user_name:
             player["user_name"] = user_name
-        apply_energy_regen(player, now_ts)
+        apply_energy_regen(
+            player,
+            now_ts,
+            energy_max=rt.energy_max,
+            regen_interval_sec=rt.energy_regen_interval_sec,
+        )
         if player.get("day_key") != today:
             # На случай если игрок пропустил глобальный ресет (не было в таблице)
-            player["energy"] = ENERGY_MAX
+            player["energy"] = rt.energy_max
             player["energy_updated_at"] = now_ts
             player["worms"] = 0
             player["maggots"] = 0
             player["mermaid_shields"] = 0
             player["bite_boost_casts_left"] = 0
             player["steal_safe"] = False
+            player["event_boost_day_key"] = ""
             player["day_key"] = today
+        self._apply_schedule_boost(player, today=today, events=events)
         await fishing_db.upsert_player(self._db, player)
         return player
 
@@ -158,7 +204,7 @@ class FishingStorage:
     async def restore_all_energy(self) -> int:
         return await fishing_db.restore_all_energy(
             self._db,
-            energy=ENERGY_MAX,
+            energy=self._rt().energy_max,
             energy_updated_at=time.time(),
         )
 

@@ -127,6 +127,11 @@ class AdminRoutes:
                 web.post("/api/fishing/restore-energy", self._api_fishing_restore_energy),
                 web.post("/api/fishing/rewards", self._api_fishing_rewards),
                 web.post("/api/fishing/pay-rewards", self._api_fishing_pay_rewards),
+                web.put("/api/fishing/settings", self._api_fishing_settings_put),
+                web.post("/api/fishing/settings/reset", self._api_fishing_settings_reset),
+                web.get("/api/events", self._api_events_get),
+                web.put("/api/events/schedule", self._api_events_schedule_put),
+                web.post("/api/events/grant", self._api_events_grant),
                 web.get("/api/steal", self._api_steal_get),
                 web.put("/api/steal", self._api_steal_put),
                 web.get("/api/steal/stats", self._api_steal_stats),
@@ -314,6 +319,7 @@ class AdminRoutes:
             {
                 "orders_enabled": self._sr.orders_enabled,
                 "block_ym_explicit": self._sr.block_ym_explicit,
+                **self._sr.queue_limits(),
             }
         )
 
@@ -321,25 +327,66 @@ class AdminRoutes:
         data = await read_json(request)
         if data is None:
             return error_response("Некорректный JSON")
-        if "orders_enabled" not in data and "block_ym_explicit" not in data:
-            return error_response("нужно orders_enabled и/или block_ym_explicit")
 
-        if "orders_enabled" in data:
+        limit_keys = (
+            "max_queue_size",
+            "max_duration_sec",
+            "track_watchdog_extra_sec",
+            "user_cooldown_sec",
+            "sr_cost",
+        )
+        has_orders = "orders_enabled" in data
+        has_explicit = "block_ym_explicit" in data
+        has_limits = any(k in data for k in limit_keys)
+        if not has_orders and not has_explicit and not has_limits:
+            return error_response(
+                "нужно orders_enabled, block_ym_explicit и/или лимиты очереди"
+            )
+
+        if has_orders:
             raw = data.get("orders_enabled")
             if not isinstance(raw, bool):
                 return error_response("orders_enabled должен быть true или false")
             await self._sr.set_orders_enabled(raw)
 
-        if "block_ym_explicit" in data:
+        if has_explicit:
             raw_ex = data.get("block_ym_explicit")
             if not isinstance(raw_ex, bool):
                 return error_response("block_ym_explicit должен быть true или false")
             await self._sr.set_block_ym_explicit(raw_ex)
 
+        if has_limits:
+            limit_args: dict[str, int] = {}
+            for key in limit_keys:
+                if key not in data:
+                    continue
+                raw_lim = data.get(key)
+                if isinstance(raw_lim, bool) or not isinstance(raw_lim, int):
+                    return error_response(f"{key} должен быть целым числом")
+                limit_args[key] = raw_lim
+            try:
+                await self._sr.set_queue_limits(**limit_args)
+            except ValueError as exc:
+                bad = str(exc)
+                if bad == "max_queue_size":
+                    return error_response("max_queue_size должен быть целым числом >= 1")
+                if bad == "max_duration_sec":
+                    return error_response("max_duration_sec должен быть целым числом >= 1")
+                if bad == "track_watchdog_extra_sec":
+                    return error_response(
+                        "track_watchdog_extra_sec должен быть целым числом >= 0"
+                    )
+                if bad == "user_cooldown_sec":
+                    return error_response("user_cooldown_sec должен быть целым числом >= 0")
+                if bad == "sr_cost":
+                    return error_response("sr_cost должен быть целым числом >= 0")
+                return error_response("Некорректные лимиты очереди")
+
         return json_response(
             {
                 "orders_enabled": self._sr.orders_enabled,
                 "block_ym_explicit": self._sr.block_ym_explicit,
+                **self._sr.queue_limits(),
             }
         )
 
@@ -574,6 +621,89 @@ class AdminRoutes:
     async def _api_fishing_restore_energy(self, request: web.Request) -> web.Response:
         status = await self._fishing.admin_restore_energy(announce=True)
         return json_response(status)
+
+    async def _api_fishing_settings_put(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None or not isinstance(data, dict):
+            return error_response("Некорректный JSON")
+        try:
+            status = await self._fishing.admin_set_runtime_settings(data)
+        except ValueError as exc:
+            bad = str(exc)
+            messages = {
+                "energy_max": "energy_max должен быть целым числом >= 1",
+                "energy_regen_interval_sec": "energy_regen_interval_sec должен быть >= 1",
+                "bite_boost_miss_trash_div": "bite_boost_miss_trash_div должен быть >= 1",
+                "dig_chances_sum": "сумма шансов копания (щит+клёв+сейф) не больше 1",
+                "miss_trash_sum": "сумма miss_chance + trash_chance не больше 1",
+                "payload": "тело запроса должно быть объектом",
+            }
+            if bad in messages:
+                return error_response(messages[bad])
+            if bad.endswith("_chance") or bad in (
+                "cast_energy_cost",
+                "worms_energy_cost",
+                "worms_gain",
+                "maggot_cost",
+                "maggot_gain",
+                "rod_cost",
+                "cast_cooldown_sec",
+                "bite_boost_casts",
+            ):
+                return error_response(f"Некорректное значение {bad}")
+            return error_response("Некорректные настройки рыбалки")
+        return json_response(status)
+
+    async def _api_fishing_settings_reset(self, request: web.Request) -> web.Response:
+        return json_response(await self._fishing.admin_reset_runtime_settings())
+
+    async def _api_events_get(self, request: web.Request) -> web.Response:
+        return json_response(await self._fishing.admin_get_events())
+
+    async def _api_events_schedule_put(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None or not isinstance(data, dict):
+            return error_response("Некорректный JSON")
+        try:
+            result = await self._fishing.admin_set_events_schedule(data)
+        except ValueError as exc:
+            bad = str(exc)
+            messages = {
+                "payload": "тело запроса должно быть объектом",
+                "boost_weekdays": "boost_weekdays — список дней 0–6 (пн=0)",
+                "boost_casts": "boost_casts должен быть целым числом >= 0",
+            }
+            return error_response(messages.get(bad, "Некорректное расписание ивентов"))
+        return json_response(result)
+
+    async def _api_events_grant(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None or not isinstance(data, dict):
+            return error_response("Некорректный JSON")
+        user_ids = data.get("user_ids")
+        if not isinstance(user_ids, list):
+            return error_response("user_ids должен быть массивом")
+        amount = data.get("amount")
+        if amount is not None:
+            try:
+                amount = int(amount)
+            except (TypeError, ValueError):
+                return error_response("amount должен быть целым числом")
+        try:
+            result = await self._fishing.admin_grant(
+                user_ids=user_ids,
+                item=str(data.get("item") or ""),
+                amount=amount,
+            )
+        except ValueError as exc:
+            bad = str(exc)
+            messages = {
+                "item": "item: mermaid_shield | bite_boost | steal_safe",
+                "user_ids": "укажите хотя бы одного пользователя",
+                "amount": "некорректный amount",
+            }
+            return error_response(messages.get(bad, "Некорректный запрос выдачи"))
+        return json_response(result)
 
     async def _api_fishing_rewards(self, request: web.Request) -> web.Response:
         try:

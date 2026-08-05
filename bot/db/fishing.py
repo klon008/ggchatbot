@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Optional
 
 from bot.db.connection import Database
@@ -22,6 +23,24 @@ async def _ensure_week_rewards_column(db: Database) -> None:
         )
 
 
+async def _ensure_settings_column(db: Database) -> None:
+    rows = await db.fetchall("PRAGMA table_info(fishing_meta)")
+    cols = {str(r[1]) for r in rows}
+    if "settings_json" not in cols:
+        await db.execute(
+            "ALTER TABLE fishing_meta ADD COLUMN settings_json TEXT NOT NULL DEFAULT ''"
+        )
+
+
+async def _ensure_events_column(db: Database) -> None:
+    rows = await db.fetchall("PRAGMA table_info(fishing_meta)")
+    cols = {str(r[1]) for r in rows}
+    if "events_json" not in cols:
+        await db.execute(
+            "ALTER TABLE fishing_meta ADD COLUMN events_json TEXT NOT NULL DEFAULT ''"
+        )
+
+
 async def ensure_meta(db: Database) -> None:
     await db.execute(
         "INSERT OR IGNORE INTO fishing_meta "
@@ -29,13 +48,15 @@ async def ensure_meta(db: Database) -> None:
         "VALUES (1, '', 0, '', '')"
     )
     await _ensure_week_rewards_column(db)
+    await _ensure_settings_column(db)
+    await _ensure_events_column(db)
 
 
 async def get_meta(db: Database) -> dict[str, Any]:
     await ensure_meta(db)
     row = await db.fetchone(
         "SELECT day_key, first_fish_claimed, current_week_id, pending_rewards_week_id, "
-        "week_rewards_json "
+        "week_rewards_json, settings_json, events_json "
         "FROM fishing_meta WHERE id = 1"
     )
     assert row is not None
@@ -45,6 +66,8 @@ async def get_meta(db: Database) -> dict[str, Any]:
         "current_week_id": str(row[2] or ""),
         "pending_rewards_week_id": str(row[3] or ""),
         "week_rewards_json": str(row[4] or ""),
+        "settings_json": str(row[5] or ""),
+        "events_json": str(row[6] or "") if len(row) > 6 else "",
     }
 
 
@@ -56,6 +79,8 @@ async def set_meta(
     current_week_id: Optional[str] = None,
     pending_rewards_week_id: Optional[str] = None,
     week_rewards_json: Optional[str] = None,
+    settings_json: Optional[str] = None,
+    events_json: Optional[str] = None,
 ) -> None:
     await ensure_meta(db)
     meta = await get_meta(db)
@@ -69,16 +94,22 @@ async def set_meta(
         meta["pending_rewards_week_id"] = pending_rewards_week_id
     if week_rewards_json is not None:
         meta["week_rewards_json"] = week_rewards_json
+    if settings_json is not None:
+        meta["settings_json"] = settings_json
+    if events_json is not None:
+        meta["events_json"] = events_json
     await db.execute(
         "UPDATE fishing_meta SET day_key = ?, first_fish_claimed = ?, "
-        "current_week_id = ?, pending_rewards_week_id = ?, week_rewards_json = ? "
-        "WHERE id = 1",
+        "current_week_id = ?, pending_rewards_week_id = ?, week_rewards_json = ?, "
+        "settings_json = ?, events_json = ? WHERE id = 1",
         (
             meta["day_key"],
             1 if meta["first_fish_claimed"] else 0,
             meta["current_week_id"],
             meta["pending_rewards_week_id"],
             meta["week_rewards_json"],
+            meta["settings_json"],
+            meta["events_json"],
         ),
     )
 
@@ -127,12 +158,61 @@ async def set_week_rewards_override(
     await set_meta(db, week_rewards_json=json.dumps(payload, ensure_ascii=False))
 
 
+def parse_settings_json(raw: str) -> Optional[dict[str, Any]]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+async def get_settings_override(db: Database) -> Optional[dict[str, Any]]:
+    meta = await get_meta(db)
+    return parse_settings_json(meta.get("settings_json", ""))
+
+
+async def set_settings_override(db: Database, payload: Optional[dict[str, Any]]) -> None:
+    if payload is None:
+        await set_meta(db, settings_json="")
+        return
+    await set_meta(db, settings_json=json.dumps(payload, ensure_ascii=False))
+
+
+def parse_events_json(raw: str) -> Optional[dict[str, Any]]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+async def get_events_override(db: Database) -> Optional[dict[str, Any]]:
+    meta = await get_meta(db)
+    return parse_events_json(meta.get("events_json", ""))
+
+
+async def set_events_override(db: Database, payload: Optional[dict[str, Any]]) -> None:
+    if payload is None:
+        await set_meta(db, events_json="")
+        return
+    await set_meta(db, events_json=json.dumps(payload, ensure_ascii=False))
+
 
 async def get_player(db: Database, user_id: str) -> Optional[dict[str, Any]]:
     row = await db.fetchone(
         "SELECT user_id, user_name, energy, energy_updated_at, worms, maggots, "
         "rod_state, last_cast_at, day_key, mermaid_shields, bite_boost_casts_left, "
-        "steal_safe "
+        "steal_safe, event_boost_day_key "
         "FROM fishing_players WHERE user_id = ?",
         (str(user_id),),
     )
@@ -147,8 +227,8 @@ async def upsert_player(db: Database, player: dict[str, Any]) -> None:
         INSERT INTO fishing_players (
             user_id, user_name, energy, energy_updated_at, worms, maggots,
             rod_state, last_cast_at, day_key, mermaid_shields, bite_boost_casts_left,
-            steal_safe
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            steal_safe, event_boost_day_key
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
             user_name = excluded.user_name,
             energy = excluded.energy,
@@ -160,7 +240,8 @@ async def upsert_player(db: Database, player: dict[str, Any]) -> None:
             day_key = excluded.day_key,
             mermaid_shields = excluded.mermaid_shields,
             bite_boost_casts_left = excluded.bite_boost_casts_left,
-            steal_safe = excluded.steal_safe
+            steal_safe = excluded.steal_safe,
+            event_boost_day_key = excluded.event_boost_day_key
         """,
         (
             str(player["user_id"]),
@@ -175,6 +256,7 @@ async def upsert_player(db: Database, player: dict[str, Any]) -> None:
             int(player.get("mermaid_shields") or 0),
             int(player.get("bite_boost_casts_left") or 0),
             1 if player.get("steal_safe") else 0,
+            str(player.get("event_boost_day_key") or ""),
         ),
     )
 
@@ -189,7 +271,7 @@ async def reset_all_for_new_day(
     await db.execute(
         "UPDATE fishing_players SET energy = ?, energy_updated_at = ?, "
         "worms = 0, maggots = 0, mermaid_shields = 0, bite_boost_casts_left = 0, "
-        "steal_safe = 0, day_key = ?",
+        "steal_safe = 0, event_boost_day_key = '', day_key = ?",
         (energy, energy_updated_at, day_key),
     )
 
@@ -372,4 +454,62 @@ def _player_row(row: tuple) -> dict[str, Any]:
         "mermaid_shields": int(row[9] or 0) if len(row) > 9 else 0,
         "bite_boost_casts_left": int(row[10] or 0) if len(row) > 10 else 0,
         "steal_safe": bool(int(row[11] or 0)) if len(row) > 11 else False,
+        "event_boost_day_key": str(row[12] or "") if len(row) > 12 else "",
     }
+
+
+async def insert_grant_log(
+    db: Database,
+    *,
+    user_id: str,
+    user_name: str = "",
+    item: str,
+    amount: int = 0,
+    actor: str = "admin",
+    note: str = "",
+    created_at: Optional[float] = None,
+) -> int:
+    ts = time.time() if created_at is None else float(created_at)
+    cursor = await db.execute(
+        """
+        INSERT INTO fishing_grant_log
+            (created_at, actor, user_id, user_name, item, amount, note)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            ts,
+            str(actor or "admin"),
+            str(user_id),
+            str(user_name or ""),
+            str(item),
+            int(amount),
+            str(note or ""),
+        ),
+    )
+    return int(cursor.lastrowid or 0)
+
+
+async def list_grant_log(db: Database, *, limit: int = 100) -> list[dict[str, Any]]:
+    lim = max(1, min(int(limit), 500))
+    rows = await db.fetchall(
+        """
+        SELECT id, created_at, actor, user_id, user_name, item, amount, note
+        FROM fishing_grant_log
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
+        (lim,),
+    )
+    return [
+        {
+            "id": int(r[0]),
+            "created_at": float(r[1]),
+            "actor": str(r[2] or ""),
+            "user_id": str(r[3]),
+            "user_name": str(r[4] or ""),
+            "item": str(r[5]),
+            "amount": int(r[6] or 0),
+            "note": str(r[7] or ""),
+        }
+        for r in rows
+    ]

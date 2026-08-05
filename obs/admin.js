@@ -11,6 +11,11 @@
   const ordersStatus = document.getElementById("ordersStatus");
   const ordersToggle = document.getElementById("ordersToggle");
   const blockYmExplicit = document.getElementById("blockYmExplicit");
+  const queueMaxSize = document.getElementById("queueMaxSize");
+  const queueMaxDurationSec = document.getElementById("queueMaxDurationSec");
+  const queueWatchdogExtraSec = document.getElementById("queueWatchdogExtraSec");
+  const queueUserCooldownSec = document.getElementById("queueUserCooldownSec");
+  const queueSrCost = document.getElementById("queueSrCost");
   const rouletteAuto = document.getElementById("rouletteAuto");
   const rouletteCollectSec = document.getElementById("rouletteCollectSec");
   const rouletteCooldownSec = document.getElementById("rouletteCooldownSec");
@@ -258,6 +263,67 @@
     ordersEnabled = !!data.orders_enabled;
     blockYmExplicitEnabled = data.block_ym_explicit !== false;
     renderOrdersControl();
+    renderQueueSettings(data);
+  }
+
+  function renderQueueSettings(data) {
+    if (queueMaxSize && data.max_queue_size != null) {
+      queueMaxSize.value = data.max_queue_size;
+    }
+    if (queueMaxDurationSec && data.max_duration_sec != null) {
+      queueMaxDurationSec.value = data.max_duration_sec;
+    }
+    if (queueWatchdogExtraSec && data.track_watchdog_extra_sec != null) {
+      queueWatchdogExtraSec.value = data.track_watchdog_extra_sec;
+    }
+    if (queueUserCooldownSec && data.user_cooldown_sec != null) {
+      queueUserCooldownSec.value = data.user_cooldown_sec;
+    }
+    if (queueSrCost && data.sr_cost != null) {
+      queueSrCost.value = data.sr_cost;
+    }
+  }
+
+  async function saveQueueSettings() {
+    const maxSize = parseInt(queueMaxSize.value, 10);
+    const maxDur = parseInt(queueMaxDurationSec.value, 10);
+    const watchdogExtra = parseInt(queueWatchdogExtraSec.value, 10);
+    const cooldown = parseInt(queueUserCooldownSec.value, 10);
+    const srCost = parseInt(queueSrCost.value, 10);
+    if (Number.isNaN(maxSize) || maxSize < 1) {
+      setStatus("Макс. очередь >= 1", "err");
+      return;
+    }
+    if (Number.isNaN(maxDur) || maxDur < 1) {
+      setStatus("Макс. длительность >= 1", "err");
+      return;
+    }
+    if (Number.isNaN(watchdogExtra) || watchdogExtra < 0) {
+      setStatus("Watchdog запас >= 0", "err");
+      return;
+    }
+    if (Number.isNaN(cooldown) || cooldown < 0) {
+      setStatus("Кулдаун !sr >= 0", "err");
+      return;
+    }
+    if (Number.isNaN(srCost) || srCost < 0) {
+      setStatus("Стоимость !sr >= 0", "err");
+      return;
+    }
+    setStatus("Сохранение настроек очереди…");
+    try {
+      const data = await api("PUT", "/api/song-request", {
+        max_queue_size: maxSize,
+        max_duration_sec: maxDur,
+        track_watchdog_extra_sec: watchdogExtra,
+        user_cooldown_sec: cooldown,
+        sr_cost: srCost,
+      });
+      renderQueueSettings(data);
+      setStatus("Настройки очереди сохранены", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
   }
 
   async function toggleOrders() {
@@ -414,6 +480,10 @@
   ordersToggle.addEventListener("click", toggleOrders);
   if (blockYmExplicit) {
     blockYmExplicit.addEventListener("change", toggleBlockYmExplicit);
+  }
+  const queueSaveSettings = document.getElementById("queueSaveSettings");
+  if (queueSaveSettings) {
+    queueSaveSettings.addEventListener("click", saveQueueSettings);
   }
 
   function formatLastResult(last) {
@@ -1062,8 +1132,72 @@
   const fishingRewardsPreview = document.getElementById("fishingRewardsPreview");
   const fishingSaveRewards = document.getElementById("fishingSaveRewards");
   const fishingResetRewards = document.getElementById("fishingResetRewards");
+  const fishingSaveSettings = document.getElementById("fishingSaveSettings");
+  const fishingResetSettings = document.getElementById("fishingResetSettings");
+  const fishingSettingsHint = document.getElementById("fishingSettingsHint");
+  const fishSettingsInputs = {
+    energy_max: document.getElementById("fishEnergyMax"),
+    energy_regen_interval_sec: document.getElementById("fishRegenSec"),
+    cast_energy_cost: document.getElementById("fishCastEnergy"),
+    worms_energy_cost: document.getElementById("fishWormsEnergy"),
+    worms_gain: document.getElementById("fishWormsGain"),
+    maggot_cost: document.getElementById("fishMaggotCost"),
+    maggot_gain: document.getElementById("fishMaggotGain"),
+    rod_cost: document.getElementById("fishRodCost"),
+    cast_cooldown_sec: document.getElementById("fishCastCooldown"),
+    worms_dig_shield_chance: document.getElementById("fishDigShield"),
+    worms_dig_bite_chance: document.getElementById("fishDigBite"),
+    worms_dig_safe_chance: document.getElementById("fishDigSafe"),
+    bite_boost_casts: document.getElementById("fishBiteBoostCasts"),
+    bite_boost_miss_trash_div: document.getElementById("fishBiteBoostDiv"),
+    miss_chance: document.getElementById("fishMissChance"),
+    trash_chance: document.getElementById("fishTrashChance"),
+  };
+  const fishFloatKeys = new Set([
+    "worms_dig_shield_chance",
+    "worms_dig_bite_chance",
+    "worms_dig_safe_chance",
+    "miss_chance",
+    "trash_chance",
+  ]);
   let fishingLastData = null;
   let fishingRewardsBuilt = false;
+
+  function fishingFillRuntimeSettings(data) {
+    const rt = data.runtime_settings || {};
+    Object.keys(fishSettingsInputs).forEach((key) => {
+      const el = fishSettingsInputs[key];
+      if (!el || rt[key] == null) return;
+      el.value = String(rt[key]);
+    });
+    const em = rt.energy_max != null ? rt.energy_max : 100;
+    if (fishingRestoreEnergy) {
+      fishingRestoreEnergy.textContent = `Энергия всем = ${em}`;
+    }
+    if (fishingSettingsHint) {
+      fishingSettingsHint.textContent = data.runtime_settings_is_default
+        ? "Сейчас defaults из settings.py (override в БД пуст)."
+        : "Сохранено в БД (override активен).";
+    }
+  }
+
+  function fishingReadRuntimeSettingsFromForm() {
+    const out = {};
+    for (const key of Object.keys(fishSettingsInputs)) {
+      const el = fishSettingsInputs[key];
+      if (!el) continue;
+      if (fishFloatKeys.has(key)) {
+        const n = parseFloat(el.value);
+        if (Number.isNaN(n)) throw new Error(`${key}: число`);
+        out[key] = n;
+      } else {
+        const n = parseInt(el.value, 10);
+        if (Number.isNaN(n)) throw new Error(`${key}: целое число`);
+        out[key] = n;
+      }
+    }
+    return out;
+  }
 
   function fishingReadRewardsFromForm() {
     const species = {};
@@ -1199,6 +1333,7 @@
       data.fish_of_week_bonus ?? 0,
       data.species_enabled || {}
     );
+    fishingFillRuntimeSettings(data);
     const cfg = fishingReadRewardsFromForm();
 
     const leaders = data.week_leaders || [];
@@ -1250,6 +1385,41 @@
       setStatus(e.message, "err");
     }
   });
+
+  if (fishingSaveSettings) {
+    fishingSaveSettings.addEventListener("click", async () => {
+      let payload;
+      try {
+        payload = fishingReadRuntimeSettingsFromForm();
+      } catch (e) {
+        setStatus(e.message, "err");
+        return;
+      }
+      setStatus("Сохранение настроек рыбалки…");
+      try {
+        const data = await api("PUT", "/api/fishing/settings", payload);
+        renderFishing(data);
+        setStatus("Настройки рыбалки сохранены", "ok");
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    });
+  }
+
+  if (fishingResetSettings) {
+    fishingResetSettings.addEventListener("click", async () => {
+      const ok = confirm("Сбросить настройки рыбалки к defaults из settings.py?");
+      if (!ok) return;
+      setStatus("Сброс настроек рыбалки…");
+      try {
+        const data = await api("POST", "/api/fishing/settings/reset");
+        renderFishing(data);
+        setStatus("Настройки рыбалки сброшены", "ok");
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    });
+  }
 
   fishingSaveRewards.addEventListener("click", async () => {
     const body = fishingReadRewardsFromForm();
@@ -1548,6 +1718,206 @@
     }
   });
 
+  // --- Ивенты ---
+  const EVENT_ITEM_LABELS = {
+    bite_boost: "Буст клёва",
+    mermaid_shield: "Щит от русалки",
+    steal_safe: "Карманный сейф",
+  };
+  let eventsUsers = [];
+  let eventsSelected = new Set();
+
+  function eventsReadWeekdays() {
+    return Array.from(
+      document.querySelectorAll("#eventsWeekdays input[type=checkbox]:checked")
+    ).map((el) => parseInt(el.value, 10));
+  }
+
+  function eventsFillSchedule(schedule) {
+    const s = schedule || {};
+    document.getElementById("eventsBoostEnabled").checked = !!s.boost_enabled;
+    document.getElementById("eventsBoostCasts").value =
+      s.boost_casts != null ? s.boost_casts : 30;
+    const days = new Set(
+      Array.isArray(s.boost_weekdays) ? s.boost_weekdays.map(Number) : [3]
+    );
+    document.querySelectorAll("#eventsWeekdays input[type=checkbox]").forEach((el) => {
+      el.checked = days.has(parseInt(el.value, 10));
+    });
+  }
+
+  function eventsFormatTs(ts) {
+    const d = new Date(Number(ts) * 1000);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString("ru-RU", { hour12: false });
+  }
+
+  function renderEventsLog(rows) {
+    const body = document.getElementById("eventsLogBody");
+    if (!rows || !rows.length) {
+      body.innerHTML = '<tr><td colspan="5" class="empty">Пока пусто</td></tr>';
+      return;
+    }
+    body.innerHTML = rows
+      .map(
+        (r) => `
+      <tr>
+        <td>${esc(eventsFormatTs(r.created_at))}</td>
+        <td class="mono">${esc(r.user_id)}</td>
+        <td>${esc(r.user_name || "—")}</td>
+        <td>${esc(EVENT_ITEM_LABELS[r.item] || r.item)}</td>
+        <td>${esc(r.amount)}</td>
+      </tr>`
+      )
+      .join("");
+  }
+
+  function renderEventsUsers() {
+    const body = document.getElementById("eventsUsersBody");
+    const q = document.getElementById("eventsUsersFilter").value.trim().toLowerCase();
+    const items = q
+      ? eventsUsers.filter(
+          (p) =>
+            String(p.user_id).toLowerCase().includes(q) ||
+            (p.user_name && String(p.user_name).toLowerCase().includes(q))
+        )
+      : eventsUsers;
+
+    if (!items.length) {
+      body.innerHTML =
+        '<tr><td colspan="3" class="empty">' +
+        (q ? "Ничего не найдено" : "Нет пользователей") +
+        "</td></tr>";
+      return;
+    }
+
+    body.innerHTML = items
+      .map((p) => {
+        const id = String(p.user_id);
+        const checked = eventsSelected.has(id) ? " checked" : "";
+        return `
+      <tr data-user-id="${esc(id)}">
+        <td><input type="checkbox" class="events-user-cb" data-user-id="${esc(id)}"${checked} /></td>
+        <td class="mono">${esc(id)}</td>
+        <td>${esc(displayName(p))}</td>
+      </tr>`;
+      })
+      .join("");
+  }
+
+  async function loadEventsUsers(silent) {
+    try {
+      const data = await api("GET", "/api/points");
+      eventsUsers = data.items || [];
+      renderEventsUsers();
+      if (!silent) setStatus(`Пользователей: ${eventsUsers.length}`, "ok");
+    } catch (e) {
+      document.getElementById("eventsUsersBody").innerHTML =
+        '<tr><td colspan="3" class="empty">Ошибка загрузки</td></tr>';
+      if (!silent) setStatus(e.message, "err");
+    }
+  }
+
+  async function loadEvents(silent) {
+    if (!silent) setStatus("Загрузка ивентов…");
+    try {
+      const data = await api("GET", "/api/events");
+      eventsFillSchedule(data.schedule);
+      renderEventsLog(data.grant_log || []);
+      await loadEventsUsers(true);
+      if (!silent) setStatus("Ивенты загружены", "ok");
+    } catch (e) {
+      if (!silent) setStatus(e.message, "err");
+    }
+  }
+
+  document.getElementById("eventsScheduleSave").addEventListener("click", async () => {
+    const payload = {
+      boost_enabled: document.getElementById("eventsBoostEnabled").checked,
+      boost_weekdays: eventsReadWeekdays(),
+      boost_casts: parseInt(document.getElementById("eventsBoostCasts").value, 10),
+    };
+    if (Number.isNaN(payload.boost_casts) || payload.boost_casts < 0) {
+      setStatus("Зарядов: целое число >= 0", "err");
+      return;
+    }
+    setStatus("Сохранение расписания…");
+    try {
+      const data = await api("PUT", "/api/events/schedule", payload);
+      eventsFillSchedule(data.schedule);
+      renderEventsLog(data.grant_log || []);
+      setStatus("Расписание сохранено", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  document.getElementById("eventsUsersFilter").addEventListener("input", renderEventsUsers);
+  document.getElementById("eventsUsersRefresh").addEventListener("click", () =>
+    loadEventsUsers(false)
+  );
+
+  document.getElementById("eventsUsersBody").addEventListener("change", (e) => {
+    const t = e.target;
+    if (!t.classList || !t.classList.contains("events-user-cb")) return;
+    const id = t.getAttribute("data-user-id");
+    if (!id) return;
+    if (t.checked) eventsSelected.add(id);
+    else eventsSelected.delete(id);
+  });
+
+  document.getElementById("eventsSelectAll").addEventListener("change", (e) => {
+    const on = e.target.checked;
+    document.querySelectorAll("#eventsUsersBody .events-user-cb").forEach((cb) => {
+      cb.checked = on;
+      const id = cb.getAttribute("data-user-id");
+      if (!id) return;
+      if (on) eventsSelected.add(id);
+      else eventsSelected.delete(id);
+    });
+  });
+
+  document.getElementById("eventsClearSelection").addEventListener("click", () => {
+    eventsSelected.clear();
+    document.getElementById("eventsSelectAll").checked = false;
+    renderEventsUsers();
+  });
+
+  document.getElementById("eventsGrantItem").addEventListener("change", () => {
+    const item = document.getElementById("eventsGrantItem").value;
+    const amountEl = document.getElementById("eventsGrantAmount");
+    if (item === "bite_boost") amountEl.value = 30;
+    else if (item === "mermaid_shield") amountEl.value = 1;
+    else amountEl.value = 1;
+    amountEl.disabled = item === "steal_safe";
+  });
+
+  document.getElementById("eventsGrantSelected").addEventListener("click", async () => {
+    const ids = Array.from(eventsSelected);
+    if (!ids.length) {
+      setStatus("Выберите хотя бы одного пользователя", "err");
+      return;
+    }
+    const item = document.getElementById("eventsGrantItem").value;
+    const amountRaw = parseInt(document.getElementById("eventsGrantAmount").value, 10);
+    const body = { user_ids: ids, item };
+    if (item !== "steal_safe") {
+      if (Number.isNaN(amountRaw)) {
+        setStatus("Кол-во: целое число", "err");
+        return;
+      }
+      body.amount = amountRaw;
+    }
+    setStatus(`Выдача ${item} × ${ids.length}…`);
+    try {
+      const data = await api("POST", "/api/events/grant", body);
+      renderEventsLog(data.grant_log || []);
+      setStatus(`Выдано: ${data.granted}`, "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
   document.querySelectorAll(".tab[data-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -1563,10 +1933,88 @@
       if (id === "polls") loadPolls(false);
       else stopPollsPoll();
       if (id === "fishing") loadFishing(false);
+      if (id === "events") loadEvents(false);
       if (id === "steal") loadSteal(false);
     });
   });
 
+  function parseSortCellValue(text) {
+    const t = String(text || "")
+      .replace(/\u00a0/g, " ")
+      .trim();
+    if (!t || t === "—" || t === "-" || t === "…") {
+      return { kind: "empty", num: 0, str: "" };
+    }
+    const pct = t.replace(",", ".").match(/^(-?\d+(?:\.\d+)?)\s*%$/);
+    if (pct) {
+      return { kind: "num", num: parseFloat(pct[1]), str: t.toLowerCase() };
+    }
+    const cleaned = t.replace(/\s/g, "").replace(",", ".");
+    if (/^-?\d+(?:\.\d+)?$/.test(cleaned)) {
+      return { kind: "num", num: parseFloat(cleaned), str: t.toLowerCase() };
+    }
+    return { kind: "str", num: 0, str: t.toLowerCase() };
+  }
+
+  function cellSortText(cell) {
+    if (!cell) return "";
+    const input = cell.querySelector("input, select, textarea");
+    if (input) return String(input.value ?? "");
+    return cell.textContent || "";
+  }
+
+  function sortTableByColumn(table, colIndex, th) {
+    const tbody = table.tBodies[0];
+    if (!tbody) return;
+    const prev = th.getAttribute("data-sort");
+    const dir = prev === "asc" ? "desc" : "asc";
+    table.querySelectorAll("th.sortable-th").forEach((h) => h.removeAttribute("data-sort"));
+    th.setAttribute("data-sort", dir);
+
+    const rows = Array.from(tbody.rows).filter((row) => {
+      if (row.cells.length === 0) return false;
+      if (row.cells[0].colSpan > 1) return false;
+      return true;
+    });
+    const placeholders = Array.from(tbody.rows).filter((row) => !rows.includes(row));
+
+    rows.sort((a, b) => {
+      const va = parseSortCellValue(cellSortText(a.cells[colIndex]));
+      const vb = parseSortCellValue(cellSortText(b.cells[colIndex]));
+      let cmp = 0;
+      if (va.kind === "empty" && vb.kind !== "empty") cmp = 1;
+      else if (vb.kind === "empty" && va.kind !== "empty") cmp = -1;
+      else if (va.kind === "num" && vb.kind === "num") cmp = va.num - vb.num;
+      else cmp = va.str.localeCompare(vb.str, "ru");
+      return dir === "asc" ? cmp : -cmp;
+    });
+
+    rows.forEach((row) => tbody.appendChild(row));
+    placeholders.forEach((row) => tbody.appendChild(row));
+  }
+
+  function initSortableTables() {
+    document.querySelectorAll("table.sortable").forEach((table) => {
+      if (table.dataset.sortBound === "1") return;
+      table.dataset.sortBound = "1";
+      const heads = table.tHead ? table.tHead.querySelectorAll("th") : [];
+      heads.forEach((th, colIndex) => {
+        if (th.hasAttribute("data-nosort")) return;
+        th.classList.add("sortable-th");
+        th.title = "Сортировать";
+        th.tabIndex = 0;
+        th.addEventListener("click", () => sortTableByColumn(table, colIndex, th));
+        th.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            sortTableByColumn(table, colIndex, th);
+          }
+        });
+      });
+    });
+  }
+
   resetPollCreateForm();
+  initSortableTables();
   loadPoints();
 })();

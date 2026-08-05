@@ -34,25 +34,37 @@ def week_id(dt: datetime | None = None) -> str:
     return f"{iso.year}-W{iso.week:02d}"
 
 
-def apply_energy_regen(player: dict[str, Any], now_ts: float | None = None) -> dict[str, Any]:
+def apply_energy_regen(
+    player: dict[str, Any],
+    now_ts: float | None = None,
+    *,
+    energy_max: int | None = None,
+    regen_interval_sec: int | None = None,
+) -> dict[str, Any]:
+    cap = ENERGY_MAX if energy_max is None else int(energy_max)
+    interval = (
+        ENERGY_REGEN_INTERVAL_SEC
+        if regen_interval_sec is None
+        else max(1, int(regen_interval_sec))
+    )
     now = time.time() if now_ts is None else now_ts
     energy = int(player["energy"])
     updated = float(player["energy_updated_at"] or 0)
-    if energy >= ENERGY_MAX:
-        player["energy"] = ENERGY_MAX
+    if energy >= cap:
+        player["energy"] = cap
         player["energy_updated_at"] = now
         return player
     if updated <= 0:
         player["energy_updated_at"] = now
         return player
     elapsed = max(0.0, now - updated)
-    gained = int(elapsed // ENERGY_REGEN_INTERVAL_SEC)
+    gained = int(elapsed // interval)
     if gained <= 0:
         return player
-    energy = min(ENERGY_MAX, energy + gained)
+    energy = min(cap, energy + gained)
     player["energy"] = energy
-    player["energy_updated_at"] = updated + gained * ENERGY_REGEN_INTERVAL_SEC
-    if energy >= ENERGY_MAX:
+    player["energy_updated_at"] = updated + gained * interval
+    if energy >= cap:
         player["energy_updated_at"] = now
     return player
 
@@ -76,12 +88,19 @@ def sell_price(species: str, weight: float) -> tuple[str, int]:
     return size, int(base * mult)
 
 
-def new_player(user_id: str, user_name: str, now_ts: float | None = None) -> dict[str, Any]:
+def new_player(
+    user_id: str,
+    user_name: str,
+    now_ts: float | None = None,
+    *,
+    energy_max: int | None = None,
+) -> dict[str, Any]:
     now = time.time() if now_ts is None else now_ts
+    cap = ENERGY_MAX if energy_max is None else int(energy_max)
     return {
         "user_id": str(user_id),
         "user_name": user_name,
-        "energy": ENERGY_MAX,
+        "energy": cap,
         "energy_updated_at": now,
         "worms": 0,
         "maggots": 0,
@@ -91,4 +110,5 @@ def new_player(user_id: str, user_name: str, now_ts: float | None = None) -> dic
         "mermaid_shields": 0,
         "bite_boost_casts_left": 0,
         "steal_safe": False,
+        "event_boost_day_key": "",
     }

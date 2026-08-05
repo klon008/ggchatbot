@@ -184,10 +184,10 @@ Dataclass `Config` читает переменные из `.env` (через `py
 | `GG_ADMIN_USER_ID` | `gg_admin_user_id` | ID админа для `!списать` / `!начислить` |
 | `OBS_WS_HOST` | `obs_host` | Хост локального сервера (default `127.0.0.1`) |
 | `OBS_WS_PORT` | `obs_port` | Порт (default `8765`) |
-| `MAX_QUEUE_SIZE` | `max_queue_size` | Лимит очереди (default `50`) |
-| `MAX_DURATION_SEC` | `max_duration_sec` | Макс. длина трека, сек (default `300`) |
-| `TRACK_WATCHDOG_EXTRA_SEC` | `track_watchdog_extra_sec` | Запас watchdog поверх max duration (default `60`) |
-| `USER_COOLDOWN_SEC` | `user_cooldown_sec` | Кулдаун между `!sr` от одного user (0 = выкл.) |
+| `MAX_QUEUE_SIZE` | `max_queue_size` | Bootstrap лимита очереди (default `50`); runtime — админка «Очередь» / `queue_meta` |
+| `MAX_DURATION_SEC` | `max_duration_sec` | Bootstrap макс. длины трека, сек (default `300`); runtime — админка |
+| `TRACK_WATCHDOG_EXTRA_SEC` | `track_watchdog_extra_sec` | Bootstrap запаса watchdog (default `60`); runtime — админка |
+| `USER_COOLDOWN_SEC` | `user_cooldown_sec` | Bootstrap кулдауна `!sr` (0 = выкл.); runtime — админка |
 | `YOUTUBE_API_KEY` | `youtube_api_key` | Заготовка под Data API (пока не используется) |
 | `ALBUM_LINK_SECRET` | `album_link_secret` | Секрет подписи `k` и шифрования `api` в ссылке `!альбом` |
 | `SITE_BASE_URL` | `site_base_url` | Базовый URL GitHub Pages (default `https://klon008.github.io/princtascdwk`) |
@@ -345,7 +345,7 @@ sequenceDiagram
 
 #### Watchdog
 
-Если трек не завершился за `MAX_DURATION_SEC + TRACK_WATCHDOG_EXTRA_SEC`, вызывается `advance(token, "таймаут воспроизведения")`.
+Если трек не завершился за `max_duration_sec + track_watchdog_extra_sec` (из админки / bootstrap `.env`), вызывается `advance(token, "таймаут воспроизведения")`.
 
 Страховка от зависших live-стримов и потерянных WS-событий.
 

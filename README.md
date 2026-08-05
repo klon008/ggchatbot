@@ -21,7 +21,7 @@
    `{"action":"play","videoId":...,"token":...}`.
 3. **Воспроизведение (HTML/JS):** страница в OBS — YouTube IFrame API и/или локальный `<audio>`
    для Яндекс Музыки (одновременно играет только один источник).
-   играет видео. Длительность (≤ `MAX_DURATION_SEC`) и live-стримы проверяются
+   играет видео. Длительность (≤ лимит из админки / `MAX_DURATION_SEC`) и live-стримы проверяются
    прямо в плеере; невстраиваемые/age-restricted ролики отдают ошибку.
 4. **Закольцовка:** по окончании плеер шлёт `{"status":"ended",...}`, бот берёт
    следующий трек. Если очередь пуста — ждёт новых заказов.
@@ -76,27 +76,24 @@ copy bot\fishing\settings.example.py bot\fishing\settings.py
 | `GG_USER_ID` | ID бота. Можно оставить пустым — подставится после логина (нужен, чтобы игнорировать собственные сообщения). |
 | `GG_CHANNEL_ID` | Числовой ID вашего канала. |
 | `OBS_WS_HOST`, `OBS_WS_PORT` | Хост/порт локального сервера (по умолчанию `127.0.0.1:8765`). Один порт и для HTTP-страницы, и для WebSocket. |
-| `MAX_QUEUE_SIZE` | Максимум треков в очереди. |
-| `MAX_DURATION_SEC` | Лимит длительности трека (проверяется в плеере). |
-| `TRACK_WATCHDOG_EXTRA_SEC` | Запас к лимиту для watchdog принудительного перехода. |
-| `USER_COOLDOWN_SEC` | Антиспам: пауза между `!sr` одного пользователя (`0` = выкл). |
+| `MAX_QUEUE_SIZE`, `MAX_DURATION_SEC`, `TRACK_WATCHDOG_EXTRA_SEC`, `USER_COOLDOWN_SEC` | Стартовые лимиты очереди (до первого сохранения во вкладке «Очередь» админки). Дальше источник истины — админка / `queue_meta`. |
 | `YANDEX_MUSIC_TOKEN` | OAuth-токен Яндекс Музыки (Plus). GUI: двойной клик `tools\yandex_music_token.cmd`. Без него заказы ЯМузыки отклоняются. |
 
 Логи бота пишутся в консоль и в `logs/bot.log` (ротация ~5 МБ × 5 файлов). При проблемах на эфире пришлите `logs/bot.log` (и при наличии `bot.log.1` …).
 
 ## Настройка баланса (принцессы, !sr)
 
-Баланс игры (очки за сообщения, кража, дейлики, стоимость `!sr` и т.д.) задаётся
+Баланс игры (очки за сообщения, кража, дейлики и т.д.) задаётся
 в локальных файлах, которые **не попадают в git** и **сохраняются при `update.cmd`**:
 
 | Файл | Шаблон в репозитории |
 |------|----------------------|
 | `bot/princess/settings.py` | `bot/princess/settings.example.py` |
-| `bot/song_request/settings.py` | `bot/song_request/settings.example.py` |
+| `bot/song_request/settings.py` | `bot/song_request/settings.example.py` (bootstrap `SR_COST`; runtime — админка «Очередь») |
 | `bot/roulette/settings.py` | `bot/roulette/settings.example.py` |
 | `bot/minigames/settings.py` | `bot/minigames/settings.example.py` |
 | `bot/races/settings.py` | `bot/races/settings.example.py` |
-| `bot/fishing/settings.py` | `bot/fishing/settings.example.py` |
+| `bot/fishing/settings.py` | `bot/fishing/settings.example.py` (часть knobs — bootstrap; runtime — админка «Рыбалка») |
 
 При первой установке (`install.cmd` или ручное копирование) создаётся `settings.py`
 из `settings.example.py`. Меняйте только свой `settings.py`.
