@@ -301,11 +301,40 @@ class FishingHandler:
 
     async def admin_get_events(self) -> dict:
         cfg = await self.store.load_events_config()
-        log_rows = await fishing_db.list_grant_log(self._db, limit=100)
         return {
             "schedule": cfg.to_dict(),
             "schedule_defaults": FishingEventsConfig.defaults().to_dict(),
-            "grant_log": log_rows,
+        }
+
+    async def admin_grant_log(
+        self,
+        *,
+        page: int = 1,
+        limit: int = 50,
+        q: str = "",
+    ) -> dict:
+        lim = max(1, min(int(limit), 100))
+        pg = max(1, int(page))
+        offset = (pg - 1) * lim
+        items, total = await fishing_db.list_grant_log(
+            self._db, limit=lim, offset=offset, q=q
+        )
+        pages = max(1, (total + lim - 1) // lim) if total else 1
+        if total and pg > pages:
+            pg = pages
+            offset = (pg - 1) * lim
+            items, total = await fishing_db.list_grant_log(
+                self._db, limit=lim, offset=offset, q=q
+            )
+        elif not total:
+            pg = 1
+            pages = 1
+        return {
+            "items": items,
+            "total": total,
+            "page": pg,
+            "pages": pages,
+            "limit": lim,
         }
 
     async def admin_set_events_schedule(self, payload: dict) -> dict:

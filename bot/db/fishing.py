@@ -489,18 +489,42 @@ async def insert_grant_log(
     return int(cursor.lastrowid or 0)
 
 
-async def list_grant_log(db: Database, *, limit: int = 100) -> list[dict[str, Any]]:
-    lim = max(1, min(int(limit), 500))
+async def list_grant_log(
+    db: Database,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    q: str = "",
+) -> tuple[list[dict[str, Any]], int]:
+    lim = max(1, min(int(limit), 100))
+    off = max(0, int(offset))
+    query = (q or "").strip()
+    where = ""
+    params: list[Any] = []
+    if query:
+        like = f"%{query}%"
+        where = (
+            "WHERE user_id LIKE ? OR user_name LIKE ? OR item LIKE ?"
+        )
+        params.extend([like, like, like])
+
+    count_row = await db.fetchone(
+        f"SELECT COUNT(*) FROM fishing_grant_log {where}",
+        tuple(params),
+    )
+    total = int(count_row[0] if count_row else 0)
+
     rows = await db.fetchall(
-        """
+        f"""
         SELECT id, created_at, actor, user_id, user_name, item, amount, note
         FROM fishing_grant_log
+        {where}
         ORDER BY created_at DESC, id DESC
-        LIMIT ?
+        LIMIT ? OFFSET ?
         """,
-        (lim,),
+        tuple(params + [lim, off]),
     )
-    return [
+    items = [
         {
             "id": int(r[0]),
             "created_at": float(r[1]),
@@ -513,3 +537,4 @@ async def list_grant_log(db: Database, *, limit: int = 100) -> list[dict[str, An
         }
         for r in rows
     ]
+    return items, total

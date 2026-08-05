@@ -132,6 +132,7 @@ class AdminRoutes:
                 web.get("/api/events", self._api_events_get),
                 web.put("/api/events/schedule", self._api_events_schedule_put),
                 web.post("/api/events/grant", self._api_events_grant),
+                web.get("/api/events/log", self._api_events_log_get),
                 web.get("/api/steal", self._api_steal_get),
                 web.put("/api/steal", self._api_steal_put),
                 web.get("/api/steal/stats", self._api_steal_stats),
@@ -659,6 +660,20 @@ class AdminRoutes:
 
     async def _api_events_get(self, request: web.Request) -> web.Response:
         return json_response(await self._fishing.admin_get_events())
+
+    async def _api_events_log_get(self, request: web.Request) -> web.Response:
+        try:
+            page = int(request.query.get("page") or "1")
+        except ValueError:
+            page = 1
+        try:
+            limit = int(request.query.get("limit") or "50")
+        except ValueError:
+            limit = 50
+        q = str(request.query.get("q") or "")
+        return json_response(
+            await self._fishing.admin_grant_log(page=page, limit=limit, q=q)
+        )
 
     async def _api_events_schedule_put(self, request: web.Request) -> web.Response:
         data = await read_json(request)

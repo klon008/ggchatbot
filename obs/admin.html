@@ -147,6 +147,34 @@
       font-size: 10px;
       color: #8fd48f;
     }
+    .pager {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .pager .pager-page,
+    .pager .pager-nav {
+      min-width: 32px;
+      padding: 4px 8px;
+    }
+    .pager .pager-page.active {
+      background: #3a5a8a;
+      color: #fff;
+      border-color: #5a7aaa;
+      cursor: default;
+    }
+    .pager .pager-ellipsis {
+      color: #8888a0;
+      padding: 0 4px;
+      user-select: none;
+    }
+    .pager .pager-total {
+      color: #b8b8d0;
+      font-size: 13px;
+      margin-left: 6px;
+    }
     .mono { font-family: Consolas, "Cascadia Mono", monospace; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     #statusBar {
@@ -778,17 +806,18 @@
             <input type="number" id="eventsGrantAmount" min="0" value="30" style="width:90px" />
           </label>
           <button type="button" id="eventsGrantSelected" class="primary">Выдать выбранным</button>
+          <button type="button" id="eventsSelectAllPages" title="Выбрать всех на всех страницах (с учётом фильтра)">Выбрать все</button>
           <button type="button" id="eventsClearSelection">Снять выделение</button>
           <button type="button" id="eventsUsersRefresh">Обновить список</button>
         </div>
         <div class="toolbar">
           <input type="text" id="eventsUsersFilter" placeholder="Поиск по user_id или нику…" style="min-width:240px" />
         </div>
-        <table class="sortable" id="eventsUsersTable">
+        <table id="eventsUsersTable">
           <thead>
             <tr>
-              <th data-nosort>
-                <input type="checkbox" id="eventsSelectAll" title="Выбрать все видимые" />
+              <th>
+                <input type="checkbox" id="eventsSelectAll" title="Выбрать все на странице" />
               </th>
               <th>user_id</th>
               <th>user_name</th>
@@ -798,11 +827,15 @@
             <tr><td colspan="3" class="empty">Загрузка…</td></tr>
           </tbody>
         </table>
+        <div class="pager" id="eventsUsersPager"></div>
       </div>
 
       <div class="card" style="margin-top: 16px">
         <h3>Лог ручных выдач</h3>
-        <table class="sortable">
+        <div class="toolbar" style="margin-bottom:10px">
+          <input type="text" id="eventsLogFilter" placeholder="Поиск по user_id, нику или предмету…" style="min-width:280px" />
+        </div>
+        <table>
           <thead>
             <tr>
               <th>Время</th>
@@ -816,6 +849,7 @@
             <tr><td colspan="5" class="empty">—</td></tr>
           </tbody>
         </table>
+        <div class="pager" id="eventsLogPager"></div>
       </div>
     </section>
 

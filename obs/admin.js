@@ -1724,8 +1724,14 @@
     mermaid_shield: "Щит от русалки",
     steal_safe: "Карманный сейф",
   };
+  const EVENTS_PAGE_SIZE = 30;
   let eventsUsers = [];
   let eventsSelected = new Set();
+  let eventsUsersPage = 1;
+  let eventsLogPage = 1;
+  let eventsLogPages = 1;
+  let eventsLogTotal = 0;
+  let eventsLogFilterTimer = null;
 
   function eventsReadWeekdays() {
     return Array.from(
@@ -1752,6 +1758,90 @@
     return d.toLocaleString("ru-RU", { hour12: false });
   }
 
+  function eventsFilteredUsers() {
+    const q = document.getElementById("eventsUsersFilter").value.trim().toLowerCase();
+    if (!q) return eventsUsers;
+    return eventsUsers.filter(
+      (p) =>
+        String(p.user_id).toLowerCase().includes(q) ||
+        (p.user_name && String(p.user_name).toLowerCase().includes(q))
+    );
+  }
+
+  /** Fixed head + window: numbers and 'ellipsis'. */
+  function eventsPagerPages(current, totalPages) {
+    const pages = Math.max(1, Number(totalPages) || 1);
+    const cur = Math.min(Math.max(1, Number(current) || 1), pages);
+    if (pages <= 10) {
+      return Array.from({ length: pages }, (_, i) => i + 1);
+    }
+    if (cur <= 6) {
+      return [1, 2, 3, 4, 5, 6, 7, 8, 9, "ellipsis", pages];
+    }
+    if (cur >= pages - 5) {
+      const start = pages - 8;
+      const tail = [];
+      for (let p = start; p <= pages; p++) tail.push(p);
+      return [1, "ellipsis", ...tail];
+    }
+    return [
+      1,
+      "ellipsis",
+      cur - 2,
+      cur - 1,
+      cur,
+      cur + 1,
+      cur + 2,
+      "ellipsis",
+      pages,
+    ];
+  }
+
+  function renderEventsPager(containerId, { page, pages, total, onPage }) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const totalPages = Math.max(1, pages || 1);
+    const cur = Math.min(Math.max(1, page || 1), totalPages);
+    const items = eventsPagerPages(cur, totalPages);
+
+    const parts = [];
+    parts.push(
+      `<button type="button" class="small pager-nav" data-pager-go="${cur - 1}" ${
+        cur <= 1 ? "disabled" : ""
+      }>←</button>`
+    );
+    for (const item of items) {
+      if (item === "ellipsis") {
+        parts.push('<span class="pager-ellipsis">…</span>');
+        continue;
+      }
+      const active = item === cur ? " active" : "";
+      const disabled = item === cur ? " disabled" : "";
+      parts.push(
+        `<button type="button" class="small pager-page${active}" data-pager-go="${item}"${disabled}>${item}</button>`
+      );
+    }
+    parts.push(
+      `<button type="button" class="small pager-nav" data-pager-go="${cur + 1}" ${
+        cur >= totalPages || !total ? "disabled" : ""
+      }>→</button>`
+    );
+    parts.push(
+      `<span class="pager-total">${
+        total ? `всего ${total}` : "нет записей"
+      }</span>`
+    );
+    el.innerHTML = parts.join("");
+    el.querySelectorAll("[data-pager-go]").forEach((btn) => {
+      if (btn.disabled) return;
+      btn.addEventListener("click", () => {
+        const n = parseInt(btn.getAttribute("data-pager-go"), 10);
+        if (!Number.isFinite(n) || n < 1 || n > totalPages || n === cur) return;
+        onPage(n);
+      });
+    });
+  }
+
   function renderEventsLog(rows) {
     const body = document.getElementById("eventsLogBody");
     if (!rows || !rows.length) {
@@ -1774,24 +1864,35 @@
 
   function renderEventsUsers() {
     const body = document.getElementById("eventsUsersBody");
-    const q = document.getElementById("eventsUsersFilter").value.trim().toLowerCase();
-    const items = q
-      ? eventsUsers.filter(
-          (p) =>
-            String(p.user_id).toLowerCase().includes(q) ||
-            (p.user_name && String(p.user_name).toLowerCase().includes(q))
-        )
-      : eventsUsers;
+    const filtered = eventsFilteredUsers();
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / EVENTS_PAGE_SIZE) || 1);
+    if (eventsUsersPage > pages) eventsUsersPage = pages;
+    if (eventsUsersPage < 1) eventsUsersPage = 1;
+    renderEventsPager("eventsUsersPager", {
+      page: eventsUsersPage,
+      pages,
+      total,
+      onPage: (n) => {
+        eventsUsersPage = n;
+        renderEventsUsers();
+      },
+    });
 
-    if (!items.length) {
+    if (!total) {
       body.innerHTML =
         '<tr><td colspan="3" class="empty">' +
-        (q ? "Ничего не найдено" : "Нет пользователей") +
+        (document.getElementById("eventsUsersFilter").value.trim()
+          ? "Ничего не найдено"
+          : "Нет пользователей") +
         "</td></tr>";
+      document.getElementById("eventsSelectAll").checked = false;
       return;
     }
 
-    body.innerHTML = items
+    const start = (eventsUsersPage - 1) * EVENTS_PAGE_SIZE;
+    const pageItems = filtered.slice(start, start + EVENTS_PAGE_SIZE);
+    body.innerHTML = pageItems
       .map((p) => {
         const id = String(p.user_id);
         const checked = eventsSelected.has(id) ? " checked" : "";
@@ -1803,12 +1904,19 @@
       </tr>`;
       })
       .join("");
+
+    const cbs = Array.from(
+      document.querySelectorAll("#eventsUsersBody .events-user-cb")
+    );
+    document.getElementById("eventsSelectAll").checked =
+      cbs.length > 0 && cbs.every((cb) => cb.checked);
   }
 
   async function loadEventsUsers(silent) {
     try {
       const data = await api("GET", "/api/points");
       eventsUsers = data.items || [];
+      eventsUsersPage = 1;
       renderEventsUsers();
       if (!silent) setStatus(`Пользователей: ${eventsUsers.length}`, "ok");
     } catch (e) {
@@ -1818,13 +1926,41 @@
     }
   }
 
+  async function loadEventsLog(page, silent) {
+    const q = document.getElementById("eventsLogFilter").value.trim();
+    const pg = page != null ? page : eventsLogPage;
+    try {
+      const params = new URLSearchParams({
+        page: String(pg),
+        limit: String(EVENTS_PAGE_SIZE),
+      });
+      if (q) params.set("q", q);
+      const data = await api("GET", `/api/events/log?${params.toString()}`);
+      eventsLogPage = data.page || 1;
+      eventsLogPages = data.pages || 1;
+      eventsLogTotal = data.total || 0;
+      renderEventsLog(data.items || []);
+      renderEventsPager("eventsLogPager", {
+        page: eventsLogPage,
+        pages: eventsLogPages,
+        total: eventsLogTotal,
+        onPage: (n) => loadEventsLog(n, true),
+      });
+      if (!silent) setStatus(`Лог: ${eventsLogTotal} записей`, "ok");
+    } catch (e) {
+      document.getElementById("eventsLogBody").innerHTML =
+        '<tr><td colspan="5" class="empty">Ошибка загрузки</td></tr>';
+      if (!silent) setStatus(e.message, "err");
+    }
+  }
+
   async function loadEvents(silent) {
     if (!silent) setStatus("Загрузка ивентов…");
     try {
       const data = await api("GET", "/api/events");
       eventsFillSchedule(data.schedule);
-      renderEventsLog(data.grant_log || []);
       await loadEventsUsers(true);
+      await loadEventsLog(1, true);
       if (!silent) setStatus("Ивенты загружены", "ok");
     } catch (e) {
       if (!silent) setStatus(e.message, "err");
@@ -1845,17 +1981,24 @@
     try {
       const data = await api("PUT", "/api/events/schedule", payload);
       eventsFillSchedule(data.schedule);
-      renderEventsLog(data.grant_log || []);
       setStatus("Расписание сохранено", "ok");
     } catch (e) {
       setStatus(e.message, "err");
     }
   });
 
-  document.getElementById("eventsUsersFilter").addEventListener("input", renderEventsUsers);
+  document.getElementById("eventsUsersFilter").addEventListener("input", () => {
+    eventsUsersPage = 1;
+    renderEventsUsers();
+  });
   document.getElementById("eventsUsersRefresh").addEventListener("click", () =>
     loadEventsUsers(false)
   );
+
+  document.getElementById("eventsLogFilter").addEventListener("input", () => {
+    clearTimeout(eventsLogFilterTimer);
+    eventsLogFilterTimer = setTimeout(() => loadEventsLog(1, true), 250);
+  });
 
   document.getElementById("eventsUsersBody").addEventListener("change", (e) => {
     const t = e.target;
@@ -1864,6 +2007,11 @@
     if (!id) return;
     if (t.checked) eventsSelected.add(id);
     else eventsSelected.delete(id);
+    const cbs = Array.from(
+      document.querySelectorAll("#eventsUsersBody .events-user-cb")
+    );
+    document.getElementById("eventsSelectAll").checked =
+      cbs.length > 0 && cbs.every((cb) => cb.checked);
   });
 
   document.getElementById("eventsSelectAll").addEventListener("change", (e) => {
@@ -1875,6 +2023,14 @@
       if (on) eventsSelected.add(id);
       else eventsSelected.delete(id);
     });
+  });
+
+  document.getElementById("eventsSelectAllPages").addEventListener("click", () => {
+    eventsFilteredUsers().forEach((p) => {
+      eventsSelected.add(String(p.user_id));
+    });
+    renderEventsUsers();
+    setStatus(`Выбрано: ${eventsSelected.size}`, "ok");
   });
 
   document.getElementById("eventsClearSelection").addEventListener("click", () => {
@@ -1911,7 +2067,7 @@
     setStatus(`Выдача ${item} × ${ids.length}…`);
     try {
       const data = await api("POST", "/api/events/grant", body);
-      renderEventsLog(data.grant_log || []);
+      await loadEventsLog(1, true);
       setStatus(`Выдано: ${data.granted}`, "ok");
     } catch (e) {
       setStatus(e.message, "err");

@@ -442,7 +442,7 @@ sqlite3 data\bot.db "SELECT user_id, balance FROM points ORDER BY balance DESC L
 | `fishing_players.event_boost_day_key` | Идемпотентность ленивой выдачи ивент-буста за сутки |
 | `fishing_grant_log` | Лог **ручных** выдач из админки «Ивенты» |
 
-API: `GET /api/events`, `PUT /api/events/schedule`, `POST /api/events/grant`.
+API: `GET /api/events`, `PUT /api/events/schedule`, `POST /api/events/grant`, `GET /api/events/log?page=&limit=&q=`.
 
 ### Daycycle: анонс суток (m034)
 
