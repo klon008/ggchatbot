@@ -444,6 +444,14 @@ sqlite3 data\bot.db "SELECT user_id, balance FROM points ORDER BY balance DESC L
 
 API: `GET /api/events`, `PUT /api/events/schedule`, `POST /api/events/grant`.
 
+### Daycycle: анонс суток (m034)
+
+| Таблица / колонка | Назначение |
+|------------------|------------|
+| `daycycle_meta.announced_day_key` | Идемпотентность общего анонса смены суток (МСК) |
+
+Модуль `bot/daycycle`: хуки fishing/princess, триггер — первое сообщение чата или tick у полуночи.
+
 ---
 
 ## Быстрая шпаргалка

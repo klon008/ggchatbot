@@ -17,6 +17,7 @@ from bot.web.routes.admin import AdminRoutes
 from bot.web.routes.docs import DocsRoutes
 from config import Config
 
+from .daycycle import DaycycleHandler
 from .fishing import FishingHandler
 from .goodgame import GoodGameClient
 from .polls import PollsHandler
@@ -34,6 +35,7 @@ class StreamBot:
         self.db = Database(db_path)
         self.busy = EconomyBusyGate()
         self.web = LocalWebServer(cfg.obs_host, cfg.obs_port)
+        self.daycycle = DaycycleHandler(db=self.db)
         self.princess = PrincessHandler(
             db=self.db,
             admin_user_id=cfg.gg_admin_user_id,
@@ -118,6 +120,9 @@ class StreamBot:
         self.princess.bind_viewers_fetch(self.gg.get_users_list)
         self.princess.bind_reply(self._princess_reply)
         self.princess.bind_announce(self._reply)
+        self.daycycle.bind_reply(self._reply)
+        self.daycycle.add_hook(self.fishing)
+        self.daycycle.add_hook(self.princess)
         self.sr.bind_reply(self._reply)
         self.roulette.bind_reply(self._reply)
         self.races.bind_reply(self._reply)
@@ -138,6 +143,7 @@ class StreamBot:
         self.cards.bind_obs(self.sr.player)
         self.fishing.bind_obs(self.sr.player)
         self.races.bind_obs(self.sr.player)
+        await self.daycycle.start()
         await self.princess.start()
         await self.roulette.start()
         await self.races.start()
@@ -153,6 +159,7 @@ class StreamBot:
         await self.gg.run()
 
     async def close(self) -> None:
+        await self.daycycle.close()
         await self.princess.close()
         await self.roulette.close()
         await self.races.close()
@@ -176,6 +183,7 @@ class StreamBot:
             )
 
     async def _dispatch_chat_message(self, msg) -> None:
+        await self.daycycle.on_chat_message(msg)
         text = (msg.text or "").strip()
         cmd = text.split(maxsplit=1)[0].lower() if text else ""
         if cmd.startswith("!"):

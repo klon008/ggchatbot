@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Awaitable, Callable, Optional
 
 from bot.economy import PointsStore
@@ -62,14 +62,12 @@ class PrincessHandler:
         self._reply: Optional[ReplyFn] = None
         self._announce: Optional[AnnounceFn] = None
         self._fetch_viewers: Optional[ViewersFetchFn] = None
-        self._last_schedule_was_open: Optional[bool] = None
 
     async def start(self) -> None:
         await self.points.load()
         await self.steal.load()
         await self.daily.load()
         await self.daily.normalize()
-        self._last_schedule_was_open = is_steal_schedule_day()
         self._tick_task = asyncio.create_task(self._passive_income_loop())
         self._steal_watch_task = asyncio.create_task(self._steal_watch_loop())
         log.info("Princess-модуль запущен.")
@@ -236,14 +234,6 @@ class PrincessHandler:
             while True:
                 await self._steal_process_events()
                 delay = await self._steal_next_wake_delay()
-                meta = await self.steal.get_meta()
-                today_key = now_msk().strftime("%Y-%m-%d")
-                # Пока GG не подключён, анонс дня кражи не дойдёт — короткий retry.
-                if (
-                    is_steal_schedule_day()
-                    and meta["last_schedule_open_key"] != today_key
-                ):
-                    delay = min(delay, 15.0)
                 self._steal_wake.clear()
                 try:
                     await asyncio.wait_for(
@@ -272,6 +262,38 @@ class PrincessHandler:
         )
         return max(1.0, (tomorrow - now).total_seconds())
 
+    async def on_new_day(self, ctx) -> list[str]:
+        """Вклад в анонс смены суток: открытие/закрытие дня кражи по расписанию."""
+        parts: list[str] = []
+        today_open = is_steal_schedule_day()
+        if today_open:
+            parts.append(
+                "Сегодня день кражи! Команда !кража доступна до конца суток (МСК)."
+            )
+
+        try:
+            prev = date.fromisoformat(ctx.previous)
+        except ValueError:
+            prev = None
+        if (
+            prev is not None
+            and prev.weekday() in STEAL_ALLOWED_WEEKDAYS
+            and not today_open
+        ):
+            meta = await self.steal.get_meta()
+            now = time.time()
+            override_active = bool(meta["override_enabled"]) or (
+                meta["override_until"] is not None and meta["override_until"] > now
+            )
+            if not override_active:
+                nxt = next_steal_weekday_label()
+                parts.append(f"День кражи закончился. Следующий — {nxt}.")
+        return parts
+
+    async def on_day_announced(self, ctx) -> None:
+        if is_steal_schedule_day():
+            await self.steal.set_schedule_open_key(ctx.today)
+
     async def _steal_process_events(self) -> None:
         await self._process_missed_day_decay()
 
@@ -280,29 +302,6 @@ class PrincessHandler:
             meta = await self.steal.get_meta()
             if not meta["override_enabled"] and not is_steal_schedule_day():
                 await self._announce_chat("Кража закрыта.")
-
-        schedule_open = is_steal_schedule_day()
-        today_key = now_msk().strftime("%Y-%m-%d")
-        meta = await self.steal.get_meta()
-
-        if schedule_open and meta["last_schedule_open_key"] != today_key:
-            ok = await self._announce_chat(
-                "Сегодня день кражи! Команда !кража доступна до конца суток (МСК)."
-            )
-            if ok:
-                await self.steal.set_schedule_open_key(today_key)
-        elif (
-            self._last_schedule_was_open
-            and not schedule_open
-            and not meta["override_enabled"]
-            and not (
-                meta["override_until"] is not None and meta["override_until"] > time.time()
-            )
-        ):
-            nxt = next_steal_weekday_label()
-            await self._announce_chat(f"День кражи закончился. Следующий — {nxt}.")
-
-        self._last_schedule_was_open = schedule_open
 
     async def _process_missed_day_decay(self) -> None:
         """If yesterday was ср/пт and not yet processed — decay players who skipped."""

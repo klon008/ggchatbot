@@ -350,6 +350,11 @@ CREATE TABLE IF NOT EXISTS fishing_grant_log (
     amount INTEGER NOT NULL DEFAULT 0,
     note TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS daycycle_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    announced_day_key TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -399,6 +404,9 @@ async def init_schema(
         "INSERT OR IGNORE INTO fishing_meta "
         "(id, day_key, first_fish_claimed, current_week_id, pending_rewards_week_id) "
         "VALUES (1, '', 0, '', '')"
+    )
+    await conn.execute(
+        "INSERT OR IGNORE INTO daycycle_meta (id, announced_day_key) VALUES (1, '')"
     )
     from .migrate import run_migrations
     from .migrations.m009_elsa_mythic import seed_if_empty

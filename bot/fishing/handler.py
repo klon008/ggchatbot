@@ -89,6 +89,17 @@ class FishingHandler:
     def bind_steal_allowed(self, fn: StealAllowedFn) -> None:
         self._steal_allowed = fn
 
+    async def on_new_day(self, ctx) -> list[str]:
+        """Вклад в анонс смены суток (daycycle)."""
+        await self.store.ensure_calendar()
+        parts = [texts.pick(texts.BAIT_SPOILED)]
+        events = await self.store.load_events_config()
+        if events.is_active_today():
+            parts.append(
+                texts.pick(texts.EVENT_BOOST_DAY).format(N=events.boost_casts)
+            )
+        return parts
+
     async def _is_steal_active(self) -> bool:
         if self._steal_allowed is None:
             return False
@@ -459,16 +470,7 @@ class FishingHandler:
         rest = text[len(FISHING_CMD) :].strip()
         sub = rest.split(maxsplit=1)[0].lower() if rest else ""
 
-        cal = await self.store.ensure_calendar()
         prefix_note = ""
-        if cal["day_changed"]:
-            prefix_note = texts.pick(texts.BAIT_SPOILED) + " "
-            events = await self.store.load_events_config()
-            if events.is_active_today():
-                prefix_note += (
-                    texts.pick(texts.EVENT_BOOST_DAY).format(N=events.boost_casts)
-                    + " "
-                )
 
         # Любая !рыбалка* — ленивая выдача ивент-буста (тихо, 1 раз/сутки).
         await self.store.get_or_create_player(msg.user_id, msg.user_name)
