@@ -38,19 +38,7 @@ class AlbumApiRoutes:
         app.router.add_route("OPTIONS", "/api/v1/health", self._options)
 
     def _cors_origin(self, request: web.Request) -> Optional[str]:
-        origin = request.headers.get("Origin", "")
-        if not origin:
-            return self._cors_origins[0] if self._cors_origins else "*"
-        for allowed in self._cors_origins:
-            if allowed == "*":
-                return origin
-            if origin == allowed or (
-                allowed.startswith("https://") and origin.endswith(allowed.removeprefix("https://"))
-            ):
-                return origin
-        if "github.io" in origin:
-            return origin
-        return self._cors_origins[0] if self._cors_origins else None
+        return resolve_cors_origin(request, self._cors_origins)
 
     def _with_cors(self, request: web.Request, response: web.Response) -> web.Response:
         origin = self._cors_origin(request)
@@ -152,3 +140,28 @@ def parse_cors_origins(site_base_url: str) -> tuple[str, ...]:
     if parsed.scheme and parsed.netloc:
         return (f"{parsed.scheme}://{parsed.netloc}",)
     return ("https://klon008.github.io",)
+
+
+def resolve_cors_origin(
+    request: web.Request,
+    cors_origins: tuple[str, ...],
+) -> Optional[str]:
+    """Выбрать Access-Control-Allow-Origin: SITE_BASE, github.io, localhost Vite."""
+    origin = request.headers.get("Origin", "")
+    if not origin:
+        return cors_origins[0] if cors_origins else "*"
+    for allowed in cors_origins:
+        if allowed == "*":
+            return origin
+        if origin == allowed or (
+            allowed.startswith("https://")
+            and origin.endswith(allowed.removeprefix("https://"))
+        ):
+            return origin
+    if "github.io" in origin:
+        return origin
+    # Local Vite / SPA (http://localhost:5173, http://127.0.0.1:5173, …)
+    if origin.startswith(("http://localhost:", "http://127.0.0.1:")):
+        return origin
+    return cors_origins[0] if cors_origins else None
+

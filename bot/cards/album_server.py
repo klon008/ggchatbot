@@ -11,6 +11,7 @@ from bot.web.server import LocalWebServer
 
 from .constants import ALBUM_API_HOST, ALBUM_API_PORT
 from .routes.album import AlbumApiRoutes, parse_cors_origins
+from .routes.fishing import FishingApiRoutes
 
 log = logging.getLogger("cards.album_server")
 
@@ -20,11 +21,17 @@ class AlbumWebServer:
         self._server = LocalWebServer(ALBUM_API_HOST, ALBUM_API_PORT)
         cors = parse_cors_origins(site_base_url)
         AlbumApiRoutes(db, link_secret, cors).register(self._server.app)
+        FishingApiRoutes(db, cors).register(self._server.app)
 
     async def start(self) -> None:
         await self._server.start()
         log.info(
             "Album API: http://%s:%d/api/v1/album",
+            ALBUM_API_HOST,
+            ALBUM_API_PORT,
+        )
+        log.info(
+            "Fishing API: http://%s:%d/api/v1/fishing",
             ALBUM_API_HOST,
             ALBUM_API_PORT,
         )
