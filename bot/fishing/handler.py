@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, Optional
 
 from bot.db import Database
 from bot.db import fishing as fishing_db
@@ -36,12 +36,18 @@ from .settings import (
 from .storage import FishingStorage
 
 if TYPE_CHECKING:
+    from bot.cards.clo_tunnel import CloTunnel
     from bot.web.routes.player import PlayerRoutes
 
 log = logging.getLogger("fishing")
 
 ReplyFn = Callable[[str], Awaitable[None]]
 StealAllowedFn = Callable[[], Awaitable[bool]]
+FishingTab = Literal["weekly", "alltime", "guide"]
+
+HELP_ALIASES = frozenset({"помощь", "инфо", "info", "help", "справка"})
+TOP_ALIASES = frozenset({"топрыба", "топ", "топнеделя"})
+TROPHY_ALIASES = frozenset({"трофеи", "рекорды", "залславы"})
 
 
 class FishingHandler:
@@ -54,6 +60,9 @@ class FishingHandler:
         self._points: Optional[PointsStore] = None
         self._player: Optional["PlayerRoutes"] = None
         self._steal_allowed: Optional[StealAllowedFn] = None
+        self._site_base_url: str = ""
+        self._link_secret: str = ""
+        self._clo: Optional["CloTunnel"] = None
 
     async def start(self) -> None:
         await fishing_db.ensure_meta(self._db)
@@ -88,6 +97,50 @@ class FishingHandler:
 
     def bind_steal_allowed(self, fn: StealAllowedFn) -> None:
         self._steal_allowed = fn
+
+    def bind_site(
+        self,
+        *,
+        site_base_url: str,
+        link_secret: str,
+        clo: "CloTunnel",
+    ) -> None:
+        self._site_base_url = site_base_url
+        self._link_secret = link_secret
+        self._clo = clo
+
+    def _try_build_page_url(self, tab: FishingTab) -> Optional[str]:
+        """Собрать ссылку на /fishing?api=…#tab или None, если нет секрета/туннеля."""
+        if not self._link_secret or not self._site_base_url:
+            return None
+        api_url = self._clo.public_url if self._clo is not None else None
+        if not api_url:
+            return None
+        from bot.cards.album_token import build_fishing_url
+
+        return build_fishing_url(
+            site_base_url=self._site_base_url,
+            link_secret=self._link_secret,
+            api_base_url=api_url,
+            tab=tab,
+        )
+
+    async def _reply_site_page(
+        self,
+        msg: ChatMessage,
+        tab: FishingTab,
+        templates: tuple[str, ...],
+    ) -> None:
+        """Короткий ответ в чат: пара слов + ссылка на страницу (без полотна текста)."""
+        url = self._try_build_page_url(tab)
+        if not url:
+            await self._say(
+                f"{msg.user_name}, {texts.pick(texts.SITE_UNAVAILABLE)}"
+            )
+            return
+        await self._say(
+            f"{msg.user_name}, {texts.pick(templates).format(url=url)}"
+        )
 
     async def on_new_day(self, ctx) -> list[str]:
         """Вклад в анонс смены суток (daycycle)."""
@@ -149,6 +202,52 @@ class FishingHandler:
                 "imageUrl": f"/assets/fishing/{slug}.png",
             }
         )
+
+    @staticmethod
+    def _board_catch_row(row: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        if not row:
+            return None
+        return {
+            "species": str(row.get("species") or ""),
+            "user_name": str(row.get("user_name") or ""),
+            "weight": round(float(row.get("weight") or 0), 2),
+        }
+
+    async def build_board_payload(
+        self,
+        kind: str = "snapshot",
+        changed: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Lean payload для полноэкранной доски трофеев (WS)."""
+        await self.store.ensure_calendar()
+        meta = await self.store.meta()
+        leaders, fow = await self.store.week_top()
+        trophies = await self.store.list_trophies()
+        payload: dict[str, Any] = {
+            "action": "fishing_board",
+            "kind": kind if kind in ("snapshot", "update") else "snapshot",
+            "week_id": str(meta.get("current_week_id") or ""),
+            "week_leaders": [
+                r
+                for r in (self._board_catch_row(x) for x in leaders)
+                if r is not None
+            ],
+            "fish_of_week": self._board_catch_row(fow),
+            "trophies": [
+                r
+                for r in (self._board_catch_row(x) for x in trophies)
+                if r is not None
+            ],
+        }
+        if kind == "update" and changed:
+            payload["changed"] = changed
+        return payload
+
+    async def push_board_update(self, changed: dict[str, Any]) -> None:
+        if self._player is None or not self._player.has_fishing_board_clients:
+            return
+        payload = await self.build_board_payload("update", changed)
+        await self._player.broadcast_fishing_board(payload)
 
     async def _push_mermaid_overlay(
         self, *, user_name: str, loss: int, kind: str = "mermaid"
@@ -551,11 +650,8 @@ class FishingHandler:
         if sub == "защита":
             await self._cmd_shield(msg, prefix_note, rest)
             return True
-        if sub == "помощь":
-            await self._say(
-                f"{msg.user_name}, "
-                f"{texts.pick(texts.HELP).format(N=FIRST_FISH_BONUS, C=self._rt.maggot_cost)}"
-            )
+        if sub in HELP_ALIASES:
+            await self._cmd_help(msg)
             return True
         if sub == "энергия":
             await self._cmd_energy(msg)
@@ -563,18 +659,21 @@ class FishingHandler:
         if sub == "улов":
             await self._cmd_catch(msg)
             return True
-        if sub == "топрыба":
+        if sub in TOP_ALIASES:
             await self._cmd_top(msg)
             return True
-        if sub == "трофеи":
+        if sub in TROPHY_ALIASES:
             await self._cmd_trophies(msg)
             return True
 
         await self._say(
             f"{msg.user_name}, неизвестная подкоманда. "
-            f"{texts.pick(texts.HELP).format(N=FIRST_FISH_BONUS, C=self._rt.maggot_cost)}"
+            f"Справка: !рыбалка помощь"
         )
         return True
+
+    async def _cmd_help(self, msg: ChatMessage) -> None:
+        await self._reply_site_page(msg, "guide", texts.SITE_GUIDE)
 
     async def _cmd_cast(self, msg: ChatMessage, prefix_note: str) -> None:
         points = self._require_points()
@@ -643,6 +742,22 @@ class FishingHandler:
                     )
             if flags.get("fish_of_week"):
                 result.message += " " + texts.pick(texts.WEEK_FISH_OF_WEEK)
+
+            board_changed: dict[str, Any] = {
+                "week": [],
+                "trophies": [],
+                "fish_of_week": bool(flags.get("fish_of_week")),
+            }
+            if flags.get("week_species_record") or flags.get("fish_of_week"):
+                board_changed["week"] = [result.species]
+            if flags.get("all_time_trophy"):
+                board_changed["trophies"] = [result.species]
+            if (
+                board_changed["week"]
+                or board_changed["trophies"]
+                or board_changed["fish_of_week"]
+            ):
+                await self.push_board_update(board_changed)
         elif result.kind == "mermaid":
             await self._push_mermaid_overlay(
                 user_name=msg.user_name,
@@ -818,43 +933,14 @@ class FishingHandler:
         await self._say(f"{msg.user_name}, Твои рекорды: {parts}. {res}.")
 
     async def _cmd_top(self, msg: ChatMessage) -> None:
-        leaders, fow = await self.store.week_top()
-        if not leaders:
-            await self._say(
-                f"{msg.user_name}, Недельный топ пока пуст. Лови рыбу — и займи место!"
-            )
-            return
-        leader_bits = [
-            f"{r['species']} — {r['user_name'] or r['user_id']} ({r['weight']:.2f} кг)"
-            for r in leaders
-        ]
-        leaders_str = ", ".join(leader_bits)
-        fow_name = (fow["user_name"] if fow else "—") or "—"
-        fow_weight = f"{fow['weight']:.2f}" if fow else "—"
-        body = texts.pick(texts.TOP_WEEK).format(
-            leaders=leaders_str,
-            fow_name=fow_name,
-            fow_weight=fow_weight,
-        )
-        await self._say(f"{msg.user_name}, {body}")
+        leaders, _fow = await self.store.week_top()
+        templates = texts.SITE_TOP_WEEK if leaders else texts.SITE_TOP_WEEK_EMPTY
+        await self._reply_site_page(msg, "weekly", templates)
 
     async def _cmd_trophies(self, msg: ChatMessage) -> None:
         trophies = await self.store.list_trophies()
-        if not trophies:
-            await self._say(
-                f"{msg.user_name}, {texts.pick(texts.TOP_TROPHIES_EMPTY)}"
-            )
-            return
-        order = {name: i for i, name in enumerate(FISH_SPECIES)}
-        trophies_sorted = sorted(
-            trophies, key=lambda r: order.get(str(r["species"]), 999)
-        )
-        leader_bits = [
-            f"{r['species']} — {r['user_name'] or r['user_id']} ({r['weight']:.2f} кг)"
-            for r in trophies_sorted
-        ]
-        body = texts.pick(texts.TOP_TROPHIES).format(leaders=", ".join(leader_bits))
-        await self._say(f"{msg.user_name}, {body}")
+        templates = texts.SITE_TROPHIES if trophies else texts.SITE_TROPHIES_EMPTY
+        await self._reply_site_page(msg, "alltime", templates)
 
     async def _say(self, text: str) -> None:
         if self._reply is None:

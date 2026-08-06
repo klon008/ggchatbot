@@ -26,10 +26,18 @@ class PlayerRoutes:
         self._clients: set[web.WebSocketResponse] = set()
         self._booster_clients: set[web.WebSocketResponse] = set()
         self._fishing_record_clients: set[web.WebSocketResponse] = set()
+        self._fishing_board_clients: set[web.WebSocketResponse] = set()
         self._races_clients: set[web.WebSocketResponse] = set()
+        self._fishing_board_snapshot: Optional[Callable[[], Awaitable[dict]]] = None
 
     def bind_ym_stream(self, ym_stream: object) -> None:
         self._ym_stream = ym_stream
+
+    def bind_fishing_board_snapshot(
+        self, provider: Callable[[], Awaitable[dict]]
+    ) -> None:
+        """Провайдер snapshot для fishing_board при ready."""
+        self._fishing_board_snapshot = provider
 
     def add_status_handler(self, handler: StatusHandler) -> None:
         self._extra_handlers.append(handler)
@@ -44,6 +52,11 @@ class PlayerRoutes:
                 web.get("/booster.js", self._handle_booster_js),
                 web.get("/fishing-record.html", self._handle_fishing_record_html),
                 web.get("/fishing-record.js", self._handle_fishing_record_js),
+                web.get("/fishing/board.html", self._handle_fishing_board_html),
+                web.get("/fishing/board.css", self._handle_fishing_board_css),
+                web.get("/fishing/board.js", self._handle_fishing_board_js),
+                web.get("/fishing/pixi-bg.js", self._handle_fishing_pixi_bg_js),
+                web.get("/fishing/pixi.min.js", self._handle_fishing_pixi_min_js),
                 web.get("/sfx.js", self._handle_sfx_js),
                 web.get("/ym/file/{play_token}", self._handle_ym_file),
                 web.get("/ym/cover/{play_token}", self._handle_ym_cover),
@@ -103,6 +116,39 @@ class PlayerRoutes:
             "fishing-record.js", "application/javascript; charset=utf-8"
         )
 
+    async def _handle_fishing_board_html(
+        self, request: web.Request
+    ) -> web.StreamResponse:
+        return await serve_obs_file(
+            "fishing/board.html", "text/html; charset=utf-8"
+        )
+
+    async def _handle_fishing_board_css(
+        self, request: web.Request
+    ) -> web.StreamResponse:
+        return await serve_obs_file("fishing/board.css", "text/css; charset=utf-8")
+
+    async def _handle_fishing_board_js(
+        self, request: web.Request
+    ) -> web.StreamResponse:
+        return await serve_obs_file(
+            "fishing/board.js", "application/javascript; charset=utf-8"
+        )
+
+    async def _handle_fishing_pixi_bg_js(
+        self, request: web.Request
+    ) -> web.StreamResponse:
+        return await serve_obs_file(
+            "fishing/pixi-bg.js", "application/javascript; charset=utf-8"
+        )
+
+    async def _handle_fishing_pixi_min_js(
+        self, request: web.Request
+    ) -> web.StreamResponse:
+        return await serve_obs_file(
+            "fishing/pixi.min.js", "application/javascript; charset=utf-8"
+        )
+
     async def _handle_sfx_js(self, request: web.Request) -> web.StreamResponse:
         return await serve_obs_file("sfx.js", "application/javascript; charset=utf-8")
 
@@ -117,6 +163,10 @@ class PlayerRoutes:
     @property
     def has_fishing_record_clients(self) -> bool:
         return len(self._fishing_record_clients) > 0
+
+    @property
+    def has_fishing_board_clients(self) -> bool:
+        return len(self._fishing_board_clients) > 0
 
     @property
     def has_races_clients(self) -> bool:
@@ -137,6 +187,7 @@ class PlayerRoutes:
             self._clients.discard(ws)
             self._booster_clients.discard(ws)
             self._fishing_record_clients.discard(ws)
+            self._fishing_board_clients.discard(ws)
             self._races_clients.discard(ws)
             log.info("Плеер отключился (клиентов: %d)", len(self._clients))
         return ws
@@ -155,6 +206,9 @@ class PlayerRoutes:
                 self._booster_clients.add(ws)
             elif overlay == "fishing_record":
                 self._fishing_record_clients.add(ws)
+            elif overlay == "fishing_board":
+                self._fishing_board_clients.add(ws)
+                await self._send_fishing_board_snapshot(ws)
             elif overlay == "races":
                 await self._claim_races_slot(ws)
         try:
@@ -166,6 +220,15 @@ class PlayerRoutes:
                 await handler(data)
             except Exception:  # noqa: BLE001
                 log.exception("Ошибка extra status handler: %s", data.get("status"))
+
+    async def _send_fishing_board_snapshot(self, ws: web.WebSocketResponse) -> None:
+        if self._fishing_board_snapshot is None:
+            return
+        try:
+            payload = await self._fishing_board_snapshot()
+            await ws.send_str(json.dumps(payload, ensure_ascii=False))
+        except Exception:  # noqa: BLE001
+            log.exception("Не удалось отправить fishing_board snapshot")
 
     async def _claim_races_slot(self, ws: web.WebSocketResponse) -> None:
         """Один races.html: новый коннект вытесняет старый (без дублей анимации)."""
@@ -209,6 +272,22 @@ class PlayerRoutes:
                 dead.append(ws)
         for ws in dead:
             self._fishing_record_clients.discard(ws)
+            self._clients.discard(ws)
+
+    async def broadcast_fishing_board(self, payload: dict) -> None:
+        """Только клиентам fishing_board (полноэкранная доска трофеев)."""
+        if not self._fishing_board_clients:
+            log.debug("Нет fishing_board клиентов, событие пропущено")
+            return
+        msg = json.dumps(payload, ensure_ascii=False)
+        dead: list[web.WebSocketResponse] = []
+        for ws in list(self._fishing_board_clients):
+            try:
+                await ws.send_str(msg)
+            except ConnectionError:
+                dead.append(ws)
+        for ws in dead:
+            self._fishing_board_clients.discard(ws)
             self._clients.discard(ws)
 
     async def broadcast_races(self, payload: dict) -> None:

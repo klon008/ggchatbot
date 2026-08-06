@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Доска трофеев · Рыбалка</title>
+  <link rel="stylesheet" href="/assets/fishing/fonts/fishing-fonts.css" />
+  <link rel="stylesheet" href="/fishing/board.css" />
+</head>
+<body>
+  <div id="pixi-host" class="pixi-host" aria-hidden="true"></div>
+  <div class="veil" aria-hidden="true"></div>
+
+  <main class="board">
+    <header class="board-header">
+      <div class="board-eyebrow">Игровая статистика · Рыбалка</div>
+      <h1 class="board-title">Доска трофеев</h1>
+      <div class="board-rule" aria-hidden="true">
+        <span></span><i></i><span></span>
+      </div>
+      <p id="week-label" class="board-week">—</p>
+    </header>
+
+    <div class="columns">
+      <section class="col" aria-label="Рекорды недели">
+        <div class="col-head">
+          <div class="col-bar"></div>
+          <h2>Рекорды недели</h2>
+        </div>
+        <div id="week-hero" class="hero-slot"></div>
+        <div id="week-grid" class="card-grid card-grid--dense"></div>
+      </section>
+
+      <section class="col" aria-label="Абсолютные рекорды">
+        <div class="col-head">
+          <div class="col-bar"></div>
+          <h2>Абсолютные рекорды</h2>
+        </div>
+        <div id="trophy-grid" class="card-grid card-grid--dense"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="status" class="status" hidden>Подключение…</div>
+
+  <script src="/fishing/pixi.min.js"></script>
+  <script src="/fishing/pixi-bg.js"></script>
+  <script src="/fishing/board.js"></script>
+</body>
+</html>

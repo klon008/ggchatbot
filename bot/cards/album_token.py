@@ -88,3 +88,18 @@ def build_album_url(
         quote_via=quote,
     )
     return f"{base}/?{params}"
+
+
+def build_fishing_url(
+    *,
+    site_base_url: str,
+    link_secret: str,
+    api_base_url: str,
+    tab: str = "weekly",
+) -> str:
+    """Публичная ссылка на доску трофеев: /fishing?api=ENC#weekly|alltime|guide."""
+    api_enc = encode_api_url(link_secret, api_base_url)
+    base = site_base_url.rstrip("/")
+    hash_tab = tab if tab in ("weekly", "alltime", "guide") else "weekly"
+    params = urlencode({"api": api_enc}, quote_via=quote)
+    return f"{base}/fishing?{params}#{hash_tab}"

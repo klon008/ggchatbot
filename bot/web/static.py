@@ -21,6 +21,8 @@ _CONTENT_TYPES = {
     ".md": "text/markdown",
     ".txt": "text/plain",
     ".mp3": "audio/mpeg",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
 }
 
 

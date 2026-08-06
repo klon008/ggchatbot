@@ -136,6 +136,11 @@ class StreamBot:
         self.sr.bind_points(self.princess.points)
         self.cards.bind_points(self.princess.points)
         self.fishing.bind_steal_allowed(self.princess.steal.is_allowed)
+        self.fishing.bind_site(
+            site_base_url=self.cfg.site_base_url,
+            link_secret=self.cfg.album_link_secret,
+            clo=self.clo,
+        )
         self.roulette.bind_busy(self.busy)
         self.races.bind_busy(self.busy)
         self.cards.bind_busy(self.busy)
@@ -143,6 +148,9 @@ class StreamBot:
         self.cards.bind_obs(self.sr.player)
         self.fishing.bind_obs(self.sr.player)
         self.races.bind_obs(self.sr.player)
+        self.sr.player.bind_fishing_board_snapshot(
+            lambda: self.fishing.build_board_payload("snapshot")
+        )
         await self.daycycle.start()
         await self.princess.start()
         await self.roulette.start()
@@ -152,6 +160,11 @@ class StreamBot:
         log.info("Бустер OBS: http://%s:%d/booster.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info(
             "Рыбалка-рекорд OBS: http://%s:%d/fishing-record.html",
+            self.cfg.obs_host,
+            self.cfg.obs_port,
+        )
+        log.info(
+            "Доска трофеев: http://%s:%d/fishing/board.html",
             self.cfg.obs_host,
             self.cfg.obs_port,
         )
