@@ -363,6 +363,21 @@ CREATE TABLE IF NOT EXISTS daycycle_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     announced_day_key TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS princess_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    events_json TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS princess_bonus_grants (
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    day_key TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (user_id, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_princess_bonus_grants_kind_day
+    ON princess_bonus_grants(kind, day_key);
 """
 
 
@@ -415,6 +430,9 @@ async def init_schema(
     )
     await conn.execute(
         "INSERT OR IGNORE INTO daycycle_meta (id, announced_day_key) VALUES (1, '')"
+    )
+    await conn.execute(
+        "INSERT OR IGNORE INTO princess_meta (id, events_json) VALUES (1, '')"
     )
     from .migrate import run_migrations
     from .migrations.m009_elsa_mythic import seed_if_empty

@@ -11,7 +11,10 @@ from bot.economy import PointsStore
 from bot.goodgame import ChatMessage
 
 from bot.db import Database
+from bot.db import fishing as fishing_db
+from bot.db import princess as princess_db
 from bot.db import prison as prison_db
+from bot.db import users as users_db
 
 from .commands import (
     cmd_admin_points,
@@ -27,6 +30,16 @@ from .commands import (
     cmd_steal,
 )
 from .economy import is_steal_schedule_day, now_msk
+from .events_settings import (
+    GRANT_ITEM_TO_KIND,
+    GRANT_ITEMS,
+    PrincessEventsConfig,
+    format_mult,
+    parse_events_override,
+    scaled_points,
+    today_key,
+    validate_events_payload,
+)
 from .prison import PrisonManager
 from .settings import (
     MESSAGE_POINTS,
@@ -62,12 +75,14 @@ class PrincessHandler:
         self._reply: Optional[ReplyFn] = None
         self._announce: Optional[AnnounceFn] = None
         self._fetch_viewers: Optional[ViewersFetchFn] = None
+        self._events_cfg: Optional[PrincessEventsConfig] = None
 
     async def start(self) -> None:
         await self.points.load()
         await self.steal.load()
         await self.daily.load()
         await self.daily.normalize()
+        await self._ensure_events_config()
         self._tick_task = asyncio.create_task(self._passive_income_loop())
         self._steal_watch_task = asyncio.create_task(self._steal_watch_loop())
         log.info("Princess-модуль запущен.")
@@ -139,7 +154,7 @@ class PrincessHandler:
             return True
 
         if not text.startswith("!"):
-            await self.points.add(user_id, MESSAGE_POINTS)
+            await self.points.add(user_id, await self._message_points_for(user_id))
             return False
 
         handlers = {
@@ -225,7 +240,7 @@ class PrincessHandler:
                 eligible = await prison_db.filter_eligible(
                     self._db, list(self._viewers.keys())
                 )
-                await self.points.apply_income_tick(eligible, PASSIVE_INCOME_PER_MIN)
+                await self._apply_passive_income(eligible)
         except asyncio.CancelledError:
             raise
 
@@ -262,9 +277,114 @@ class PrincessHandler:
         )
         return max(1.0, (tomorrow - now).total_seconds())
 
+    async def _ensure_events_config(self) -> PrincessEventsConfig:
+        if self._events_cfg is None:
+            override = await princess_db.get_events_override(self._db)
+            self._events_cfg = parse_events_override(override)
+        return self._events_cfg
+
+    def _invalidate_events_config(self) -> None:
+        self._events_cfg = None
+
+    async def _message_points_for(self, user_id: str) -> int:
+        cfg = await self._ensure_events_config()
+        if cfg.is_message_active_today():
+            return scaled_points(MESSAGE_POINTS, cfg.message_mult)
+        if await princess_db.has_grant(
+            self._db, user_id, princess_db.KIND_MESSAGE, today_key()
+        ):
+            return scaled_points(MESSAGE_POINTS, cfg.message_mult)
+        return MESSAGE_POINTS
+
+    async def _apply_passive_income(self, eligible: list[str]) -> None:
+        if not eligible:
+            return
+        cfg = await self._ensure_events_config()
+        if cfg.is_view_active_today():
+            await self.points.apply_income_tick(
+                eligible, scaled_points(PASSIVE_INCOME_PER_MIN, cfg.view_mult)
+            )
+            return
+        boosted_ids = await princess_db.list_grant_user_ids(
+            self._db, kind=princess_db.KIND_VIEW, day_key=today_key()
+        )
+        boosted = [uid for uid in eligible if uid in boosted_ids]
+        normal = [uid for uid in eligible if uid not in boosted_ids]
+        if normal:
+            await self.points.apply_income_tick(normal, PASSIVE_INCOME_PER_MIN)
+        if boosted:
+            await self.points.apply_income_tick(
+                boosted, scaled_points(PASSIVE_INCOME_PER_MIN, cfg.view_mult)
+            )
+
+    async def admin_get_events(self) -> dict:
+        cfg = await self._ensure_events_config()
+        return {
+            "princess_schedule": cfg.to_dict(),
+            "princess_schedule_defaults": PrincessEventsConfig.defaults().to_dict(),
+        }
+
+    async def admin_set_events_schedule(self, payload: dict) -> dict:
+        validated = validate_events_payload(payload)
+        await princess_db.set_events_override(self._db, validated)
+        self._invalidate_events_config()
+        await self._ensure_events_config()
+        log.info("Princess events schedule updated: %s", validated)
+        return await self.admin_get_events()
+
+    async def admin_grant(self, *, user_ids: list[str], item: str) -> dict:
+        item_key = str(item or "").strip()
+        kind = GRANT_ITEM_TO_KIND.get(item_key)
+        if kind is None or item_key not in GRANT_ITEMS:
+            raise ValueError("item")
+        ids = [str(u).strip() for u in user_ids if str(u).strip()]
+        if not ids:
+            raise ValueError("user_ids")
+
+        cfg = await self._ensure_events_config()
+        mult = cfg.view_mult if kind == princess_db.KIND_VIEW else cfg.message_mult
+        day = today_key()
+        note = format_mult(mult)
+        qty = int(round(mult))
+
+        log_ids: list[int] = []
+        for uid in ids:
+            name = await users_db.get_user_name(self._db, uid)
+            await princess_db.upsert_grant(
+                self._db, user_id=uid, kind=kind, day_key=day
+            )
+            lid = await fishing_db.insert_grant_log(
+                self._db,
+                user_id=uid,
+                user_name=name,
+                item=item_key,
+                amount=qty,
+                actor="admin",
+                note=note,
+            )
+            log_ids.append(lid)
+
+        result = await self.admin_get_events()
+        grant_rows, _ = await fishing_db.list_grant_log(self._db, limit=100)
+        result["grant_log"] = grant_rows
+        result["granted"] = len(log_ids)
+        result["log_ids"] = log_ids
+        return result
+
     async def on_new_day(self, ctx) -> list[str]:
         """Вклад в анонс смены суток: открытие/закрытие дня кражи по расписанию."""
         parts: list[str] = []
+        cfg = await self._ensure_events_config()
+        if cfg.is_view_active_today():
+            parts.append(
+                f"Сегодня {format_mult(cfg.view_mult)} принцесс за просмотр "
+                "до конца суток (МСК)."
+            )
+        if cfg.is_message_active_today():
+            parts.append(
+                f"Сегодня {format_mult(cfg.message_mult)} принцесс за сообщения "
+                "до конца суток (МСК)."
+            )
         today_open = is_steal_schedule_day()
         if today_open:
             parts.append(

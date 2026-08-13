@@ -132,6 +132,7 @@ class AdminRoutes:
                 web.post("/api/fishing/trophies/reset", self._api_fishing_trophies_reset),
                 web.get("/api/events", self._api_events_get),
                 web.put("/api/events/schedule", self._api_events_schedule_put),
+                web.put("/api/events/princess-schedule", self._api_events_princess_schedule_put),
                 web.post("/api/events/grant", self._api_events_grant),
                 web.get("/api/events/log", self._api_events_log_get),
                 web.get("/api/events/online", self._api_events_online_get),
@@ -663,8 +664,13 @@ class AdminRoutes:
     async def _api_fishing_trophies_reset(self, request: web.Request) -> web.Response:
         return json_response(await self._fishing.admin_clear_trophies())
 
+    async def _events_payload(self) -> dict:
+        fishing = await self._fishing.admin_get_events()
+        princess = await self._princess.admin_get_events()
+        return {**fishing, **princess}
+
     async def _api_events_get(self, request: web.Request) -> web.Response:
-        return json_response(await self._fishing.admin_get_events())
+        return json_response(await self._events_payload())
 
     async def _api_events_log_get(self, request: web.Request) -> web.Response:
         try:
@@ -709,7 +715,7 @@ class AdminRoutes:
         if data is None or not isinstance(data, dict):
             return error_response("Некорректный JSON")
         try:
-            result = await self._fishing.admin_set_events_schedule(data)
+            fishing = await self._fishing.admin_set_events_schedule(data)
         except ValueError as exc:
             bad = str(exc)
             messages = {
@@ -718,7 +724,27 @@ class AdminRoutes:
                 "boost_casts": "boost_casts должен быть целым числом >= 0",
             }
             return error_response(messages.get(bad, "Некорректное расписание ивентов"))
-        return json_response(result)
+        princess = await self._princess.admin_get_events()
+        return json_response({**fishing, **princess})
+
+    async def _api_events_princess_schedule_put(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None or not isinstance(data, dict):
+            return error_response("Некорректный JSON")
+        try:
+            princess = await self._princess.admin_set_events_schedule(data)
+        except ValueError as exc:
+            bad = str(exc)
+            messages = {
+                "payload": "тело запроса должно быть объектом",
+                "view_weekdays": "view_weekdays — список дней 0–6 (пн=0)",
+                "message_weekdays": "message_weekdays — список дней 0–6 (пн=0)",
+                "view_mult": "view_mult должен быть числом >= 1",
+                "message_mult": "message_mult должен быть числом >= 1",
+            }
+            return error_response(messages.get(bad, "Некорректное расписание ивентов"))
+        fishing = await self._fishing.admin_get_events()
+        return json_response({**fishing, **princess})
 
     async def _api_events_grant(self, request: web.Request) -> web.Response:
         data = await read_json(request)
@@ -733,21 +759,36 @@ class AdminRoutes:
                 amount = int(amount)
             except (TypeError, ValueError):
                 return error_response("amount должен быть целым числом")
+        item = str(data.get("item") or "")
         try:
-            result = await self._fishing.admin_grant(
-                user_ids=user_ids,
-                item=str(data.get("item") or ""),
-                amount=amount,
-            )
+            if item in ("view_boost", "message_boost"):
+                result = await self._princess.admin_grant(
+                    user_ids=user_ids,
+                    item=item,
+                )
+            else:
+                result = await self._fishing.admin_grant(
+                    user_ids=user_ids,
+                    item=item,
+                    amount=amount,
+                )
         except ValueError as exc:
             bad = str(exc)
             messages = {
-                "item": "item: mermaid_shield | bite_boost | steal_safe",
+                "item": (
+                    "item: mermaid_shield | bite_boost | steal_safe "
+                    "| view_boost | message_boost"
+                ),
                 "user_ids": "укажите хотя бы одного пользователя",
                 "amount": "некорректный amount",
             }
             return error_response(messages.get(bad, "Некорректный запрос выдачи"))
-        return json_response(result)
+        extra = await (
+            self._fishing.admin_get_events()
+            if item in ("view_boost", "message_boost")
+            else self._princess.admin_get_events()
+        )
+        return json_response({**result, **extra})
 
     async def _api_fishing_rewards(self, request: web.Request) -> web.Response:
         try:

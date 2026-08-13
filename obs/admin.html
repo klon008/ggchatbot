@@ -814,9 +814,64 @@
       </div>
 
       <div class="card" style="margin-top: 16px">
+        <h3>Расписание: множитель за просмотр</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          В выбранные дни (МСК) пассивный доход за присутствие в чате умножается
+          на коэффициент до конца суток. По умолчанию понедельник, x2.
+          Анонс — вместе с сообщением о смене суток.
+        </p>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;color:#b8b8d0;cursor:pointer">
+          <input type="checkbox" id="eventsViewEnabled" checked />
+          Включено
+        </label>
+        <div class="toolbar" style="flex-wrap:wrap;gap:10px;margin-bottom:12px" id="eventsViewWeekdays">
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="0" checked /> Пн</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="1" /> Вт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="2" /> Ср</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="3" /> Чт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="4" /> Пт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="5" /> Сб</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="6" /> Вс</label>
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:8px;margin-right:12px;color:#b8b8d0">
+          Множитель
+          <input type="number" id="eventsViewMult" min="1" step="0.5" value="2" style="width:90px" />
+        </label>
+        <button type="button" id="eventsViewScheduleSave" class="primary">Сохранить расписание</button>
+      </div>
+
+      <div class="card" style="margin-top: 16px">
+        <h3>Расписание: множитель за сообщение</h3>
+        <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+          В выбранные дни (МСК) награда за каждое сообщение в чате умножается
+          на коэффициент до конца суток. По умолчанию вторник, x2.
+          Анонс — вместе с сообщением о смене суток.
+        </p>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;color:#b8b8d0;cursor:pointer">
+          <input type="checkbox" id="eventsMessageEnabled" checked />
+          Включено
+        </label>
+        <div class="toolbar" style="flex-wrap:wrap;gap:10px;margin-bottom:12px" id="eventsMessageWeekdays">
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="0" /> Пн</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="1" checked /> Вт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="2" /> Ср</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="3" /> Чт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="4" /> Пт</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="5" /> Сб</label>
+          <label style="color:#b8b8d0;cursor:pointer"><input type="checkbox" value="6" /> Вс</label>
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:8px;margin-right:12px;color:#b8b8d0">
+          Множитель
+          <input type="number" id="eventsMessageMult" min="1" step="0.5" value="2" style="width:90px" />
+        </label>
+        <button type="button" id="eventsMessageScheduleSave" class="primary">Сохранить расписание</button>
+      </div>
+
+      <div class="card" style="margin-top: 16px">
         <h3>Ручная выдача</h3>
         <p class="empty" style="margin: 0 0 10px; font-size: 13px">
-          Щит от русалки, буст клёва или карманный сейф. Без сообщений в чат.
+          Щит от русалки, буст клёва, карманный сейф или множитель принцесс до конца суток.
+          Без сообщений в чат.
         </p>
         <div class="toolbar" style="flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <label style="color:#b8b8d0">
@@ -825,6 +880,8 @@
               <option value="bite_boost">Буст клёва</option>
               <option value="mermaid_shield">Щит от русалки</option>
               <option value="steal_safe">Карманный сейф</option>
+              <option value="view_boost">Множитель за просмотр</option>
+              <option value="message_boost">Множитель за сообщение</option>
             </select>
           </label>
           <label style="color:#b8b8d0">

@@ -1764,7 +1764,10 @@
     bite_boost: "Буст клёва",
     mermaid_shield: "Щит от русалки",
     steal_safe: "Карманный сейф",
+    view_boost: "Множитель за просмотр",
+    message_boost: "Множитель за сообщение",
   };
+  const PRINCESS_GRANT_ITEMS = new Set(["view_boost", "message_boost"]);
   const EVENTS_PAGE_SIZE = 30;
   let eventsUsers = [];
   let eventsSelected = new Set();
@@ -1774,10 +1777,19 @@
   let eventsLogTotal = 0;
   let eventsLogFilterTimer = null;
 
-  function eventsReadWeekdays() {
+  function eventsReadWeekdays(containerId) {
     return Array.from(
-      document.querySelectorAll("#eventsWeekdays input[type=checkbox]:checked")
+      document.querySelectorAll(`${containerId} input[type=checkbox]:checked`)
     ).map((el) => parseInt(el.value, 10));
+  }
+
+  function eventsFillWeekdays(containerId, weekdays, fallback) {
+    const days = new Set(
+      Array.isArray(weekdays) ? weekdays.map(Number) : fallback
+    );
+    document.querySelectorAll(`${containerId} input[type=checkbox]`).forEach((el) => {
+      el.checked = days.has(parseInt(el.value, 10));
+    });
   }
 
   function eventsFillSchedule(schedule) {
@@ -1785,12 +1797,31 @@
     document.getElementById("eventsBoostEnabled").checked = !!s.boost_enabled;
     document.getElementById("eventsBoostCasts").value =
       s.boost_casts != null ? s.boost_casts : 30;
-    const days = new Set(
-      Array.isArray(s.boost_weekdays) ? s.boost_weekdays.map(Number) : [3]
-    );
-    document.querySelectorAll("#eventsWeekdays input[type=checkbox]").forEach((el) => {
-      el.checked = days.has(parseInt(el.value, 10));
-    });
+    eventsFillWeekdays("#eventsWeekdays", s.boost_weekdays, [3]);
+  }
+
+  function eventsFillPrincessSchedule(schedule) {
+    const s = schedule || {};
+    document.getElementById("eventsViewEnabled").checked = s.view_enabled !== false;
+    document.getElementById("eventsViewMult").value =
+      s.view_mult != null ? s.view_mult : 2;
+    eventsFillWeekdays("#eventsViewWeekdays", s.view_weekdays, [0]);
+    document.getElementById("eventsMessageEnabled").checked =
+      s.message_enabled !== false;
+    document.getElementById("eventsMessageMult").value =
+      s.message_mult != null ? s.message_mult : 2;
+    eventsFillWeekdays("#eventsMessageWeekdays", s.message_weekdays, [1]);
+  }
+
+  function eventsReadPrincessSchedule() {
+    return {
+      view_enabled: document.getElementById("eventsViewEnabled").checked,
+      view_weekdays: eventsReadWeekdays("#eventsViewWeekdays"),
+      view_mult: parseFloat(document.getElementById("eventsViewMult").value),
+      message_enabled: document.getElementById("eventsMessageEnabled").checked,
+      message_weekdays: eventsReadWeekdays("#eventsMessageWeekdays"),
+      message_mult: parseFloat(document.getElementById("eventsMessageMult").value),
+    };
   }
 
   function eventsFormatTs(ts) {
@@ -1897,7 +1928,11 @@
         <td class="mono">${esc(r.user_id)}</td>
         <td>${esc(r.user_name || "—")}</td>
         <td>${esc(EVENT_ITEM_LABELS[r.item] || r.item)}</td>
-        <td>${esc(r.amount)}</td>
+        <td>${esc(
+          PRINCESS_GRANT_ITEMS.has(r.item)
+            ? r.note || `x${r.amount}`
+            : r.amount
+        )}</td>
       </tr>`
       )
       .join("");
@@ -2000,6 +2035,7 @@
     try {
       const data = await api("GET", "/api/events");
       eventsFillSchedule(data.schedule);
+      eventsFillPrincessSchedule(data.princess_schedule);
       await loadEventsUsers(true);
       await loadEventsLog(1, true);
       if (!silent) setStatus("Ивенты загружены", "ok");
@@ -2011,7 +2047,7 @@
   document.getElementById("eventsScheduleSave").addEventListener("click", async () => {
     const payload = {
       boost_enabled: document.getElementById("eventsBoostEnabled").checked,
-      boost_weekdays: eventsReadWeekdays(),
+      boost_weekdays: eventsReadWeekdays("#eventsWeekdays"),
       boost_casts: parseInt(document.getElementById("eventsBoostCasts").value, 10),
     };
     if (Number.isNaN(payload.boost_casts) || payload.boost_casts < 0) {
@@ -2027,6 +2063,34 @@
       setStatus(e.message, "err");
     }
   });
+
+  async function savePrincessSchedule() {
+    const payload = eventsReadPrincessSchedule();
+    if (
+      Number.isNaN(payload.view_mult) ||
+      payload.view_mult < 1 ||
+      Number.isNaN(payload.message_mult) ||
+      payload.message_mult < 1
+    ) {
+      setStatus("Множитель: число >= 1", "err");
+      return;
+    }
+    setStatus("Сохранение расписания…");
+    try {
+      const data = await api("PUT", "/api/events/princess-schedule", payload);
+      eventsFillPrincessSchedule(data.princess_schedule);
+      setStatus("Расписание сохранено", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  }
+
+  document.getElementById("eventsViewScheduleSave").addEventListener("click", () =>
+    savePrincessSchedule()
+  );
+  document.getElementById("eventsMessageScheduleSave").addEventListener("click", () =>
+    savePrincessSchedule()
+  );
 
   document.getElementById("eventsUsersFilter").addEventListener("input", () => {
     eventsUsersPage = 1;
@@ -2109,7 +2173,7 @@
     if (item === "bite_boost") amountEl.value = 30;
     else if (item === "mermaid_shield") amountEl.value = 1;
     else amountEl.value = 1;
-    amountEl.disabled = item === "steal_safe";
+    amountEl.disabled = item === "steal_safe" || PRINCESS_GRANT_ITEMS.has(item);
   });
 
   document.getElementById("eventsGrantSelected").addEventListener("click", async () => {
@@ -2121,7 +2185,7 @@
     const item = document.getElementById("eventsGrantItem").value;
     const amountRaw = parseInt(document.getElementById("eventsGrantAmount").value, 10);
     const body = { user_ids: ids, item };
-    if (item !== "steal_safe") {
+    if (item !== "steal_safe" && !PRINCESS_GRANT_ITEMS.has(item)) {
       if (Number.isNaN(amountRaw)) {
         setStatus("Кол-во: целое число", "err");
         return;

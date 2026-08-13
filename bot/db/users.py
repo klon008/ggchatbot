@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from .connection import Database
 
 
@@ -23,6 +25,21 @@ async def get_user_name(db: Database, user_id: str) -> str:
         (str(user_id),),
     )
     return str(row["user_name"]) if row else ""
+
+
+async def get_user_by_nick(db: Database, nick: str) -> Optional[tuple[str, str]]:
+    """Найти (user_id, user_name) по нику. Регистр через Python — SQLite LOWER не умеет кириллицу."""
+    needle = str(nick).lstrip("@").strip().lower()
+    if not needle:
+        return None
+    rows = await db.fetchall(
+        "SELECT user_id, user_name FROM user_names WHERE user_name != ''"
+    )
+    for row in rows:
+        name = str(row["user_name"] or "")
+        if name.lower() == needle:
+            return str(row["user_id"]), name
+    return None
 
 
 async def list_user_ids_with_names(db: Database) -> list[str]:
