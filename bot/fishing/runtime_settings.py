@@ -35,6 +35,10 @@ FLOAT_KEYS = (
 ALL_KEYS = INT_KEYS + FLOAT_KEYS
 
 
+def neg_event_chances_sum() -> float:
+    return float(sum(S.NEG_EVENT_CHANCES.values()))
+
+
 @dataclass
 class FishingRuntimeSettings:
     energy_max: int
@@ -151,8 +155,8 @@ def validate(raw: dict[str, Any]) -> FishingRuntimeSettings:
     if dig_sum > 1.0 + 1e-9:
         raise ValueError("dig_chances_sum")
 
-    if out["miss_chance"] + out["trash_chance"] > 1.0 + 1e-9:
-        raise ValueError("miss_trash_sum")
+    if neg_event_chances_sum() + out["miss_chance"] + out["trash_chance"] > 1.0 + 1e-9:
+        raise ValueError("cast_chances_sum")
 
     return FishingRuntimeSettings(**out)
 

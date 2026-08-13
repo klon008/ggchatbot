@@ -639,7 +639,8 @@ class AdminRoutes:
                 "energy_regen_interval_sec": "energy_regen_interval_sec должен быть >= 1",
                 "bite_boost_miss_trash_div": "bite_boost_miss_trash_div должен быть >= 1",
                 "dig_chances_sum": "сумма шансов копания (щит+клёв+сейф) не больше 1",
-                "miss_trash_sum": "сумма miss_chance + trash_chance не больше 1",
+                "cast_chances_sum": "сумма негативов + miss_chance + trash_chance не больше 1",
+                "miss_trash_sum": "сумма негативов + miss_chance + trash_chance не больше 1",
                 "payload": "тело запроса должно быть объектом",
             }
             if bad in messages:

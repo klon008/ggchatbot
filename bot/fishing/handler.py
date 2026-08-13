@@ -22,7 +22,7 @@ from .events_settings import (
 )
 from .grants import grant_bite_boost, grant_mermaid_shields, grant_steal_safe
 from .record_assets import FISH_RECORD_ASSETS
-from .runtime_settings import FishingRuntimeSettings, validate
+from .runtime_settings import FishingRuntimeSettings, neg_event_chances_sum, validate
 from .settings import (
     FIRST_FISH_BONUS,
     FISH_OF_WEEK_BONUS,
@@ -295,6 +295,7 @@ class FishingHandler:
             "runtime_settings": self._rt.to_dict(),
             "runtime_settings_defaults": FishingRuntimeSettings.defaults().to_dict(),
             "runtime_settings_is_default": self._rt_is_default,
+            "neg_event_chances_sum": neg_event_chances_sum(),
             "events": (await self.store.load_events_config()).to_dict(),
         }
 

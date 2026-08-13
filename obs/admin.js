@@ -1164,6 +1164,29 @@
   ]);
   let fishingLastData = null;
   let fishingRewardsBuilt = false;
+  let fishingNegEventSum = 0.06;
+
+  function fishingUpdateFishRemainder() {
+    const el = document.getElementById("fishChanceRemainder");
+    if (!el) return;
+    const missEl = fishSettingsInputs.miss_chance;
+    const trashEl = fishSettingsInputs.trash_chance;
+    if (!missEl || !trashEl) {
+      el.textContent = "—";
+      el.style.color = "";
+      return;
+    }
+    const miss = parseFloat(missEl.value);
+    const trash = parseFloat(trashEl.value);
+    if (!Number.isFinite(miss) || !Number.isFinite(trash)) {
+      el.textContent = "—";
+      el.style.color = "";
+      return;
+    }
+    const fish = 1 - fishingNegEventSum - miss - trash;
+    el.textContent = fish.toFixed(2);
+    el.style.color = fish < -1e-9 ? "#c62828" : "";
+  }
 
   function fishingFillRuntimeSettings(data) {
     const rt = data.runtime_settings || {};
@@ -1172,6 +1195,10 @@
       if (!el || rt[key] == null) return;
       el.value = String(rt[key]);
     });
+    if (typeof data.neg_event_chances_sum === "number") {
+      fishingNegEventSum = data.neg_event_chances_sum;
+    }
+    fishingUpdateFishRemainder();
     const em = rt.energy_max != null ? rt.energy_max : 100;
     if (fishingRestoreEnergy) {
       fishingRestoreEnergy.textContent = `Энергия всем = ${em}`;
@@ -1425,6 +1452,13 @@
         setStatus(e.message, "err");
       }
     });
+  }
+
+  if (fishSettingsInputs.miss_chance) {
+    fishSettingsInputs.miss_chance.addEventListener("input", fishingUpdateFishRemainder);
+  }
+  if (fishSettingsInputs.trash_chance) {
+    fishSettingsInputs.trash_chance.addEventListener("input", fishingUpdateFishRemainder);
   }
 
   if (fishingSaveSettings) {

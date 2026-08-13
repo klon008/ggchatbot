@@ -621,8 +621,8 @@
       <div class="card" id="fishingSettingsCard">
         <h3>Настройки</h3>
         <p class="empty" style="margin: 0 0 10px; font-size: 13px">
-          Энергия, цены, шансы копания и miss/trash. Сохраняется в БД; сброс — значения из
-          <code>settings.py</code>.
+          Энергия, цены, шансы копания и исходы заброса (одна шкала). Сохраняется в БД;
+          сброс — значения из <code>settings.py</code>.
         </p>
         <table>
           <thead>
@@ -703,17 +703,22 @@
             <tr>
               <td>Буст ÷ miss/trash</td>
               <td><input type="number" id="fishBiteBoostDiv" min="1" value="3" style="width:100px" /></td>
-              <td class="empty">во сколько раз меньше miss/trash</td>
+              <td class="empty">во сколько раз меньше miss/trash (разница уходит в рыбу)</td>
             </tr>
             <tr>
               <td>Miss chance</td>
               <td><input type="number" id="fishMissChance" min="0" max="1" step="0.01" value="0.20" style="width:100px" /></td>
-              <td class="empty">сход, 0–1</td>
+              <td class="empty">сход, доля всех забросов (0–1)</td>
             </tr>
             <tr>
               <td>Trash chance</td>
               <td><input type="number" id="fishTrashChance" min="0" max="1" step="0.01" value="0.18" style="width:100px" /></td>
-              <td class="empty">мусор, 0–1</td>
+              <td class="empty">мусор, доля всех забросов (0–1)</td>
+            </tr>
+            <tr>
+              <td>Fish chance</td>
+              <td id="fishChanceRemainder">0.56</td>
+              <td class="empty">остаток шкалы: 1 − негативы − miss − trash</td>
             </tr>
           </tbody>
         </table>

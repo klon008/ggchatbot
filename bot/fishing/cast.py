@@ -40,14 +40,30 @@ class CastResult:
     is_trophy: bool = False
 
 
-def _roll_neg_event() -> Optional[str]:
+def _cast_kind_chances(
+    miss: float,
+    trash: float,
+    *,
+    boost: bool,
+    boost_div: int,
+) -> dict[str, float]:
+    """Абсолютные доли одной шкалы заброса. Рыба = остаток до 1."""
+    div = max(1, int(boost_div)) if boost else 1
+    return {
+        **NEG_EVENT_CHANCES,
+        "miss": float(miss) / div,
+        "trash": float(trash) / div,
+    }
+
+
+def _roll_cast_kind(chances: dict[str, float]) -> str:
     roll = random.random()
     acc = 0.0
-    for name, chance in NEG_EVENT_CHANCES.items():
+    for name, chance in chances.items():
         acc += chance
         if roll < acc:
             return name
-    return None
+    return "fish"
 
 
 def _pick_species(enabled: Optional[set[str]] = None) -> Optional[str]:
@@ -129,6 +145,7 @@ def apply_cast_roll(
 ) -> tuple[CastResult, int]:
     """
     Ресурсы заброса уже списаны.
+    Исход — один бросок по общей шкале (негатив / сход / мусор / рыба-остаток).
     Возвращает (результат, дельта принцесс: отрицательная = штраф, положительная = продажа без бонуса дня).
     enabled_species: если задан — дроп только из этого множества (пусто → сход вместо рыбы).
     """
@@ -145,16 +162,17 @@ def apply_cast_roll(
     boost_active = int(player.get("bite_boost_casts_left") or 0) > 0
     if boost_active:
         player["bite_boost_casts_left"] = int(player["bite_boost_casts_left"]) - 1
-        div = max(1, boost_div)
-        roll_miss = base_miss / div
-        roll_trash = base_trash / div
-    else:
-        roll_miss = base_miss
-        roll_trash = base_trash
 
-    event = _roll_neg_event()
+    kind = _roll_cast_kind(
+        _cast_kind_chances(
+            base_miss,
+            base_trash,
+            boost=boost_active,
+            boost_div=boost_div,
+        )
+    )
 
-    if event == "mermaid":
+    if kind == "mermaid":
         shields = int(player.get("mermaid_shields") or 0)
         if shields > 0:
             player["mermaid_shields"] = shields - 1
@@ -164,31 +182,30 @@ def apply_cast_roll(
         msg = prefix + texts.pick(texts.NEG_MERMAID)
         return CastResult(kind="mermaid", message=msg), -loss
 
-    if event == "pike_break":
+    if kind == "pike_break":
         player["rod_state"] = "broken"
         msg = prefix + texts.pick(texts.NEG_PIKE)
         return CastResult(kind="pike_break", message=msg), 0
 
-    if event == "seagull":
+    if kind == "seagull":
         taken = consume_bait(player, min(SEAGULL_BAIT_MAX, bait_total(player)))
         msg = prefix + texts.pick(texts.NEG_SEAGULL).replace("{K}", str(taken))
         return CastResult(kind="seagull", message=msg, bait_taken=taken), 0
 
-    if event == "silt":
+    if kind == "silt":
         player["energy"] = max(0, int(player["energy"]) - SILT_ENERGY_LOSS)
         msg = prefix + texts.pick(texts.NEG_SILT)
         return CastResult(kind="silt", message=msg), 0
 
-    if event == "reeds":
+    if kind == "reeds":
         msg = prefix + texts.pick(texts.NEG_REEDS)
         return CastResult(kind="reeds", message=msg), 0
 
-    category = random.random()
-    if category < roll_miss:
+    if kind == "miss":
         msg = prefix + texts.pick(texts.MISS)
         return CastResult(kind="miss", message=msg), 0
 
-    if category < roll_miss + roll_trash:
+    if kind == "trash":
         trash_key = random.choice(TRASH_TYPES)
         msg = prefix + texts.pick(texts.TRASH[trash_key])
         return CastResult(kind="trash", message=msg), 0
