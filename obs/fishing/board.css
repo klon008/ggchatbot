@@ -248,9 +248,63 @@ body {
   user-select: none;
 }
 
-.card > *:not(.card-fish) {
+.card > *:not(.card-fish):not(.card-trophy-badge) {
   position: relative;
   z-index: 1;
+}
+
+.card--catch-trophy::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 2;
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 172, 234, 0.78),
+    inset 0 1px 0 rgba(200, 245, 255, 0.45);
+}
+
+.card--hero.card--catch-trophy::after {
+  inset: 5px;
+  border-radius: 10px;
+}
+
+.card-trophy-badge {
+  display: none;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  align-items: center;
+  justify-content: center;
+  color: #041820;
+  background: linear-gradient(180deg, #5ad4f5 0%, #00acea 45%, #0088bb 100%);
+  box-shadow:
+    0 2px 0 #045a78,
+    0 3px 8px rgba(0, 172, 234, 0.45),
+    inset 0 1px 0 rgba(200, 245, 255, 0.65);
+}
+
+.card--hero .card-trophy-badge {
+  width: 20px;
+  height: 20px;
+  top: 8px;
+  right: 8px;
+  border-radius: 6px;
+}
+
+.card--catch-trophy .card-trophy-badge {
+  display: flex;
+}
+
+.card-trophy-badge svg {
+  display: block;
+  width: 11px;
+  height: 11px;
 }
 
 .card-rank {

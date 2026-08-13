@@ -38,6 +38,34 @@
     "Осётр",
   ];
 
+  /** w_max вида — как FISH_SPECIES[*][2] в bot/fishing/settings.py. Трофей: weight > w_max. */
+  var FISH_W_MAX = {
+    Карась: 0.8,
+    Плотва: 0.55,
+    Окунь: 1.2,
+    Линь: 3.0,
+    Язь: 2.8,
+    Лещ: 2.0,
+    Сазан: 8.0,
+    Жерех: 4.0,
+    Судак: 5.0,
+    Щука: 4.0,
+    Сом: 8.0,
+    Осётр: 12.0,
+  };
+
+  function isCatchTrophy(species, weight) {
+    var max = FISH_W_MAX[species];
+    if (max == null || !isFinite(weight)) return false;
+    return weight > max + 1e-6;
+  }
+
+  var TROPHY_BADGE_HTML =
+    '<div class="card-trophy-badge" title="Трофейный улов" aria-label="Трофейный улов">' +
+    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path fill="currentColor" d="M7 3h10v2h2.2A2.3 2.3 0 0 1 21.5 7.3c0 2.4-1.8 4.3-4.2 4.6L16.4 14.5H18v2.2H6v-2.2h1.6l-.9-2.6A4.6 4.6 0 0 1 2.5 7.3 2.3 2.3 0 0 1 4.8 5H7V3Zm1.6 2v4.1c-1.6-.25-2.7-1.4-2.7-2.7 0-.7.5-1.4 1.2-1.4h1.5Zm8.8 0h1.5c.7 0 1.2.7 1.2 1.4 0 1.3-1.1 2.45-2.7 2.7V5ZM8.2 18.2h7.6V21H8.2v-2.8Z"/>' +
+    "</svg></div>";
+
   /**
    * Порядок слотов в сетке.
    * "weight"  — пойманные по убыванию веса, пустые в конце (по SPECIES_ORDER)
@@ -234,6 +262,7 @@
     el.setAttribute("data-key", key);
     el.innerHTML =
       '<div class="card-fish" aria-hidden="true"></div>' +
+      TROPHY_BADGE_HTML +
       '<div class="card-rank"></div>' +
       '<div class="card-species"></div>' +
       '<div class="card-weight-row"><span class="card-weight">0.00</span><span class="card-unit">кг</span></div>' +
@@ -322,13 +351,16 @@
         ? prevEntry.user_name
         : playerEl.textContent || "";
 
+    var isHero =
+      card.classList.contains("card--hero") ||
+      card.getAttribute("data-key").indexOf("hero:") === 0 ||
+      card.getAttribute("data-key") === "hero";
     card.className =
       "card" +
-      (card.classList.contains("card--hero") || card.getAttribute("data-key").indexOf("hero:") === 0
-        ? " card--hero"
-        : "") +
+      (isHero ? " card--hero" : "") +
       " " +
-      cardMod(rank);
+      cardMod(rank) +
+      (isCatchTrophy(entry.species, entry.weight) ? " card--catch-trophy" : "");
 
     rankEl.className = rankClass(rank);
     rankEl.textContent = String(rank);
