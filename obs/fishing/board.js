@@ -62,8 +62,13 @@
 
   var TROPHY_BADGE_HTML =
     '<div class="card-trophy-badge" title="Трофейный улов" aria-label="Трофейный улов">' +
-    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
-    '<path fill="currentColor" d="M7 3h10v2h2.2A2.3 2.3 0 0 1 21.5 7.3c0 2.4-1.8 4.3-4.2 4.6L16.4 14.5H18v2.2H6v-2.2h1.6l-.9-2.6A4.6 4.6 0 0 1 2.5 7.3 2.3 2.3 0 0 1 4.8 5H7V3Zm1.6 2v4.1c-1.6-.25-2.7-1.4-2.7-2.7 0-.7.5-1.4 1.2-1.4h1.5Zm8.8 0h1.5c.7 0 1.2.7 1.2 1.4 0 1.3-1.1 2.45-2.7 2.7V5ZM8.2 18.2h7.6V21H8.2v-2.8Z"/>' +
+    '<svg viewBox="0 0 64 64" aria-hidden="true">' +
+    '<path fill="currentColor" d="M20 14c-10 1-16 9-16 17 0 9 7 15 16 16l2.5-7.5C16 38.5 12 34 12 31c0-4 3.5-8 8-8.5V14Zm24 0c10 1 16 9 16 17 0 9-7 15-16 16l-2.5-7.5C48 38.5 52 34 52 31c0-4-3.5-8-8-8.5V14Z"/>' +
+    '<path fill="currentColor" d="M18 6h28a2 2 0 0 1 2 2v5c-1 15-8 23-16 23S17 28 16 13V8a2 2 0 0 1 2-2Z"/>' +
+    '<path fill="currentColor" d="M29 36h6v8h-6z"/>' +
+    '<ellipse cx="32" cy="45" rx="5" ry="2.2" fill="currentColor"/>' +
+    '<path fill="currentColor" d="M22 48h20l3.5 4.5H18.5L22 48Z"/>' +
+    '<rect x="14" y="52.5" width="36" height="7" rx="2" fill="currentColor"/>' +
     "</svg></div>";
 
   /**
@@ -262,8 +267,9 @@
     el.setAttribute("data-key", key);
     el.innerHTML =
       '<div class="card-fish" aria-hidden="true"></div>' +
+      '<div class="card-top"><div class="card-rank"></div>' +
       TROPHY_BADGE_HTML +
-      '<div class="card-rank"></div>' +
+      "</div>" +
       '<div class="card-species"></div>' +
       '<div class="card-weight-row"><span class="card-weight">0.00</span><span class="card-unit">кг</span></div>' +
       '<div class="card-player-row"><span class="card-dot"></span><span class="card-player"></span></div>';
