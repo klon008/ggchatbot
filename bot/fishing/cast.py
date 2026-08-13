@@ -46,11 +46,19 @@ def _cast_kind_chances(
     *,
     boost: bool,
     boost_div: int,
+    neg_chances: Optional[dict[str, float]] = None,
 ) -> dict[str, float]:
     """Абсолютные доли одной шкалы заброса. Рыба = остаток до 1."""
     div = max(1, int(boost_div)) if boost else 1
+    if neg_chances is None:
+        negs = dict(NEG_EVENT_CHANCES)
+    else:
+        negs = {
+            name: float(neg_chances.get(name, chance))
+            for name, chance in NEG_EVENT_CHANCES.items()
+        }
     return {
-        **NEG_EVENT_CHANCES,
+        **negs,
         "miss": float(miss) / div,
         "trash": float(trash) / div,
     }
@@ -142,6 +150,7 @@ def apply_cast_roll(
     miss_chance: float | None = None,
     trash_chance: float | None = None,
     bite_boost_miss_trash_div: int | None = None,
+    neg_event_chances: Optional[dict[str, float]] = None,
 ) -> tuple[CastResult, int]:
     """
     Ресурсы заброса уже списаны.
@@ -169,6 +178,7 @@ def apply_cast_roll(
             base_trash,
             boost=boost_active,
             boost_div=boost_div,
+            neg_chances=neg_event_chances,
         )
     )
 

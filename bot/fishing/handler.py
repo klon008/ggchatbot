@@ -22,7 +22,7 @@ from .events_settings import (
 )
 from .grants import grant_bite_boost, grant_mermaid_shields, grant_steal_safe
 from .record_assets import FISH_RECORD_ASSETS
-from .runtime_settings import FishingRuntimeSettings, neg_event_chances_sum, validate
+from .runtime_settings import FishingRuntimeSettings, validate
 from .settings import (
     FIRST_FISH_BONUS,
     FISH_OF_WEEK_BONUS,
@@ -295,7 +295,6 @@ class FishingHandler:
             "runtime_settings": self._rt.to_dict(),
             "runtime_settings_defaults": FishingRuntimeSettings.defaults().to_dict(),
             "runtime_settings_is_default": self._rt_is_default,
-            "neg_event_chances_sum": neg_event_chances_sum(),
             "events": (await self.store.load_events_config()).to_dict(),
         }
 
@@ -709,6 +708,7 @@ class FishingHandler:
             miss_chance=rt.miss_chance,
             trash_chance=rt.trash_chance,
             bite_boost_miss_trash_div=rt.bite_boost_miss_trash_div,
+            neg_event_chances=rt.neg_event_chances(),
         )
 
         if result.kind == "fish" and result.species and result.weight is not None:

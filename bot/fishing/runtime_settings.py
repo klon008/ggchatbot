@@ -24,10 +24,13 @@ INT_KEYS = (
     "bite_boost_miss_trash_div",
 )
 
+NEG_EVENT_CHANCE_KEYS = tuple(f"{name}_chance" for name in S.NEG_EVENT_CHANCES)
+
 FLOAT_KEYS = (
     "worms_dig_shield_chance",
     "worms_dig_bite_chance",
     "worms_dig_safe_chance",
+) + NEG_EVENT_CHANCE_KEYS + (
     "miss_chance",
     "trash_chance",
 )
@@ -35,8 +38,11 @@ FLOAT_KEYS = (
 ALL_KEYS = INT_KEYS + FLOAT_KEYS
 
 
-def neg_event_chances_sum() -> float:
-    return float(sum(S.NEG_EVENT_CHANCES.values()))
+def neg_event_chances_from(data: dict[str, Any]) -> dict[str, float]:
+    return {
+        name: float(data[f"{name}_chance"])
+        for name in S.NEG_EVENT_CHANCES
+    }
 
 
 @dataclass
@@ -55,8 +61,16 @@ class FishingRuntimeSettings:
     worms_dig_shield_chance: float
     worms_dig_bite_chance: float
     worms_dig_safe_chance: float
+    mermaid_chance: float
+    pike_break_chance: float
+    seagull_chance: float
+    silt_chance: float
+    reeds_chance: float
     miss_chance: float
     trash_chance: float
+
+    def neg_event_chances(self) -> dict[str, float]:
+        return neg_event_chances_from(self.to_dict())
 
     @classmethod
     def defaults(cls) -> "FishingRuntimeSettings":
@@ -75,6 +89,11 @@ class FishingRuntimeSettings:
             worms_dig_shield_chance=float(S.WORMS_DIG_SHIELD_CHANCE),
             worms_dig_bite_chance=float(S.WORMS_DIG_BITE_CHANCE),
             worms_dig_safe_chance=float(S.WORMS_DIG_SAFE_CHANCE),
+            mermaid_chance=float(S.NEG_EVENT_CHANCES["mermaid"]),
+            pike_break_chance=float(S.NEG_EVENT_CHANCES["pike_break"]),
+            seagull_chance=float(S.NEG_EVENT_CHANCES["seagull"]),
+            silt_chance=float(S.NEG_EVENT_CHANCES["silt"]),
+            reeds_chance=float(S.NEG_EVENT_CHANCES["reeds"]),
             miss_chance=float(S.MISS_CHANCE),
             trash_chance=float(S.TRASH_CHANCE),
         )
@@ -155,7 +174,8 @@ def validate(raw: dict[str, Any]) -> FishingRuntimeSettings:
     if dig_sum > 1.0 + 1e-9:
         raise ValueError("dig_chances_sum")
 
-    if neg_event_chances_sum() + out["miss_chance"] + out["trash_chance"] > 1.0 + 1e-9:
+    neg_sum = sum(neg_event_chances_from(out).values())
+    if neg_sum + out["miss_chance"] + out["trash_chance"] > 1.0 + 1e-9:
         raise ValueError("cast_chances_sum")
 
     return FishingRuntimeSettings(**out)

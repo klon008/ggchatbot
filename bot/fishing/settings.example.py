@@ -49,6 +49,7 @@ BITE_BOOST_CASTS = 10  # Сколько усиленных забросов да
 BITE_BOOST_MISS_TRASH_DIV = 3  # Во сколько раз уменьшаются MISS/TRASH при бусте
 
 # --- Одна шкала заброса (негатив + miss + trash + рыба-остаток = 1) ---
+# Bootstrap → админка «Рыбалка»; дальше override в fishing_meta.settings_json.
 
 NEG_EVENT_CHANCES: dict[str, float] = {
     "mermaid": 0.01,  # Русалка: штраф принцесс

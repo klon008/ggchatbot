@@ -1152,6 +1152,11 @@
     worms_dig_safe_chance: document.getElementById("fishDigSafe"),
     bite_boost_casts: document.getElementById("fishBiteBoostCasts"),
     bite_boost_miss_trash_div: document.getElementById("fishBiteBoostDiv"),
+    mermaid_chance: document.getElementById("fishNegMermaid"),
+    pike_break_chance: document.getElementById("fishNegPike"),
+    seagull_chance: document.getElementById("fishNegSeagull"),
+    silt_chance: document.getElementById("fishNegSilt"),
+    reeds_chance: document.getElementById("fishNegReeds"),
     miss_chance: document.getElementById("fishMissChance"),
     trash_chance: document.getElementById("fishTrashChance"),
   };
@@ -1159,32 +1164,47 @@
     "worms_dig_shield_chance",
     "worms_dig_bite_chance",
     "worms_dig_safe_chance",
+    "mermaid_chance",
+    "pike_break_chance",
+    "seagull_chance",
+    "silt_chance",
+    "reeds_chance",
     "miss_chance",
     "trash_chance",
   ]);
+  const fishCastScaleKeys = [
+    "mermaid_chance",
+    "pike_break_chance",
+    "seagull_chance",
+    "silt_chance",
+    "reeds_chance",
+    "miss_chance",
+    "trash_chance",
+  ];
   let fishingLastData = null;
   let fishingRewardsBuilt = false;
-  let fishingNegEventSum = 0.06;
 
   function fishingUpdateFishRemainder() {
     const el = document.getElementById("fishChanceRemainder");
     if (!el) return;
-    const missEl = fishSettingsInputs.miss_chance;
-    const trashEl = fishSettingsInputs.trash_chance;
-    if (!missEl || !trashEl) {
-      el.textContent = "—";
-      el.style.color = "";
-      return;
+    let used = 0;
+    for (const key of fishCastScaleKeys) {
+      const input = fishSettingsInputs[key];
+      if (!input) {
+        el.textContent = "—";
+        el.style.color = "";
+        return;
+      }
+      const n = parseFloat(input.value);
+      if (!Number.isFinite(n)) {
+        el.textContent = "—";
+        el.style.color = "";
+        return;
+      }
+      used += n;
     }
-    const miss = parseFloat(missEl.value);
-    const trash = parseFloat(trashEl.value);
-    if (!Number.isFinite(miss) || !Number.isFinite(trash)) {
-      el.textContent = "—";
-      el.style.color = "";
-      return;
-    }
-    const fish = 1 - fishingNegEventSum - miss - trash;
-    el.textContent = fish.toFixed(2);
+    const fish = 1 - used;
+    el.textContent = fish.toFixed(3);
     el.style.color = fish < -1e-9 ? "#c62828" : "";
   }
 
@@ -1195,9 +1215,6 @@
       if (!el || rt[key] == null) return;
       el.value = String(rt[key]);
     });
-    if (typeof data.neg_event_chances_sum === "number") {
-      fishingNegEventSum = data.neg_event_chances_sum;
-    }
     fishingUpdateFishRemainder();
     const em = rt.energy_max != null ? rt.energy_max : 100;
     if (fishingRestoreEnergy) {
@@ -1454,12 +1471,10 @@
     });
   }
 
-  if (fishSettingsInputs.miss_chance) {
-    fishSettingsInputs.miss_chance.addEventListener("input", fishingUpdateFishRemainder);
-  }
-  if (fishSettingsInputs.trash_chance) {
-    fishSettingsInputs.trash_chance.addEventListener("input", fishingUpdateFishRemainder);
-  }
+  fishCastScaleKeys.forEach((key) => {
+    const el = fishSettingsInputs[key];
+    if (el) el.addEventListener("input", fishingUpdateFishRemainder);
+  });
 
   if (fishingSaveSettings) {
     fishingSaveSettings.addEventListener("click", async () => {

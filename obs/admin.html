@@ -679,7 +679,7 @@
               <td><input type="number" id="fishCastCooldown" min="0" value="20" style="width:100px" /></td>
               <td class="empty">пауза между забросами</td>
             </tr>
-            <tr><td colspan="3" style="color:#9ecbff;font-weight:600;background:#1c1c2e">Копание и исходы</td></tr>
+            <tr><td colspan="3" style="color:#9ecbff;font-weight:600;background:#1c1c2e">Копание</td></tr>
             <tr>
               <td>Копание: щит</td>
               <td><input type="number" id="fishDigShield" min="0" max="1" step="0.01" value="0.03" style="width:100px" /></td>
@@ -704,6 +704,32 @@
               <td>Буст ÷ miss/trash</td>
               <td><input type="number" id="fishBiteBoostDiv" min="1" value="3" style="width:100px" /></td>
               <td class="empty">во сколько раз меньше miss/trash (разница уходит в рыбу)</td>
+            </tr>
+            <tr><td colspan="3" style="color:#9ecbff;font-weight:600;background:#1c1c2e">Заброс (одна шкала)</td></tr>
+            <tr>
+              <td>Русалка</td>
+              <td><input type="number" id="fishNegMermaid" min="0" max="1" step="0.001" value="0.01" style="width:100px" /></td>
+              <td class="empty">штраф принцесс, доля всех забросов</td>
+            </tr>
+            <tr>
+              <td>Щука (удочка)</td>
+              <td><input type="number" id="fishNegPike" min="0" max="1" step="0.001" value="0.015" style="width:100px" /></td>
+              <td class="empty">удочка ломается</td>
+            </tr>
+            <tr>
+              <td>Чайка</td>
+              <td><input type="number" id="fishNegSeagull" min="0" max="1" step="0.001" value="0.015" style="width:100px" /></td>
+              <td class="empty">крадёт наживку</td>
+            </tr>
+            <tr>
+              <td>Ил</td>
+              <td><input type="number" id="fishNegSilt" min="0" max="1" step="0.001" value="0.01" style="width:100px" /></td>
+              <td class="empty">доп. потеря энергии</td>
+            </tr>
+            <tr>
+              <td>Камыши</td>
+              <td><input type="number" id="fishNegReeds" min="0" max="1" step="0.001" value="0.01" style="width:100px" /></td>
+              <td class="empty">пустой заброс</td>
             </tr>
             <tr>
               <td>Miss chance</td>
