@@ -311,7 +311,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 22px;
+  min-height: 0;
   flex-shrink: 0;
 }
 
@@ -323,8 +323,8 @@ body {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: clamp(18px, 22cqh, 32px);
+  height: clamp(18px, 22cqh, 32px);
   flex-shrink: 0;
   color: #00acea;
   opacity: 0.42;
@@ -392,12 +392,14 @@ body {
 }
 
 .card-species {
-  font-size: clamp(12px, 14cqh, 15px);
+  font-size: clamp(11px, min(16cqh, 11cqw), 15px);
   font-weight: 800;
   color: #2a1400;
-  line-height: 1.15;
+  line-height: 1.2;
   margin-top: 2px;
   min-width: 0;
+  min-height: 1.2em;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -415,6 +417,7 @@ body {
   gap: 3px;
   margin-top: 2px;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .card--hero .card-weight-row {
@@ -458,6 +461,8 @@ body {
   padding-top: clamp(3px, 4cqh, 6px);
   border-top: 1px solid rgba(160, 110, 40, 0.18);
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .card--hero .card-player-row {
