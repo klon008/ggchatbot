@@ -135,6 +135,7 @@ body {
   min-width: 0;
   min-height: 0;
   gap: 10px;
+  /* inline-size only: `size` containment collapses this column when height is auto. */
   container-type: inline-size;
   container-name: board-col;
 }
@@ -156,7 +157,7 @@ body {
 
 .col-head h2 {
   margin: 0;
-  font-size: clamp(15px, 1.85cqh, 20px);
+  font-size: clamp(15px, 2.2cqw, 20px);
   font-weight: 800;
   color: #fff8ee;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
@@ -164,7 +165,7 @@ body {
 
 .hero-slot {
   flex: 0 0 auto;
-  height: clamp(96px, 13.5cqh, 136px);
+  height: clamp(96px, 15cqw, 136px);
   min-height: 96px;
 }
 
@@ -181,7 +182,7 @@ body {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: clamp(6px, 0.75cqh, 8px);
+  gap: clamp(6px, 1cqw, 8px);
   align-content: stretch;
 }
 
@@ -221,7 +222,7 @@ body {
 }
 
 .card--hero {
-  container-type: inline-size;
+  container-type: size;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-rows: auto auto auto;
@@ -233,7 +234,7 @@ body {
   align-content: center;
   column-gap: 10px;
   row-gap: 2px;
-  padding: clamp(8px, 1.2cqh, 12px) clamp(12px, 1cqw, 16px);
+  padding: clamp(8px, 9cqh, 12px) clamp(12px, 3cqi, 16px);
   border-radius: 14px;
   min-height: 0;
 }
@@ -333,8 +334,8 @@ body {
 .card--hero .card-trophy-badge {
   grid-area: badge;
   align-self: start;
-  width: clamp(28px, 4cqh, 42px);
-  height: clamp(28px, 4cqh, 42px);
+  width: clamp(28px, 32cqh, 42px);
+  height: clamp(28px, 32cqh, 42px);
 }
 
 .card--catch-trophy .card-trophy-badge {
@@ -363,9 +364,9 @@ body {
 .card--hero .card-rank {
   grid-area: rank;
   align-self: center;
-  width: clamp(28px, 3.4cqh, 36px);
-  height: clamp(28px, 3.4cqh, 36px);
-  font-size: clamp(13px, 1.6cqh, 16px);
+  width: clamp(28px, 28cqh, 36px);
+  height: clamp(28px, 28cqh, 36px);
+  font-size: clamp(13px, 14cqh, 16px);
   border-radius: 8px;
 }
 
@@ -405,7 +406,7 @@ body {
 .card--hero .card-species {
   grid-area: species;
   margin-top: 0;
-  font-size: clamp(16px, 2.1cqh, 22px);
+  font-size: clamp(16px, 18cqh, 22px);
 }
 
 .card-weight-row {
@@ -430,7 +431,7 @@ body {
 }
 
 .card--hero .card-weight {
-  font-size: clamp(24px, 3.4cqh, 34px);
+  font-size: clamp(24px, 28cqh, 34px);
 }
 
 .card--rank1 .card-weight {
@@ -446,7 +447,7 @@ body {
 }
 
 .card--hero .card-unit {
-  font-size: clamp(11px, 1.3cqh, 13px);
+  font-size: clamp(11px, 11cqh, 13px);
 }
 
 .card-player-row {
@@ -486,7 +487,7 @@ body {
 }
 
 .card--hero .card-player {
-  font-size: clamp(12px, 1.5cqh, 14px);
+  font-size: clamp(12px, 12cqh, 14px);
 }
 
 .card-player.is-fading {
