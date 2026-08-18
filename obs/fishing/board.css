@@ -1,4 +1,4 @@
-/* Fishing board — fullscreen 1080p, no scroll */
+/* Fishing board — 1080p overlay; grids wrap 4×3 → 3×4 → 2×6 */
 
 *,
 *::before,
@@ -53,10 +53,12 @@ body {
   max-width: 1920px;
   max-height: 1080px;
   margin: 0 auto;
-  padding: 28px 36px 24px;
+  padding: clamp(10px, 2.6cqh, 28px) clamp(14px, 1.9cqw, 36px) clamp(10px, 2.2cqh, 24px);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: clamp(8px, 1.5cqh, 16px);
+  container-type: size;
+  container-name: board;
 }
 
 .board-header {
@@ -67,7 +69,7 @@ body {
 .board-eyebrow {
   display: inline-block;
   font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
+  font-size: clamp(9px, 1cqh, 11px);
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: rgba(255, 220, 140, 0.6);
@@ -75,17 +77,17 @@ body {
   border: 1px solid rgba(255, 200, 80, 0.18);
   padding: 4px 14px;
   border-radius: 20px;
-  margin-bottom: 10px;
+  margin-bottom: clamp(4px, 0.9cqh, 10px);
 }
 
 .board-title {
   font-family: "Manrope", system-ui, sans-serif;
-  font-size: 48px;
+  font-size: clamp(26px, 4.5cqh, 48px);
   font-weight: 800;
   color: #fff8ee;
   text-shadow: 0 4px 30px rgba(0, 0, 0, 0.55);
   line-height: 1.05;
-  margin: 0 0 10px;
+  margin: 0 0 clamp(4px, 0.9cqh, 10px);
   letter-spacing: -0.01em;
 }
 
@@ -120,17 +122,21 @@ body {
 
 .columns {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(12px, 1.5cqw, 28px);
 }
 
 .col {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   gap: 10px;
+  container-type: inline-size;
+  container-name: board-col;
 }
 
 .col-head {
@@ -150,15 +156,16 @@ body {
 
 .col-head h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: clamp(15px, 1.85cqh, 20px);
   font-weight: 800;
   color: #fff8ee;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
 
 .hero-slot {
-  flex-shrink: 0;
-  height: 118px;
+  flex: 0 0 auto;
+  height: clamp(96px, 13.5cqh, 136px);
+  min-height: 96px;
 }
 
 .hero-slot .card--hero {
@@ -166,19 +173,34 @@ body {
   min-height: 0;
 }
 
-.card-grid {
+.card-grid,
+.card-grid--dense {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: clamp(6px, 0.75cqh, 8px);
   align-content: stretch;
 }
 
-.card-grid--dense {
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(3, 1fr);
+/* Узкая колонка: лучше 3×4, чем четыре «спички». */
+@container board-col (max-width: 640px) {
+  .card-grid,
+  .card-grid--dense {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Совсем узко: 2×6. */
+@container board-col (max-width: 460px) {
+  .card-grid,
+  .card-grid--dense {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(6, minmax(0, 1fr));
+  }
 }
 
 .card {
@@ -188,18 +210,32 @@ body {
   border: 1.5px solid rgba(180, 130, 60, 0.22);
   border-radius: 12px;
   box-shadow: 0 3px 12px rgba(40, 20, 0, 0.12), inset 0 1px 0 rgba(255, 255, 220, 0.7);
-  padding: 8px 10px;
+  padding: clamp(6px, 1.2cqh, 8px) clamp(8px, 0.7cqw, 10px);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
   min-height: 0;
+  container-type: size;
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
 
 .card--hero {
-  padding: 12px 16px;
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "rank species badge"
+    "rank weight  badge"
+    "rank player  badge";
+  align-items: center;
+  align-content: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  padding: clamp(8px, 1.2cqh, 12px) clamp(12px, 1cqw, 16px);
   border-radius: 14px;
-  min-height: 110px;
+  min-height: 0;
 }
 
 .card--empty {
@@ -210,8 +246,13 @@ body {
   align-items: center;
   justify-content: center;
   color: rgba(255, 225, 150, 0.4);
-  font-size: 12px;
+  font-size: clamp(10px, 11cqh, 12px);
   font-weight: 600;
+  text-align: center;
+}
+
+.card--hero.card--empty {
+  display: flex;
 }
 
 .card--rank1 {
@@ -239,6 +280,10 @@ body {
   z-index: 0;
 }
 
+.card--hero .card-fish {
+  width: 40%;
+}
+
 .card-fish img {
   width: 110%;
   height: 95%;
@@ -258,19 +303,19 @@ body {
 .card--catch-trophy.card--rank2,
 .card--catch-trophy.card--rank3 {
   box-sizing: border-box;
-  border: 5.5px solid rgba(0, 172, 234, 0.8);
+  border: clamp(2.5px, 3.5cqh, 5.5px) solid rgba(0, 172, 234, 0.8);
 }
 
 .card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 28px;
+  min-height: 22px;
   flex-shrink: 0;
 }
 
 .card--hero .card-top {
-  min-height: 40px;
+  display: contents;
 }
 
 .card-trophy-badge {
@@ -286,8 +331,10 @@ body {
 }
 
 .card--hero .card-trophy-badge {
-  width: 42px;
-  height: 42px;
+  grid-area: badge;
+  align-self: start;
+  width: clamp(28px, 4cqh, 42px);
+  height: clamp(28px, 4cqh, 42px);
 }
 
 .card--catch-trophy .card-trophy-badge {
@@ -304,13 +351,22 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: clamp(18px, 18cqh, 22px);
+  height: clamp(18px, 18cqh, 22px);
   border-radius: 6px;
   font-family: "JetBrains Mono", monospace;
-  font-size: 10px;
+  font-size: clamp(9px, 9cqh, 11px);
   font-weight: 800;
   flex-shrink: 0;
+}
+
+.card--hero .card-rank {
+  grid-area: rank;
+  align-self: center;
+  width: clamp(28px, 3.4cqh, 36px);
+  height: clamp(28px, 3.4cqh, 36px);
+  font-size: clamp(13px, 1.6cqh, 16px);
+  border-radius: 8px;
 }
 
 .card-rank--1 {
@@ -335,15 +391,21 @@ body {
 }
 
 .card-species {
-  font-size: 15px;
+  font-size: clamp(12px, 14cqh, 15px);
   font-weight: 800;
   color: #2a1400;
   line-height: 1.15;
   margin-top: 2px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card--hero .card-species {
-  font-size: 22px;
+  grid-area: species;
+  margin-top: 0;
+  font-size: clamp(16px, 2.1cqh, 22px);
 }
 
 .card-weight-row {
@@ -351,18 +413,24 @@ body {
   align-items: baseline;
   gap: 3px;
   margin-top: 2px;
+  min-width: 0;
+}
+
+.card--hero .card-weight-row {
+  grid-area: weight;
+  margin-top: 0;
 }
 
 .card-weight {
   font-family: "Lora", Georgia, serif;
-  font-size: 26px;
+  font-size: clamp(15px, min(20cqh, 22cqw), 26px);
   font-weight: 700;
   line-height: 1;
   color: #3a2000;
 }
 
 .card--hero .card-weight {
-  font-size: 38px;
+  font-size: clamp(24px, 3.4cqh, 34px);
 }
 
 .card--rank1 .card-weight {
@@ -371,9 +439,14 @@ body {
 
 .card-unit {
   font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
+  font-size: clamp(9px, 10cqh, 11px);
   font-weight: 600;
   color: #9a7040;
+  flex-shrink: 0;
+}
+
+.card--hero .card-unit {
+  font-size: clamp(11px, 1.3cqh, 13px);
 }
 
 .card-player-row {
@@ -381,8 +454,15 @@ body {
   align-items: center;
   gap: 5px;
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: clamp(3px, 4cqh, 6px);
   border-top: 1px solid rgba(160, 110, 40, 0.18);
+  min-width: 0;
+}
+
+.card--hero .card-player-row {
+  grid-area: player;
+  margin-top: 2px;
+  padding-top: 4px;
 }
 
 .card-dot {
@@ -394,11 +474,19 @@ body {
 }
 
 .card-player {
-  font-size: 12px;
+  font-size: clamp(10px, 11cqh, 12px);
   font-weight: 700;
   color: #5c3a10;
   opacity: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: opacity 0.28s ease;
+}
+
+.card--hero .card-player {
+  font-size: clamp(12px, 1.5cqh, 14px);
 }
 
 .card-player.is-fading {
@@ -443,6 +531,34 @@ body {
 
 .status[hidden] {
   display: none;
+}
+
+/* Две таблицы в одну колонку — иначе сетки ужимаются в «спички». */
+@media (max-width: 1000px) {
+  html,
+  body {
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .board {
+    height: auto;
+    max-height: none;
+    min-height: 100vh;
+  }
+
+  .columns {
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .col .card-grid,
+  .col .card-grid--dense {
+    flex: none;
+    grid-template-rows: unset;
+    grid-auto-rows: minmax(108px, auto);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
