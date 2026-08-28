@@ -1157,6 +1157,7 @@
       </tr>`
       )
       .join("");
+    reapplyTableSort(statsPlayersBody.closest("table"));
   }
 
   function renderStatsCards(items) {
@@ -1176,6 +1177,7 @@
       </tr>`
       )
       .join("");
+    reapplyTableSort(statsCardsBody.closest("table"));
   }
 
   function clearDrawStats() {
@@ -1312,7 +1314,92 @@
     document.querySelector('.tabs > .tab[data-tab="draws"]').click();
   });
 
+  function parseSortCellValue(text) {
+    const t = String(text || "")
+      .replace(/\u00a0/g, " ")
+      .trim();
+    if (!t || t === "—" || t === "-" || t === "…") {
+      return { kind: "empty", num: 0, str: "" };
+    }
+    const pct = t.replace(",", ".").match(/^(-?\d+(?:\.\d+)?)\s*%$/);
+    if (pct) {
+      return { kind: "num", num: parseFloat(pct[1]), str: t.toLowerCase() };
+    }
+    const cleaned = t.replace(/\s/g, "").replace(",", ".");
+    if (/^-?\d+(?:\.\d+)?$/.test(cleaned)) {
+      return { kind: "num", num: parseFloat(cleaned), str: t.toLowerCase() };
+    }
+    return { kind: "str", num: 0, str: t.toLowerCase() };
+  }
+
+  function cellSortText(cell) {
+    if (!cell) return "";
+    const input = cell.querySelector("input, select, textarea");
+    if (input) return String(input.value ?? "");
+    return cell.textContent || "";
+  }
+
+  function reapplyTableSort(table) {
+    const th = table.querySelector("th.sortable-th[data-sort]");
+    if (!th) return;
+    const dir = th.getAttribute("data-sort");
+    const colIndex = Array.from(th.parentElement.children).indexOf(th);
+    sortTableByColumn(table, colIndex, th, dir);
+  }
+
+  function sortTableByColumn(table, colIndex, th, forceDir) {
+    const tbody = table.tBodies[0];
+    if (!tbody) return;
+    const prev = th.getAttribute("data-sort");
+    const dir = forceDir || (prev === "asc" ? "desc" : "asc");
+    table.querySelectorAll("th.sortable-th").forEach((h) => h.removeAttribute("data-sort"));
+    th.setAttribute("data-sort", dir);
+
+    const rows = Array.from(tbody.rows).filter((row) => {
+      if (row.cells.length === 0) return false;
+      if (row.cells[0].colSpan > 1) return false;
+      return true;
+    });
+    const placeholders = Array.from(tbody.rows).filter((row) => !rows.includes(row));
+
+    rows.sort((a, b) => {
+      const va = parseSortCellValue(cellSortText(a.cells[colIndex]));
+      const vb = parseSortCellValue(cellSortText(b.cells[colIndex]));
+      let cmp = 0;
+      if (va.kind === "empty" && vb.kind !== "empty") cmp = 1;
+      else if (vb.kind === "empty" && va.kind !== "empty") cmp = -1;
+      else if (va.kind === "num" && vb.kind === "num") cmp = va.num - vb.num;
+      else cmp = va.str.localeCompare(vb.str, "ru");
+      return dir === "asc" ? cmp : -cmp;
+    });
+
+    rows.forEach((row) => tbody.appendChild(row));
+    placeholders.forEach((row) => tbody.appendChild(row));
+  }
+
+  function initSortableTables() {
+    document.querySelectorAll("table.sortable").forEach((table) => {
+      if (table.dataset.sortBound === "1") return;
+      table.dataset.sortBound = "1";
+      const heads = table.tHead ? table.tHead.querySelectorAll("th") : [];
+      heads.forEach((th, colIndex) => {
+        if (th.hasAttribute("data-nosort")) return;
+        th.classList.add("sortable-th");
+        th.title = "Сортировать";
+        th.tabIndex = 0;
+        th.addEventListener("click", () => sortTableByColumn(table, colIndex, th));
+        th.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            sortTableByColumn(table, colIndex, th);
+          }
+        });
+      });
+    });
+  }
+
   renderWeightsEditor(DEFAULT_WEIGHTS);
   renderRefundRates();
+  initSortableTables();
   loadAll();
 })();

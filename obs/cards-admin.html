@@ -127,6 +127,24 @@
     tr { border-bottom: 1px solid #222233; }
     tr:last-child td { border-bottom: none; }
     tbody tr:hover { background: #1a1a28; }
+    table.sortable th.sortable-th {
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    table.sortable th.sortable-th:hover {
+      color: #c8e0ff;
+    }
+    table.sortable th.sortable-th[data-sort="asc"]::after {
+      content: " ▲";
+      font-size: 10px;
+      color: #8fd48f;
+    }
+    table.sortable th.sortable-th[data-sort="desc"]::after {
+      content: " ▼";
+      font-size: 10px;
+      color: #8fd48f;
+    }
     .mono { font-family: Consolas, "Cascadia Mono", monospace; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     #statusBar {
@@ -904,7 +922,7 @@
           <button type="button" class="tab" data-stats-tab="cards">Карточки</button>
         </div>
         <div id="statsPanelPlayers">
-          <table>
+          <table class="sortable">
             <thead>
               <tr>
                 <th>игрок</th>
@@ -921,7 +939,7 @@
           </table>
         </div>
         <div id="statsPanelCards" style="display: none;">
-          <table>
+          <table class="sortable">
             <thead>
               <tr>
                 <th>карточка</th>
