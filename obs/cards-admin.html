@@ -260,6 +260,11 @@
       color: #e8e8f0;
       font: inherit;
     }
+    #statsDrawSelect {
+      flex: 1;
+      min-width: 240px;
+      max-width: 520px;
+    }
     .cmd-table td:first-child { white-space: nowrap; }
     .series-layout {
       display: grid;
@@ -504,7 +509,7 @@
     }
     .weights-table {
       width: 100%;
-      max-width: 640px;
+      max-width: 720px;
       border-collapse: collapse;
       font-size: 12px;
     }
@@ -603,6 +608,25 @@
           При выключенном модуле команды ниже отвечают отказом.
           Скорость анимации: 1.0 = норма, 2.0 = в 2 раза быстрее, 0.5 = в 2 раза медленнее.
         </p>
+      </div>
+
+      <div class="card">
+        <h3>Компенсация за дубль</h3>
+        <p class="hint" style="margin-top: 0;">
+          Если карта уже есть в альбоме, возвращается доля от стоимости одной карты в наборе
+          (цена тиража ÷ число карт за открытие). Значения из кода, здесь только просмотр.
+        </p>
+        <table class="weights-table" style="margin-top: 10px;">
+          <thead>
+            <tr>
+              <th>редкость</th>
+              <th>возврат</th>
+            </tr>
+          </thead>
+          <tbody id="refundRatesBody">
+            <tr><td colspan="2" class="empty">Загрузка…</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="card">
@@ -803,6 +827,7 @@
         <p class="hint">
           Шансы редкости: относительные веса (сумма не обязана быть 100).
           «Шанс» — вероятность тира редкости; «на 1 карту» = шанс тира / число карт этой редкости в бустере.
+          В «Шансы» у тиража колонка «компенсация» — баллы за один дубль этой редкости.
           Вес &gt; 0 нельзя задать, если в бустере 0 карт этой редкости (поле блокируется).
         </p>
         <div id="drawWeightsEditor" class="weights-grid"></div>
@@ -833,16 +858,23 @@
       <p class="tab-help">
         <strong>Статистика тиража</strong> - сколько принцесс потратили игроки на
         <span class="mono">!бустер</span>, сколько повторов и компенсации, и как часто
-        выпадала каждая карта. Откройте из списка тиражей кнопкой «Стат».
+        выпадала каждая карта. Выберите тираж в списке ниже или откройте его
+        кнопкой «Стат» в таблице тиражей.
       </p>
 
       <div class="card">
         <div class="toolbar">
-          <h3 id="statsDrawTitle" style="margin: 0; flex: 1;">Тираж не выбран</h3>
+          <label class="field-label" style="flex: 1; min-width: 260px;">
+            Тираж
+            <select id="statsDrawSelect">
+              <option value="">Выберите тираж</option>
+            </select>
+          </label>
           <button type="button" id="statsRefresh" class="small">Обновить</button>
+          <button type="button" id="statsCharts" class="small primary">Создать графики</button>
           <button type="button" id="statsBackToDraws" class="small">К тиражам</button>
         </div>
-        <p id="statsDrawMeta" class="hint">Выберите тираж кнопкой «Стат» во вкладке Тиражи.</p>
+        <p id="statsDrawMeta" class="hint">Выберите тираж, чтобы увидеть статистику открытий.</p>
         <div class="tabs" style="margin-bottom: 12px;">
           <button type="button" class="tab active" data-stats-tab="players">Игроки</button>
           <button type="button" class="tab" data-stats-tab="cards">Карточки</button>

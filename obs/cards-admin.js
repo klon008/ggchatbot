@@ -21,6 +21,17 @@
     secretRare: 1,
   };
 
+  const DEFAULT_REFUND_RATES = {
+    common: 0.25,
+    uncommon: 0.5,
+    rare: 0.7,
+    epic: 1,
+    legendary: 1.5,
+    mythic: 2,
+    secretRare: 5,
+  };
+  let refundRates = { ...DEFAULT_REFUND_RATES };
+
   const statusBar = document.getElementById("statusBar");
   const cardsEnabled = document.getElementById("cardsEnabled");
   const cardsDailyLimit = document.getElementById("cardsDailyLimit");
@@ -60,7 +71,7 @@
   let statsDrawId = null;
   let statsSubTab = "players";
 
-  const statsDrawTitle = document.getElementById("statsDrawTitle");
+  const statsDrawSelect = document.getElementById("statsDrawSelect");
   const statsDrawMeta = document.getElementById("statsDrawMeta");
   const statsPlayersBody = document.getElementById("statsPlayersBody");
   const statsCardsBody = document.getElementById("statsCardsBody");
@@ -198,6 +209,35 @@
     return counts;
   }
 
+  function refundPctLabel(rate) {
+    const n = Number(rate);
+    if (!Number.isFinite(n)) return "—";
+    const pct = n * 100;
+    return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1)}%`;
+  }
+
+  function duplicateRefundPoints(costPoints, cardsPerOpen, rarity) {
+    const cost = Number(costPoints);
+    const n = Number(cardsPerOpen);
+    if (!Number.isFinite(cost) || !Number.isFinite(n) || n <= 0) return "—";
+    const rate =
+      Number(refundRates[rarity]) ||
+      Number(refundRates.common) ||
+      DEFAULT_REFUND_RATES.common;
+    return String(Math.floor((cost / n) * rate));
+  }
+
+  function renderRefundRates() {
+    const body = document.getElementById("refundRatesBody");
+    if (!body) return;
+    body.innerHTML = RARITIES.map(
+      (k) => `<tr>
+        <td class="mono">${esc(k)}</td>
+        <td>${esc(refundPctLabel(refundRates[k]))}</td>
+      </tr>`
+    ).join("");
+  }
+
   function perCardPctLabel(tierPctStr, count) {
     if (!count || count <= 0) return "—";
     const tier = parseFloat(tierPctStr);
@@ -278,10 +318,12 @@
     });
   }
 
-  function weightsReadonlyHtml(weights, counts) {
+  function weightsReadonlyHtml(weights, counts, draw) {
     const w = weights || {};
     const c = counts || {};
     const pct = weightsPercentMap(w);
+    const cost = draw && draw.cost_points;
+    const perOpen = draw && draw.cards_per_open;
     const rows = RARITIES.map((k) => {
       const n = c[k] || 0;
       return `<tr>
@@ -290,6 +332,7 @@
         <td>${pct[k]}%</td>
         <td class="mono">${n}</td>
         <td>${perCardPctLabel(pct[k], n)}</td>
+        <td>${esc(duplicateRefundPoints(cost, perOpen, k))}</td>
       </tr>`;
     }).join("");
     return `<div class="weights-readonly">
@@ -301,6 +344,7 @@
             <th>шанс</th>
             <th>карт</th>
             <th>на 1 карту</th>
+            <th>компенсация</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -509,7 +553,43 @@
     }
   }
 
+  const DRAW_STATUS_LABELS = {
+    active: "активный",
+    paused: "пауза",
+    queued: "очередь",
+    closed: "завершён",
+    inactive: "неактивен",
+  };
+
+  function fillStatsDrawSelect() {
+    const prev = statsDrawId || "";
+    const statusOrder = { active: 0, paused: 1, queued: 2, inactive: 3, closed: 4 };
+    const draws = cardsDraws.slice().sort((a, b) => {
+      const da = statusOrder[a.status] ?? 9;
+      const db = statusOrder[b.status] ?? 9;
+      if (da !== db) return da - db;
+      return String(a.name || a.id).localeCompare(String(b.name || b.id), "ru");
+    });
+    const options = [
+      '<option value="">Выберите тираж</option>',
+      ...draws.map((d) => {
+        const status = DRAW_STATUS_LABELS[d.status] || d.status;
+        const label = `${d.name} · ${status} · ${d.id}`;
+        return `<option value="${esc(d.id)}">${esc(label)}</option>`;
+      }),
+    ];
+    statsDrawSelect.innerHTML = options.join("");
+    if (prev && cardsDraws.some((d) => d.id === prev)) {
+      statsDrawSelect.value = prev;
+    } else if (prev) {
+      clearDrawStats();
+    } else {
+      statsDrawSelect.value = "";
+    }
+  }
+
   function renderDraws() {
+    fillStatsDrawSelect();
     if (!cardsDraws.length) {
       drawsBody.innerHTML = '<tr><td colspan="7" class="empty">Нет тиражей</td></tr>';
       return;
@@ -533,7 +613,8 @@
         const odds = oddsOpen
           ? `<tr class="odds-row"><td colspan="7">${weightsReadonlyHtml(
               d.rarity_weights || {},
-              rarityCountsForBooster(d.booster_id)
+              rarityCountsForBooster(d.booster_id),
+              d
             )}</td></tr>`
           : "";
         return main + odds;
@@ -664,6 +745,10 @@
       cardsEnabled.checked = meta.enabled !== false;
       cardsAnimSpeed.value =
         meta.anim_speed != null ? Number(meta.anim_speed) : 1;
+      if (meta.duplicate_refund_rates && typeof meta.duplicate_refund_rates === "object") {
+        refundRates = { ...DEFAULT_REFUND_RATES, ...meta.duplicate_refund_rates };
+      }
+      renderRefundRates();
       if (!editingBoosterId && cardsBoosters.length) {
         selectedPoolIds = new Set(cardsBoosters[0].card_ids || []);
         editingBoosterId = cardsBoosters[0].id;
@@ -954,8 +1039,22 @@
       .join("");
   }
 
+  function clearDrawStats() {
+    statsDrawId = null;
+    statsDrawSelect.value = "";
+    statsDrawMeta.textContent =
+      "Выберите тираж, чтобы увидеть статистику открытий.";
+    statsPlayersBody.innerHTML =
+      '<tr><td colspan="6" class="empty">Нет данных</td></tr>';
+    statsCardsBody.innerHTML =
+      '<tr><td colspan="5" class="empty">Нет данных</td></tr>';
+  }
+
   async function loadDrawStats(drawId, silent) {
-    if (!drawId) return;
+    if (!drawId) {
+      clearDrawStats();
+      return;
+    }
     if (!silent) setStatus("Загрузка статистики…");
     try {
       const [players, cards] = await Promise.all([
@@ -964,11 +1063,11 @@
       ]);
       const draw = cardsDraws.find((d) => d.id === drawId);
       statsDrawId = drawId;
-      statsDrawTitle.textContent = draw
-        ? `Тираж «${draw.name}»`
-        : `Тираж ${drawId}`;
+      statsDrawSelect.value = drawId;
       statsDrawMeta.textContent = draw
-        ? `id: ${draw.id} · бустер: ${draw.booster_name} · статус: ${draw.status}`
+        ? `id: ${draw.id} · бустер: ${draw.booster_name} · статус: ${
+            DRAW_STATUS_LABELS[draw.status] || draw.status
+          }`
         : `id: ${drawId}`;
       renderStatsPlayers(players.items || []);
       renderStatsCards(cards.items || []);
@@ -1040,12 +1139,34 @@
     });
   });
 
+  statsDrawSelect.addEventListener("change", () => {
+    const id = statsDrawSelect.value;
+    if (!id) {
+      clearDrawStats();
+      return;
+    }
+    loadDrawStats(id);
+  });
+
   document.getElementById("statsRefresh").addEventListener("click", () => {
     if (!statsDrawId) {
-      setStatus("Сначала выберите тираж кнопкой «Стат»", "err");
+      setStatus("Сначала выберите тираж в списке", "err");
       return;
     }
     loadDrawStats(statsDrawId);
+  });
+
+  document.getElementById("statsCharts").addEventListener("click", () => {
+    if (!statsDrawId) {
+      setStatus("Сначала выберите тираж в списке", "err");
+      return;
+    }
+    const url = `cards-charts.html?draw=${encodeURIComponent(statsDrawId)}`;
+    window.open(
+      url,
+      "cards-charts",
+      "width=1440,height=920,menubar=no,toolbar=no,noopener"
+    );
   });
 
   document.getElementById("statsBackToDraws").addEventListener("click", () => {
@@ -1053,5 +1174,6 @@
   });
 
   renderWeightsEditor(DEFAULT_WEIGHTS);
+  renderRefundRates();
   loadAll();
 })();

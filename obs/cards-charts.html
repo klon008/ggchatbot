@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Графики тиража</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #1a2744 0%, transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, #2a1a3a 0%, transparent 50%),
+        #0d0d14;
+      color: #e8e8f0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .wrap { max-width: 1360px; margin: 0 auto; padding: 20px 16px 40px; }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      color: #9ecbff;
+    }
+    .sub { margin: 4px 0 0; color: #8888a0; font-size: 13px; }
+    .sub .mono { font-family: Consolas, "Cascadia Mono", monospace; color: #b8b8d0; }
+    a.back {
+      color: #9ecbff;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    a.back:hover { text-decoration: underline; }
+    .status {
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #1c1c2e;
+      color: #b8b8d0;
+      margin-bottom: 16px;
+    }
+    .status.err { color: #ff7b7b; background: #2a1518; }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .kpi {
+      padding: 12px 14px;
+      background: #14141f;
+      border: 1px solid #2a2a40;
+      border-radius: 10px;
+    }
+    .kpi .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #8888a0;
+    }
+    .kpi .value {
+      margin-top: 4px;
+      font-size: 20px;
+      font-weight: 650;
+      color: #fff;
+    }
+    .kpi .hint { margin-top: 2px; font-size: 12px; color: #8888a0; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .card {
+      background: #14141f;
+      border: 1px solid #2a2a40;
+      border-radius: 12px;
+      padding: 14px 16px 10px;
+    }
+    .card.wide { grid-column: 1 / -1; }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #9ecbff;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .chart-box { position: relative; height: 280px; }
+    .chart-box.tall { height: 340px; }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .card.wide { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1 id="title">Графики тиража</h1>
+        <p class="sub" id="subtitle">Загрузка…</p>
+      </div>
+      <a class="back" href="cards-admin.html">← Карты</a>
+    </header>
+    <div id="status" class="status">Собираем историю круток…</div>
+    <div id="content" hidden>
+      <div class="kpis" id="kpis"></div>
+      <div class="grid">
+        <section class="card wide">
+          <h2>Крутки и траты по времени</h2>
+          <div class="chart-box tall"><canvas id="chartFlow"></canvas></div>
+        </section>
+        <section class="card wide">
+          <h2>Редкость выпадений во времени</h2>
+          <div class="chart-box"><canvas id="chartRarityTime"></canvas></div>
+        </section>
+        <section class="card">
+          <h2>Состав дропа</h2>
+          <div class="chart-box"><canvas id="chartRarityPie"></canvas></div>
+        </section>
+        <section class="card">
+          <h2>Факт vs веса тиража</h2>
+          <div class="chart-box"><canvas id="chartExpected"></canvas></div>
+        </section>
+        <section class="card">
+          <h2>Новые карты и повторы</h2>
+          <div class="chart-box"><canvas id="chartNewDup"></canvas></div>
+        </section>
+        <section class="card">
+          <h2>Топ игроков по тратам</h2>
+          <div class="chart-box"><canvas id="chartPlayers"></canvas></div>
+        </section>
+        <section class="card wide">
+          <h2>Самые частые карты</h2>
+          <div class="chart-box tall"><canvas id="chartCards"></canvas></div>
+        </section>
+        <section class="card wide">
+          <h2>Самые редкие карты</h2>
+          <div class="chart-box tall"><canvas id="chartCardsRare"></canvas></div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <script src="cards-charts.js"></script>
+</body>
+</html>

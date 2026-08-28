@@ -501,6 +501,168 @@ async def list_draw_card_stats(db: Database, draw_id: str) -> list[dict[str, Any
     ]
 
 
+def _parse_cards_rolled(raw: Any) -> list[dict[str, Any]]:
+    if isinstance(raw, list):
+        return [x for x in raw if isinstance(x, dict)]
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [x for x in parsed if isinstance(x, dict)]
+
+
+def _parse_opened_at(raw: str) -> datetime:
+    text = (raw or "").strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _empty_rarity_counts() -> dict[str, int]:
+    return {k: 0 for k in RARITIES}
+
+
+def _choose_chart_bucket_sec(span_sec: float) -> int:
+    if span_sec <= 3 * 3600:
+        return 10 * 60
+    if span_sec <= 24 * 3600:
+        return 30 * 60
+    if span_sec <= 3 * 86400:
+        return 3600
+    if span_sec <= 14 * 86400:
+        return 6 * 3600
+    return 86400
+
+
+def _iso_utc(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+async def get_draw_charts(db: Database, draw_id: str) -> Optional[dict[str, Any]]:
+    draw = await get_draw(db, draw_id)
+    if draw is None:
+        return None
+
+    opening_rows = await db.fetchall(
+        """
+        SELECT o.opened_at, o.user_id, COALESCE(u.user_name, '') AS user_name,
+               o.cost_points, o.total_refund, o.cards_rolled
+        FROM booster_openings o
+        LEFT JOIN user_names u ON u.user_id = o.user_id
+        WHERE o.draw_id = ?
+        ORDER BY o.opened_at ASC
+        """,
+        (draw_id,),
+    )
+    card_rows = await db.fetchall("SELECT id, rarity FROM cards")
+    rarity_by_id = {str(r["id"]): str(r["rarity"] or "") for r in card_rows}
+
+    rarity_totals = _empty_rarity_counts()
+    parsed: list[tuple[datetime, int, int, int, int, dict[str, int]]] = []
+    for row in opening_rows:
+        dt = _parse_opened_at(str(row["opened_at"] or ""))
+        rolled = _parse_cards_rolled(row["cards_rolled"])
+        rar = _empty_rarity_counts()
+        new_count = 0
+        dup_count = 0
+        for item in rolled:
+            card_id = str(item.get("card_id") or "").strip()
+            rarity = rarity_by_id.get(card_id, "")
+            if rarity in rar:
+                rar[rarity] += 1
+                rarity_totals[rarity] += 1
+            if item.get("is_duplicate"):
+                dup_count += 1
+            else:
+                new_count += 1
+        parsed.append(
+            (
+                dt,
+                int(row["cost_points"] or 0),
+                int(row["total_refund"] or 0),
+                new_count,
+                dup_count,
+                rar,
+            )
+        )
+
+    bucket_sec = 3600
+    timeline: list[dict[str, Any]] = []
+    if parsed:
+        first_ts = int(parsed[0][0].timestamp())
+        last_ts = int(parsed[-1][0].timestamp())
+        bucket_sec = _choose_chart_bucket_sec(max(0, last_ts - first_ts))
+        start = first_ts - (first_ts % bucket_sec)
+        end = last_ts - (last_ts % bucket_sec)
+        buckets: dict[int, dict[str, Any]] = {}
+        t = start
+        while t <= end:
+            buckets[t] = {
+                "opens": 0,
+                "spent": 0,
+                "refund": 0,
+                "new_count": 0,
+                "dup_count": 0,
+                "rarity": _empty_rarity_counts(),
+            }
+            t += bucket_sec
+        for dt, cost, refund, new_count, dup_count, rar in parsed:
+            key = int(dt.timestamp()) - (int(dt.timestamp()) % bucket_sec)
+            b = buckets.get(key)
+            if b is None:
+                continue
+            b["opens"] += 1
+            b["spent"] += cost
+            b["refund"] += refund
+            b["new_count"] += new_count
+            b["dup_count"] += dup_count
+            for rar_id, n in rar.items():
+                b["rarity"][rar_id] += n
+        timeline = [
+            {
+                "t": _iso_utc(datetime.fromtimestamp(ts, tz=timezone.utc)),
+                **row,
+            }
+            for ts, row in sorted(buckets.items())
+        ]
+
+    players = await list_draw_user_stats(db, draw_id)
+    cards = await list_draw_card_stats(db, draw_id)
+    spent = sum(p["spent_points"] for p in players)
+    refund = sum(p["refund_points"] for p in players)
+    opens = sum(p["opens"] for p in players)
+    new_count = sum(p["new_count"] for p in players)
+    dup_count = sum(p["dup_count"] for p in players)
+
+    return {
+        "draw": draw,
+        "bucket_seconds": bucket_sec,
+        "totals": {
+            "opens": opens,
+            "players": len(players),
+            "spent": spent,
+            "refund": refund,
+            "new_count": new_count,
+            "dup_count": dup_count,
+            "cards": new_count + dup_count,
+        },
+        "rarity": [{"id": k, "count": rarity_totals[k]} for k in RARITIES],
+        "timeline": timeline,
+        "players": players,
+        "cards": cards,
+    }
+
+
 async def get_booster_promo_url(db: Database, booster_id: str) -> Optional[str]:
     async with db.transaction() as conn:
         cur = await conn.execute(

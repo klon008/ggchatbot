@@ -386,6 +386,13 @@ async def main() -> int:
         async with s.get(f"{base}/cards-admin.js") as r:
             assert r.status == 200, "cards-admin.js не отдался"
             print("[OK] HTTP cards-admin.js")
+        async with s.get(f"{base}/cards-charts.html") as r:
+            html = await r.text()
+            assert r.status == 200 and "cards-charts.js" in html, "cards-charts.html не отдался"
+            print("[OK] HTTP cards-charts.html")
+        async with s.get(f"{base}/cards-charts.js") as r:
+            assert r.status == 200, "cards-charts.js не отдался"
+            print("[OK] HTTP cards-charts.js")
 
         pending_uid = "smoke-pending-user"
         await bot.princess.points.set_balance(pending_uid, 0)

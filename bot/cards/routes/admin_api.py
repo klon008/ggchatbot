@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from aiohttp import web
 
 from bot.cards.card_stories import STORIES_SOURCE_REL, load_card_stories
+from bot.cards.constants import DUPLICATE_REFUND_RATES
 from bot.cards.series_pack.conflicts import check_step_conflicts
 from bot.cards.series_pack.models import (
     DEFAULT_CARD_BACK_ID,
@@ -100,6 +101,10 @@ class CardsAdminRoutes:
                     "/api/cards/draws/{draw_id}/stats/cards",
                     self._draws_stats_cards,
                 ),
+                web.get(
+                    "/api/cards/draws/{draw_id}/stats/charts",
+                    self._draws_stats_charts,
+                ),
                 web.get("/api/cards/series-pack/config", self._series_pack_config),
                 web.post("/api/cards/series-pack/check", self._series_pack_check),
                 web.post("/api/cards/series-pack/build", self._series_pack_build),
@@ -122,7 +127,9 @@ class CardsAdminRoutes:
         )
 
     async def _meta_get(self, request: web.Request) -> web.Response:
-        return json_response(await cards_db.get_cards_meta(self._db))
+        meta = await cards_db.get_cards_meta(self._db)
+        meta["duplicate_refund_rates"] = dict(DUPLICATE_REFUND_RATES)
+        return json_response(meta)
 
     async def _meta_put(self, request: web.Request) -> web.Response:
         data = await read_json(request)
@@ -403,6 +410,13 @@ class CardsAdminRoutes:
             return error_response("Тираж не найден", status=404)
         items = await cards_db.list_draw_card_stats(self._db, draw_id)
         return json_response({"items": items})
+
+    async def _draws_stats_charts(self, request: web.Request) -> web.Response:
+        draw_id = request.match_info["draw_id"]
+        payload = await cards_db.get_draw_charts(self._db, draw_id)
+        if payload is None:
+            return error_response("Тираж не найден", status=404)
+        return json_response(payload)
 
     async def _series_pack_config(self, request: web.Request) -> web.Response:
         cfg = Config.load()

@@ -21,6 +21,10 @@ data/
 
 logs/
 
+# Local scratch dumps (logs, rar archives)
+
+test/
+
 oldbot/
 
 
