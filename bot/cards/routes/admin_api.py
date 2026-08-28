@@ -105,6 +105,16 @@ class CardsAdminRoutes:
                     "/api/cards/draws/{draw_id}/stats/charts",
                     self._draws_stats_charts,
                 ),
+                web.get("/api/cards/draw-templates", self._templates_list),
+                web.post("/api/cards/draw-templates", self._templates_create),
+                web.put(
+                    "/api/cards/draw-templates/{template_id}",
+                    self._templates_update,
+                ),
+                web.delete(
+                    "/api/cards/draw-templates/{template_id}",
+                    self._templates_delete,
+                ),
                 web.get("/api/cards/series-pack/config", self._series_pack_config),
                 web.post("/api/cards/series-pack/check", self._series_pack_check),
                 web.post("/api/cards/series-pack/build", self._series_pack_build),
@@ -292,18 +302,10 @@ class CardsAdminRoutes:
         weights = _parse_weights(data.get("rarity_weights"))
         if weights is None:
             return error_response("rarity_weights: объект с редкостями common…secretRare (+ mythic)")
-        pool_cards = await cards_db.list_booster_pool_cards(self._db, booster_id)
-        rarity_counts: dict[str, int] = {r: 0 for r in cards_db.RARITIES}
-        for card in pool_cards:
-            r = card.get("rarity")
-            if r in rarity_counts:
-                rarity_counts[r] += 1
-        empty_with_weight = [
-            r for r in cards_db.RARITIES if weights.get(r, 0) > 0 and rarity_counts.get(r, 0) <= 0
-        ]
-        if empty_with_weight:
+        bad_weights = await self._empty_rarities_with_weight(booster_id, weights)
+        if bad_weights:
             return error_response(
-                "вес > 0 для rarity без карт в бустере: " + ", ".join(empty_with_weight)
+                "вес > 0 для rarity без карт в бустере: " + ", ".join(bad_weights)
             )
         if await cards_db.draw_exists(self._db, draw_id):
             return error_response("Тираж уже существует", status=409)
@@ -417,6 +419,144 @@ class CardsAdminRoutes:
         if payload is None:
             return error_response("Тираж не найден", status=404)
         return json_response(payload)
+
+    async def _empty_rarities_with_weight(
+        self, booster_id: str, weights: dict[str, float]
+    ) -> list[str]:
+        pool_cards = await cards_db.list_booster_pool_cards(self._db, booster_id)
+        rarity_counts: dict[str, int] = {r: 0 for r in cards_db.RARITIES}
+        for card in pool_cards:
+            r = card.get("rarity")
+            if r in rarity_counts:
+                rarity_counts[r] += 1
+        return [
+            r
+            for r in cards_db.RARITIES
+            if weights.get(r, 0) > 0 and rarity_counts.get(r, 0) <= 0
+        ]
+
+    def _parse_planned_draw_id(self, raw: Any) -> tuple[Optional[str], Optional[web.Response]]:
+        if raw is None:
+            return "", None
+        text = str(raw).strip()
+        if not text:
+            return "", None
+        slug = _parse_slug(text)
+        if slug is None:
+            return None, error_response("planned_draw_id: slug тиража")
+        return slug, None
+
+    async def _parse_template_fields(
+        self, data: dict[str, Any]
+    ) -> tuple[Optional[dict[str, Any]], Optional[web.Response]]:
+        name = str(data.get("name", "")).strip()
+        if not name:
+            return None, error_response("name обязателен")
+        planned_draw_id, err = self._parse_planned_draw_id(data.get("planned_draw_id"))
+        if err is not None:
+            return None, err
+        booster_id = _parse_slug(data.get("booster_id"))
+        if booster_id is None or not await cards_db.booster_exists(self._db, booster_id):
+            return None, error_response("booster_id не найден")
+        try:
+            cost = int(data.get("cost_points", 0))
+            cards_per = int(data.get("cards_per_open", 1))
+            daily_limit = int(data.get("daily_limit", 0))
+        except (TypeError, ValueError):
+            return None, error_response(
+                "cost_points, cards_per_open, daily_limit — целые числа"
+            )
+        if cost <= 0 or cards_per <= 0:
+            return None, error_response("cost_points и cards_per_open > 0")
+        weights = _parse_weights(data.get("rarity_weights"))
+        if weights is None:
+            return None, error_response(
+                "rarity_weights: объект с редкостями common…secretRare (+ mythic)"
+            )
+        bad_weights = await self._empty_rarities_with_weight(booster_id, weights)
+        if bad_weights:
+            return None, error_response(
+                "вес > 0 для rarity без карт в бустере: " + ", ".join(bad_weights)
+            )
+        return (
+            {
+                "name": name,
+                "planned_draw_id": planned_draw_id or "",
+                "booster_id": booster_id,
+                "cost_points": cost,
+                "cards_per_open": cards_per,
+                "daily_limit": max(0, daily_limit),
+                "rarity_weights": weights,
+            },
+            None,
+        )
+
+    def _parse_template_id(self, request: web.Request) -> Optional[int]:
+        raw = request.match_info.get("template_id", "")
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return None
+        if value < 1:
+            return None
+        return value
+
+    async def _templates_list(self, request: web.Request) -> web.Response:
+        items = await cards_db.list_draw_templates(self._db)
+        return json_response({"items": items})
+
+    async def _templates_create(self, request: web.Request) -> web.Response:
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        fields, err = await self._parse_template_fields(data)
+        if err is not None:
+            return err
+        assert fields is not None
+        try:
+            item = await cards_db.create_draw_template(self._db, **fields)
+        except ValueError as exc:
+            if str(exc) == "planned_draw_id_taken":
+                return error_response(
+                    "planned_draw_id уже занят другим шаблоном", status=409
+                )
+            return error_response(str(exc), status=409)
+        return json_response(item, status=201)
+
+    async def _templates_update(self, request: web.Request) -> web.Response:
+        template_id = self._parse_template_id(request)
+        if template_id is None:
+            return error_response("Шаблон не найден", status=404)
+        data = await read_json(request)
+        if data is None:
+            return error_response("Некорректный JSON")
+        fields, err = await self._parse_template_fields(data)
+        if err is not None:
+            return err
+        assert fields is not None
+        try:
+            item = await cards_db.update_draw_template(
+                self._db, template_id, **fields
+            )
+        except ValueError as exc:
+            code = str(exc)
+            if code == "not_found":
+                return error_response("Шаблон не найден", status=404)
+            if code == "planned_draw_id_taken":
+                return error_response(
+                    "planned_draw_id уже занят другим шаблоном", status=409
+                )
+            return error_response(code, status=409)
+        return json_response(item)
+
+    async def _templates_delete(self, request: web.Request) -> web.Response:
+        template_id = self._parse_template_id(request)
+        if template_id is None:
+            return error_response("Шаблон не найден", status=404)
+        deleted = await cards_db.delete_draw_template(self._db, template_id)
+        if not deleted:
+            return error_response("Шаблон не найден", status=404)
+        return json_response({"ok": True})
 
     async def _series_pack_config(self, request: web.Request) -> web.Response:
         cfg = Config.load()

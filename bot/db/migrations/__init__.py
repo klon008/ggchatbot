@@ -42,6 +42,7 @@ from . import (
     m034_daycycle_meta,
     m035_fishing_trophies,
     m036_princess_events,
+    m037_draw_templates,
 )
 
 
@@ -88,4 +89,5 @@ MIGRATIONS: list[Migration] = [
     m034_daycycle_meta,
     m035_fishing_trophies,
     m036_princess_events,
+    m037_draw_templates,
 ]

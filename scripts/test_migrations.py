@@ -70,6 +70,7 @@ REQUIRED_TABLES = [
     "races_princess_stats",
     "draw_user_stats",
     "draw_card_stats",
+    "draw_templates",
 ]
 
 

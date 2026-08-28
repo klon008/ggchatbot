@@ -808,6 +808,7 @@
         </ul>
         «Завершить» поднимает следующий из очереди. «Сразу активировать» при создании закрывает текущий live.
         Шансы задаются только при создании; у существующих - кнопка «Шансы» (просмотр).
+        Шаблоны ниже — не очередь и не тираж: только план полей. Тираж появляется после «Создать тираж».
       </div>
 
       <div class="card">
@@ -823,6 +824,7 @@
           <label>лимит/день <input type="number" id="drawDailyLimit" min="0" value="0" /></label>
           <label><input type="checkbox" id="drawActivate" /> сразу активировать (закроет текущий live)</label>
           <button type="submit" class="primary">Создать тираж</button>
+          <button type="button" id="drawTemplateSave" class="small">Сохранить шаблон</button>
         </form>
         <p class="hint">
           Шансы редкости: относительные веса (сумма не обязана быть 100).
@@ -831,6 +833,28 @@
           Вес &gt; 0 нельзя задать, если в бустере 0 карт этой редкости (поле блокируется).
         </p>
         <div id="drawWeightsEditor" class="weights-grid"></div>
+      </div>
+
+      <div class="card">
+        <h3>Шаблоны</h3>
+        <p class="hint">
+          Не в FIFO. «В форму» подставляет поля; тираж создаётся только кнопкой «Создать тираж».
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>план</th>
+              <th>id тиража</th>
+              <th>бустер</th>
+              <th>цена</th>
+              <th>карт</th>
+              <th>действия</th>
+            </tr>
+          </thead>
+          <tbody id="drawTemplatesBody">
+            <tr><td colspan="6" class="empty">Загрузка…</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="card">

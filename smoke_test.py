@@ -249,6 +249,12 @@ async def main() -> int:
             assert any(d["status"] == "active" for d in draws["items"])
             print("[OK] GET /api/cards/draws")
 
+        async with s.get(f"{base}/api/cards/draw-templates") as r:
+            assert r.status == 200
+            templates = await r.json()
+            assert isinstance(templates.get("items"), list)
+            print("[OK] GET /api/cards/draw-templates")
+
         async with s.put(
             f"{base}/api/cards/meta",
             json={"daily_open_limit": 5, "enabled": True, "anim_speed": 1.5},

@@ -43,6 +43,7 @@
   const drawBooster = document.getElementById("drawBooster");
   const boosterForm = document.getElementById("boosterForm");
   const drawForm = document.getElementById("drawForm");
+  const drawTemplatesBody = document.getElementById("drawTemplatesBody");
   const seriesList = document.getElementById("seriesList");
   const seriesForm = document.getElementById("seriesForm");
   const seriesEditEmpty = document.getElementById("seriesEditEmpty");
@@ -61,6 +62,7 @@
   };
   let cardsBoosters = [];
   let cardsDraws = [];
+  let cardsTemplates = [];
   let cardsSeries = [];
   let selectedPoolIds = new Set();
   let editingBoosterId = null;
@@ -68,6 +70,7 @@
   let selectedBoosterId = null;
   let boosterGalleryOpen = false;
   let openOddsDrawId = null;
+  let editingTemplateId = null;
   let statsDrawId = null;
   let statsSubTab = "players";
 
@@ -622,6 +625,30 @@
       .join("");
   }
 
+  function renderTemplates() {
+    if (!cardsTemplates.length) {
+      drawTemplatesBody.innerHTML =
+        '<tr><td colspan="6" class="empty">Нет шаблонов</td></tr>';
+      return;
+    }
+    drawTemplatesBody.innerHTML = cardsTemplates
+      .map((t) => {
+        const editing = editingTemplateId === t.id ? " class=\"editing\"" : "";
+        return `<tr data-template-id="${esc(t.id)}"${editing}>
+        <td>${esc(t.name)}</td>
+        <td class="mono">${esc(t.planned_draw_id || "—")}</td>
+        <td>${esc(t.booster_name)}</td>
+        <td>${esc(t.cost_points)}</td>
+        <td>${esc(t.cards_per_open)}</td>
+        <td class="actions">
+          <button type="button" class="small btn-template-fill" data-id="${esc(t.id)}">В форму</button>
+          <button type="button" class="small danger btn-template-delete" data-id="${esc(t.id)}">Удалить</button>
+        </td>
+      </tr>`;
+      })
+      .join("");
+  }
+
   function cardBackUrl(cardBackId) {
     const id = (cardBackId || "card-back").trim() || "card-back";
     return `/assets/cards/${id}.svg`;
@@ -690,6 +717,7 @@
   }
 
   function prefillDrawForm(draw) {
+    editingTemplateId = null;
     document.getElementById("drawId").value = `${draw.id}_copy`;
     document.getElementById("drawName").value = `${draw.name} (копия)`;
     drawBooster.value = draw.booster_id;
@@ -701,6 +729,47 @@
     document.querySelector('.tab[data-tab="draws"]').click();
     document.getElementById("drawId").focus();
     setStatus("Форма заполнена из тиража - поправьте id/шансы и создайте", "ok");
+  }
+
+  function fillFormFromTemplate(tpl) {
+    editingTemplateId = tpl.id;
+    document.getElementById("drawId").value = tpl.planned_draw_id || "";
+    document.getElementById("drawName").value = tpl.name || "";
+    drawBooster.value = tpl.booster_id;
+    document.getElementById("drawCost").value = tpl.cost_points;
+    document.getElementById("drawCards").value = tpl.cards_per_open;
+    document.getElementById("drawDailyLimit").value = tpl.daily_limit ?? 0;
+    document.getElementById("drawActivate").checked = false;
+    renderWeightsEditor(tpl.rarity_weights || DEFAULT_WEIGHTS);
+    renderTemplates();
+    document.getElementById("drawId").focus();
+    setStatus("Форма из шаблона. «Создать тираж» ставит в очередь; шаблон не трогается", "ok");
+  }
+
+  function collectDrawFormFields() {
+    const planned_draw_id = document.getElementById("drawId").value.trim().toLowerCase();
+    const name = document.getElementById("drawName").value.trim();
+    const booster_id = drawBooster.value;
+    const cost_points = parseInt(document.getElementById("drawCost").value, 10);
+    const cards_per_open = parseInt(document.getElementById("drawCards").value, 10);
+    const daily_limit = parseInt(document.getElementById("drawDailyLimit").value, 10);
+    const activate = document.getElementById("drawActivate").checked;
+    const counts = rarityCountsForBooster(booster_id);
+    const rarity_weights = readWeightsFromEditor();
+    const bad = RARITIES.filter(
+      (k) => (rarity_weights[k] || 0) > 0 && (counts[k] || 0) <= 0
+    );
+    return {
+      planned_draw_id,
+      name,
+      booster_id,
+      cost_points,
+      cards_per_open,
+      daily_limit: Number.isNaN(daily_limit) ? 0 : daily_limit,
+      activate,
+      rarity_weights,
+      bad,
+    };
   }
 
   drawBooster.addEventListener("change", () => {
@@ -725,10 +794,11 @@
   async function loadAll() {
     setStatus("Загрузка…");
     try {
-      const [catalog, boosters, draws, meta, series] = await Promise.all([
+      const [catalog, boosters, draws, templates, meta, series] = await Promise.all([
         api("GET", "/api/cards/catalog"),
         api("GET", "/api/cards/boosters"),
         api("GET", "/api/cards/draws"),
+        api("GET", "/api/cards/draw-templates"),
         api("GET", "/api/cards/meta"),
         api("GET", "/api/cards/series"),
       ]);
@@ -740,6 +810,7 @@
       };
       cardsBoosters = boosters.items || [];
       cardsDraws = draws.items || [];
+      cardsTemplates = templates.items || [];
       cardsSeries = series.items || [];
       cardsDailyLimit.value = meta.daily_open_limit ?? 0;
       cardsEnabled.checked = meta.enabled !== false;
@@ -757,6 +828,7 @@
       renderCatalog();
       renderBoosters();
       renderDraws();
+      renderTemplates();
       renderSeriesList();
       if (selectedSeriesId) {
         selectSeries(selectedSeriesId);
@@ -887,39 +959,106 @@
 
   drawForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const id = document.getElementById("drawId").value.trim().toLowerCase();
-    const name = document.getElementById("drawName").value.trim();
-    const booster_id = drawBooster.value;
-    const cost_points = parseInt(document.getElementById("drawCost").value, 10);
-    const cards_per_open = parseInt(document.getElementById("drawCards").value, 10);
-    const daily_limit = parseInt(document.getElementById("drawDailyLimit").value, 10);
-    const activate = document.getElementById("drawActivate").checked;
-    const counts = rarityCountsForBooster(booster_id);
-    const rarity_weights = readWeightsFromEditor();
-    const bad = RARITIES.filter((k) => (rarity_weights[k] || 0) > 0 && (counts[k] || 0) <= 0);
-    if (bad.length) {
-      setStatus(`Вес > 0 нельзя для редкости без карт в бустере: ${bad.join(", ")}`, "err");
+    const fields = collectDrawFormFields();
+    if (fields.bad.length) {
+      setStatus(`Вес > 0 нельзя для редкости без карт в бустере: ${fields.bad.join(", ")}`, "err");
       return;
     }
     try {
       await api("POST", "/api/cards/draws", {
-        id,
-        name,
-        booster_id,
-        cost_points,
-        cards_per_open,
-        daily_limit: Number.isNaN(daily_limit) ? 0 : daily_limit,
-        activate,
-        rarity_weights,
+        id: fields.planned_draw_id,
+        name: fields.name,
+        booster_id: fields.booster_id,
+        cost_points: fields.cost_points,
+        cards_per_open: fields.cards_per_open,
+        daily_limit: fields.daily_limit,
+        activate: fields.activate,
+        rarity_weights: fields.rarity_weights,
       });
       document.getElementById("drawId").value = "";
       document.getElementById("drawName").value = "";
       document.getElementById("drawActivate").checked = false;
+      editingTemplateId = null;
       renderWeightsEditor(DEFAULT_WEIGHTS);
       await loadAll();
       setStatus("Тираж создан", "ok");
     } catch (err) {
       setStatus(err.message, "err");
+    }
+  });
+
+  document.getElementById("drawTemplateSave").addEventListener("click", async () => {
+    const fields = collectDrawFormFields();
+    if (fields.bad.length) {
+      setStatus(`Вес > 0 нельзя для редкости без карт в бустере: ${fields.bad.join(", ")}`, "err");
+      return;
+    }
+    let name = fields.name;
+    if (!name) {
+      name = window.prompt("Название плана (шаблона)") || "";
+      name = name.trim();
+    }
+    if (!name) {
+      setStatus("Нужно имя плана", "err");
+      return;
+    }
+    const body = {
+      name,
+      planned_draw_id: fields.planned_draw_id,
+      booster_id: fields.booster_id,
+      cost_points: fields.cost_points,
+      cards_per_open: fields.cards_per_open,
+      daily_limit: fields.daily_limit,
+      rarity_weights: fields.rarity_weights,
+    };
+    try {
+      if (editingTemplateId) {
+        await api(
+          "PUT",
+          `/api/cards/draw-templates/${encodeURIComponent(editingTemplateId)}`,
+          body
+        );
+        await loadAll();
+        setStatus("Шаблон обновлён", "ok");
+      } else {
+        const item = await api("POST", "/api/cards/draw-templates", body);
+        editingTemplateId = item.id;
+        if (!fields.name) {
+          document.getElementById("drawName").value = name;
+        }
+        await loadAll();
+        setStatus("Шаблон сохранён", "ok");
+      }
+    } catch (err) {
+      setStatus(err.message, "err");
+    }
+  });
+
+  drawTemplatesBody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    if (!id) return;
+    if (btn.classList.contains("btn-template-fill")) {
+      const tpl = cardsTemplates.find((t) => t.id === id);
+      if (!tpl) return;
+      fillFormFromTemplate(tpl);
+      return;
+    }
+    if (btn.classList.contains("btn-template-delete")) {
+      if (!confirm("Удалить шаблон? Тиражи не изменятся.")) {
+        return;
+      }
+      try {
+        await api("DELETE", `/api/cards/draw-templates/${encodeURIComponent(id)}`);
+        if (editingTemplateId === id) {
+          editingTemplateId = null;
+        }
+        await loadAll();
+        setStatus("Шаблон удалён", "ok");
+      } catch (err) {
+        setStatus(err.message, "err");
+      }
     }
   });
 

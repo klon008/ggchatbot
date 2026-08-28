@@ -1236,3 +1236,165 @@ async def copy_draw(
         daily_limit=src["daily_limit"],
         activate=activate,
     )
+
+
+def _draw_template_from_row(r: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "id": int(r[0]),
+        "name": r[1],
+        "planned_draw_id": r[2] or "",
+        "booster_id": r[3],
+        "booster_name": r[4],
+        "cost_points": int(r[5]),
+        "cards_per_open": int(r[6]),
+        "daily_limit": int(r[7]),
+        "rarity_weights": json.loads(r[8]),
+        "created_at": r[9],
+        "updated_at": r[10],
+    }
+
+
+_TEMPLATE_SELECT = """
+    SELECT t.id, t.name, t.planned_draw_id, t.booster_id, b.name,
+           t.cost_points, t.cards_per_open, t.daily_limit, t.rarity_weights,
+           t.created_at, t.updated_at
+    FROM draw_templates t
+    JOIN boosters b ON b.id = t.booster_id
+"""
+
+
+async def list_draw_templates(db: Database) -> list[dict[str, Any]]:
+    async with db.transaction() as conn:
+        cur = await conn.execute(
+            _TEMPLATE_SELECT + " ORDER BY t.updated_at DESC, t.id DESC"
+        )
+        rows = await cur.fetchall()
+    return [_draw_template_from_row(r) for r in rows]
+
+
+async def get_draw_template(db: Database, template_id: int) -> Optional[dict[str, Any]]:
+    async with db.transaction() as conn:
+        cur = await conn.execute(
+            _TEMPLATE_SELECT + " WHERE t.id = ?",
+            (template_id,),
+        )
+        row = await cur.fetchone()
+    return _draw_template_from_row(row) if row else None
+
+
+async def _planned_draw_id_taken(
+    conn: Any,
+    planned_draw_id: str,
+    *,
+    exclude_id: Optional[int] = None,
+) -> bool:
+    if not planned_draw_id:
+        return False
+    if exclude_id is None:
+        cur = await conn.execute(
+            "SELECT 1 FROM draw_templates WHERE planned_draw_id = ? LIMIT 1",
+            (planned_draw_id,),
+        )
+    else:
+        cur = await conn.execute(
+            "SELECT 1 FROM draw_templates WHERE planned_draw_id = ? AND id != ? LIMIT 1",
+            (planned_draw_id, exclude_id),
+        )
+    return await cur.fetchone() is not None
+
+
+async def create_draw_template(
+    db: Database,
+    *,
+    name: str,
+    planned_draw_id: str,
+    booster_id: str,
+    cost_points: int,
+    cards_per_open: int,
+    daily_limit: int,
+    rarity_weights: dict[str, float],
+) -> dict[str, Any]:
+    now = _utc_now()
+    async with db.transaction() as conn:
+        if await _planned_draw_id_taken(conn, planned_draw_id):
+            raise ValueError("planned_draw_id_taken")
+        cur = await conn.execute(
+            """
+            INSERT INTO draw_templates (
+                name, planned_draw_id, booster_id, cost_points, cards_per_open,
+                daily_limit, rarity_weights, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                name,
+                planned_draw_id,
+                booster_id,
+                cost_points,
+                cards_per_open,
+                max(0, daily_limit),
+                json.dumps(rarity_weights, ensure_ascii=False),
+                now,
+                now,
+            ),
+        )
+        new_id = int(cur.lastrowid)
+    item = await get_draw_template(db, new_id)
+    assert item is not None
+    return item
+
+
+async def update_draw_template(
+    db: Database,
+    template_id: int,
+    *,
+    name: str,
+    planned_draw_id: str,
+    booster_id: str,
+    cost_points: int,
+    cards_per_open: int,
+    daily_limit: int,
+    rarity_weights: dict[str, float],
+) -> dict[str, Any]:
+    now = _utc_now()
+    async with db.transaction() as conn:
+        cur = await conn.execute(
+            "SELECT 1 FROM draw_templates WHERE id = ?",
+            (template_id,),
+        )
+        if await cur.fetchone() is None:
+            raise ValueError("not_found")
+        if await _planned_draw_id_taken(conn, planned_draw_id, exclude_id=template_id):
+            raise ValueError("planned_draw_id_taken")
+        await conn.execute(
+            """
+            UPDATE draw_templates SET
+                name = ?, planned_draw_id = ?, booster_id = ?,
+                cost_points = ?, cards_per_open = ?, daily_limit = ?,
+                rarity_weights = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                name,
+                planned_draw_id,
+                booster_id,
+                cost_points,
+                cards_per_open,
+                max(0, daily_limit),
+                json.dumps(rarity_weights, ensure_ascii=False),
+                now,
+                template_id,
+            ),
+        )
+    item = await get_draw_template(db, template_id)
+    assert item is not None
+    return item
+
+
+async def delete_draw_template(db: Database, template_id: int) -> bool:
+    async with db.transaction() as conn:
+        cur = await conn.execute(
+            "DELETE FROM draw_templates WHERE id = ?",
+            (template_id,),
+        )
+        return cur.rowcount > 0
+
