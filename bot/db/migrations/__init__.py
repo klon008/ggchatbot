@@ -43,6 +43,7 @@ from . import (
     m035_fishing_trophies,
     m036_princess_events,
     m037_draw_templates,
+    m038_messaging,
 )
 
 
@@ -90,4 +91,5 @@ MIGRATIONS: list[Migration] = [
     m035_fishing_trophies,
     m036_princess_events,
     m037_draw_templates,
+    m038_messaging,
 ]

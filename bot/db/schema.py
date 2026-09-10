@@ -396,6 +396,29 @@ CREATE TABLE IF NOT EXISTS princess_bonus_grants (
 
 CREATE INDEX IF NOT EXISTS idx_princess_bonus_grants_kind_day
     ON princess_bonus_grants(kind, day_key);
+
+CREATE TABLE IF NOT EXISTS auto_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    command TEXT NOT NULL,
+    reply TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_auto_responses_command
+    ON auto_responses(command);
+
+CREATE TABLE IF NOT EXISTS timed_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    interval_sec INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    next_send_at REAL,
+    last_sent_at REAL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 

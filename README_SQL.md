@@ -226,6 +226,35 @@ CREATE TABLE queue_items (
 );
 ```
 
+### Messaging — авто-ответы и таймер (m038)
+
+```sql
+-- Авто-ответы на !команды (админ-CRUD в tab «Сообщения»)
+CREATE TABLE auto_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    command TEXT NOT NULL,        -- '!faq', уникальный, не из PUBLIC_COMMANDS
+    reply TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,     -- ISO UTC
+    updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_auto_responses_command ON auto_responses(command);
+
+-- Сообщения по таймеру: очередь не копится, хранится только момент следующей отправки
+CREATE TABLE timed_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    interval_sec INTEGER NOT NULL,     -- 60..86400
+    enabled INTEGER NOT NULL DEFAULT 1,
+    next_send_at REAL,                 -- unix; при старте просроченные сбрасываются в будущее
+    last_sent_at REAL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+CRUD-функции — `bot/db/messaging.py`; фоновый цикл и диспетчер авто-ответов — `bot/messaging/handler.py`.
+
 ### Соответствие старым JSON
 
 | JSON-ключ / файл | SQLite |

@@ -255,6 +255,7 @@
       <button type="button" class="tab" data-tab="fishing">Рыбалка</button>
       <button type="button" class="tab" data-tab="events">Ивенты</button>
       <button type="button" class="tab" data-tab="steal">Кража</button>
+      <button type="button" class="tab" data-tab="messaging">Сообщения</button>
       <a href="cards-admin.html" class="tab tab-link" title="Портрет 310×330 · рубашка 350×490">Карты</a>
     </div>
 
@@ -1034,6 +1035,72 @@
             <tr><td colspan="7" class="empty">—</td></tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="panel-messaging" class="panel">
+      <div class="tabs" style="margin-bottom: 12px;">
+        <button type="button" class="tab active" data-msgtab="auto">Авто-ответы</button>
+        <button type="button" class="tab" data-msgtab="timed">Сообщения по таймеру</button>
+      </div>
+
+      <div id="msgPanelAuto">
+        <div class="card">
+          <h3>Авто-ответы на команды</h3>
+          <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+            Бот отвечает готовым сообщением на команду зрителя. Скрытые команды — в
+            <code>!команды</code> не попадают. Нельзя занять команды самого бота
+            (<code>!баллы</code>, <code>!рулетка</code> и т.д.).
+          </p>
+          <form class="add-form" id="autoAddForm">
+            <label>Команда <input type="text" id="autoAddCommand" placeholder="!faq" maxlength="32" required /></label>
+            <label>Ответ <input type="text" id="autoAddReply" placeholder="текст ответа бота" maxlength="500" required /></label>
+            <button type="submit" class="primary">Добавить</button>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th>Команда</th>
+                <th>Ответ</th>
+                <th>Вкл</th>
+                <th data-nosort>действия</th>
+              </tr>
+            </thead>
+            <tbody id="autoBody">
+              <tr><td colspan="4" class="empty">Загрузка…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="msgPanelTimed" style="display: none;">
+        <div class="card">
+          <h3>Сообщения по таймеру</h3>
+          <p class="empty" style="margin: 0 0 10px; font-size: 13px">
+            Бот сам пишет сообщение каждые N минут (1–1440). После перезапуска бота
+            таймеры сбрасываются — накопленное не рассылается. При выключении и повторном
+            включении таймер стартует заново.
+          </p>
+          <form class="add-form" id="timedAddForm">
+            <label>Сообщение <input type="text" id="timedAddText" placeholder="текст сообщения" maxlength="500" required /></label>
+            <label>Интервал (мин) <input type="number" id="timedAddInterval" min="1" max="1440" value="15" required /></label>
+            <button type="submit" class="primary">Добавить</button>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th>Сообщение</th>
+                <th>Интервал</th>
+                <th>Вкл</th>
+                <th>След. отправка</th>
+                <th data-nosort>действия</th>
+              </tr>
+            </thead>
+            <tbody id="timedBody">
+              <tr><td colspan="5" class="empty">Загрузка…</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 

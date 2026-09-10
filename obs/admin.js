@@ -2251,6 +2251,293 @@
     }
   });
 
+  // --- Сообщения бота: авто-ответы и сообщения по таймеру ---
+
+  const autoBody = document.getElementById("autoBody");
+  const timedBody = document.getElementById("timedBody");
+  let autoItems = [];
+  let timedItems = [];
+  let msgSubTab = "auto";
+
+  function escAttr(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function formatNextSend(ts) {
+    if (!ts) return "—";
+    const ms = ts * 1000 - Date.now();
+    if (ms <= 0) return "сейчас";
+    const min = Math.ceil(ms / 60000);
+    if (min < 60) return `через ${min} мин`;
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? `через ${h} ч ${m} мин` : `через ${h} ч`;
+  }
+
+  function rowId(btn) {
+    const tr = btn.closest("tr");
+    if (!tr) return null;
+    const id = parseInt(tr.dataset.id, 10);
+    return Number.isNaN(id) ? null : id;
+  }
+
+  function renderAuto() {
+    if (!autoItems.length) {
+      autoBody.innerHTML =
+        '<tr><td colspan="4" class="empty">Нет авто-ответов</td></tr>';
+      return;
+    }
+    autoBody.innerHTML = autoItems
+      .map(
+        (item) => `
+      <tr data-id="${item.id}">
+        <td class="mono">${escAttr(item.command)}</td>
+        <td><input type="text" class="auto-reply-input" value="${escAttr(item.reply)}" maxlength="500" /></td>
+        <td><input type="checkbox" class="auto-enabled" title="Включить/выключить" ${item.enabled ? "checked" : ""} /></td>
+        <td class="actions">
+          <button type="button" class="small primary btn-save">Сохранить</button>
+          <button type="button" class="small danger btn-delete">Удалить</button>
+        </td>
+      </tr>`
+      )
+      .join("");
+  }
+
+  function renderTimed() {
+    if (!timedItems.length) {
+      timedBody.innerHTML =
+        '<tr><td colspan="5" class="empty">Нет сообщений по таймеру</td></tr>';
+      return;
+    }
+    timedBody.innerHTML = timedItems
+      .map(
+        (item) => `
+      <tr data-id="${item.id}">
+        <td><input type="text" class="timed-text-input" value="${escAttr(item.text)}" maxlength="500" /></td>
+        <td><input type="number" class="timed-interval-input" min="1" max="1440" value="${Math.round(item.interval_sec / 60)}" style="width:80px" /> мин</td>
+        <td><input type="checkbox" class="timed-enabled" title="Включить/выключить" ${item.enabled ? "checked" : ""} /></td>
+        <td class="timed-next">${item.enabled ? escAttr(formatNextSend(item.next_send_at)) : "—"}</td>
+        <td class="actions">
+          <button type="button" class="small primary btn-save">Сохранить</button>
+          <button type="button" class="small danger btn-delete">Удалить</button>
+        </td>
+      </tr>`
+      )
+      .join("");
+  }
+
+  function applyMsgSubTab() {
+    document.querySelectorAll(".tab[data-msgtab]").forEach((t) => {
+      t.classList.toggle("active", t.dataset.msgtab === msgSubTab);
+    });
+    document.getElementById("msgPanelAuto").style.display =
+      msgSubTab === "auto" ? "block" : "none";
+    document.getElementById("msgPanelTimed").style.display =
+      msgSubTab === "timed" ? "block" : "none";
+  }
+
+  document.querySelectorAll(".tab[data-msgtab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      msgSubTab = tab.dataset.msgtab;
+      applyMsgSubTab();
+    });
+  });
+
+  async function loadMessaging(silent) {
+    if (!silent) setStatus("Загрузка сообщений…");
+    try {
+      const [autoData, timedData] = await Promise.all([
+        api("GET", "/api/messaging/auto-responses"),
+        api("GET", "/api/messaging/timed"),
+      ]);
+      autoItems = autoData.items || [];
+      timedItems = timedData.items || [];
+      renderAuto();
+      renderTimed();
+      applyMsgSubTab();
+      if (!silent) {
+        setStatus(
+          `Авто-ответы: ${autoItems.length} · таймеры: ${timedItems.length}`,
+          "ok"
+        );
+      }
+    } catch (e) {
+      autoBody.innerHTML =
+        '<tr><td colspan="4" class="empty">Ошибка загрузки</td></tr>';
+      timedBody.innerHTML =
+        '<tr><td colspan="5" class="empty">Ошибка загрузки</td></tr>';
+      setStatus(e.message, "err");
+    }
+  }
+
+  document.getElementById("autoAddForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    let command = document.getElementById("autoAddCommand").value.trim().toLowerCase();
+    if (command && !command.startsWith("!")) command = `!${command}`;
+    const reply = document.getElementById("autoAddReply").value.trim();
+    if (!command || !reply) {
+      setStatus("Команда и ответ обязательны", "err");
+      return;
+    }
+    setStatus(`Добавление ${command}…`);
+    try {
+      await api("POST", "/api/messaging/auto-responses", { command, reply });
+      document.getElementById("autoAddCommand").value = "";
+      document.getElementById("autoAddReply").value = "";
+      await loadMessaging(true);
+      setStatus(`Добавлено: ${command}`, "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  autoBody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const id = rowId(btn);
+    if (id == null) return;
+    const tr = btn.closest("tr");
+    if (btn.classList.contains("btn-save")) {
+      const reply = tr.querySelector(".auto-reply-input").value.trim();
+      if (!reply) {
+        setStatus("Ответ не может быть пустым", "err");
+        return;
+      }
+      setStatus("Сохранение…");
+      try {
+        const item = await api("PUT", `/api/messaging/auto-responses/${id}`, {
+          reply,
+        });
+        const idx = autoItems.findIndex((a) => a.id === id);
+        if (idx >= 0) autoItems[idx] = item;
+        renderAuto();
+        setStatus(`Сохранено: ${item.command}`, "ok");
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    } else if (btn.classList.contains("btn-delete")) {
+      const item = autoItems.find((a) => a.id === id);
+      if (!confirm(`Удалить авто-ответ ${item ? item.command : `#${id}`}?`)) return;
+      try {
+        await api("DELETE", `/api/messaging/auto-responses/${id}`);
+        autoItems = autoItems.filter((a) => a.id !== id);
+        renderAuto();
+        setStatus("Удалено", "ok");
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    }
+  });
+
+  autoBody.addEventListener("change", async (e) => {
+    if (!e.target.classList.contains("auto-enabled")) return;
+    const id = rowId(e.target);
+    if (id == null) return;
+    try {
+      const item = await api("PUT", `/api/messaging/auto-responses/${id}`, {
+        enabled: e.target.checked,
+      });
+      const idx = autoItems.findIndex((a) => a.id === id);
+      if (idx >= 0) autoItems[idx] = item;
+      setStatus(`${item.command}: ${item.enabled ? "включён" : "выключен"}`, "ok");
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      setStatus(err.message, "err");
+    }
+  });
+
+  document.getElementById("timedAddForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = document.getElementById("timedAddText").value.trim();
+    const minutes = parseInt(document.getElementById("timedAddInterval").value, 10);
+    if (!text) {
+      setStatus("Текст сообщения обязателен", "err");
+      return;
+    }
+    if (Number.isNaN(minutes) || minutes < 1 || minutes > 1440) {
+      setStatus("Интервал — от 1 до 1440 минут", "err");
+      return;
+    }
+    setStatus("Добавление…");
+    try {
+      await api("POST", "/api/messaging/timed", {
+        text,
+        interval_sec: minutes * 60,
+      });
+      document.getElementById("timedAddText").value = "";
+      document.getElementById("timedAddInterval").value = "15";
+      await loadMessaging(true);
+      setStatus("Сообщение по таймеру добавлено", "ok");
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  });
+
+  timedBody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const id = rowId(btn);
+    if (id == null) return;
+    const tr = btn.closest("tr");
+    if (btn.classList.contains("btn-save")) {
+      const text = tr.querySelector(".timed-text-input").value.trim();
+      const minutes = parseInt(tr.querySelector(".timed-interval-input").value, 10);
+      if (!text) {
+        setStatus("Текст не может быть пустым", "err");
+        return;
+      }
+      if (Number.isNaN(minutes) || minutes < 1 || minutes > 1440) {
+        setStatus("Интервал — от 1 до 1440 минут", "err");
+        return;
+      }
+      setStatus("Сохранение…");
+      try {
+        const item = await api("PUT", `/api/messaging/timed/${id}`, {
+          text,
+          interval_sec: minutes * 60,
+        });
+        const idx = timedItems.findIndex((t) => t.id === id);
+        if (idx >= 0) timedItems[idx] = item;
+        renderTimed();
+        setStatus("Сохранено", "ok");
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    } else if (btn.classList.contains("btn-delete")) {
+      if (!confirm("Удалить сообщение по таймеру?")) return;
+      try {
+        await api("DELETE", `/api/messaging/timed/${id}`);
+        timedItems = timedItems.filter((t) => t.id !== id);
+        renderTimed();
+        setStatus("Удалено", "ok");
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    }
+  });
+
+  timedBody.addEventListener("change", async (e) => {
+    if (!e.target.classList.contains("timed-enabled")) return;
+    const id = rowId(e.target);
+    if (id == null) return;
+    try {
+      const item = await api("PUT", `/api/messaging/timed/${id}`, {
+        enabled: e.target.checked,
+      });
+      const idx = timedItems.findIndex((t) => t.id === id);
+      if (idx >= 0) timedItems[idx] = item;
+      renderTimed();
+      setStatus(item.enabled ? "Включено — таймер стартовал заново" : "Выключено", "ok");
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      setStatus(err.message, "err");
+    }
+  });
+
   document.querySelectorAll(".tab[data-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -2268,6 +2555,7 @@
       if (id === "fishing") loadFishing(false);
       if (id === "events") loadEvents(false);
       if (id === "steal") loadSteal(false);
+      if (id === "messaging") loadMessaging(false);
     });
   });
 

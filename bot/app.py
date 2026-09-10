@@ -20,6 +20,8 @@ from config import Config
 from .daycycle import DaycycleHandler
 from .fishing import FishingHandler
 from .goodgame import GoodGameClient
+from .messaging import MessagingHandler
+from .messaging.routes import MessagingAdminRoutes
 from .polls import PollsHandler
 from .princess import PrincessHandler
 from .races import RacesHandler
@@ -52,6 +54,7 @@ class StreamBot:
         )
         self.polls = PollsHandler(db=self.db)
         self.fishing = FishingHandler(db=self.db)
+        self.messaging = MessagingHandler(self.db)
         self.album_web = AlbumWebServer(
             self.db,
             cfg.album_link_secret,
@@ -81,6 +84,7 @@ class StreamBot:
         )
         self.admin.register(self.web.app)
         CardsAdminRoutes(self.db).register(self.web.app)
+        MessagingAdminRoutes(self.db, self.messaging).register(self.web.app)
         self.gg = GoodGameClient(
             login=cfg.gg_login,
             password=cfg.gg_password,
@@ -129,6 +133,7 @@ class StreamBot:
         self.races.bind_remove(self._remove_chat)
         self.polls.bind_reply(self._reply)
         self.fishing.bind_reply(self._reply)
+        self.messaging.bind_reply(self._reply)
         self.roulette.bind_points(self.princess.points)
         self.races.bind_points(self.princess.points)
         self.polls.bind_points(self.princess.points)
@@ -157,6 +162,7 @@ class StreamBot:
         await self.races.start()
         await self.polls.start()
         await self.fishing.start()
+        await self.messaging.start()
         log.info("Бустер OBS: http://%s:%d/booster.html", self.cfg.obs_host, self.cfg.obs_port)
         log.info(
             "Рыбалка-рекорд OBS: http://%s:%d/fishing-record.html",
@@ -178,6 +184,7 @@ class StreamBot:
         await self.races.close()
         await self.polls.close()
         await self.fishing.close()
+        await self.messaging.close()
         await self.sr.close()
         await self.clo.stop()
         await self.album_web.stop()
@@ -221,6 +228,8 @@ class StreamBot:
         if await self.fishing.handle_message(msg):
             return
         await self.sr.handle_message(msg)
+        if await self.messaging.handle_message(msg):
+            return
 
     async def _princess_reply(self, user_name: str, text: str) -> None:
         await self._reply(f"{user_name}, {text}")
