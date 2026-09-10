@@ -2296,7 +2296,7 @@
         (item) => `
       <tr data-id="${item.id}">
         <td class="mono">${escAttr(item.command)}</td>
-        <td><input type="text" class="auto-reply-input" value="${escAttr(item.reply)}" maxlength="500" /></td>
+        <td><textarea class="auto-reply-input" maxlength="500" rows="2">${escAttr(item.reply)}</textarea></td>
         <td><input type="checkbox" class="auto-enabled" title="Включить/выключить" ${item.enabled ? "checked" : ""} /></td>
         <td class="actions">
           <button type="button" class="small primary btn-save">Сохранить</button>
@@ -2317,7 +2317,7 @@
       .map(
         (item) => `
       <tr data-id="${item.id}">
-        <td><input type="text" class="timed-text-input" value="${escAttr(item.text)}" maxlength="500" /></td>
+        <td><textarea class="timed-text-input" maxlength="500" rows="2">${escAttr(item.text)}</textarea></td>
         <td><input type="number" class="timed-interval-input" min="1" max="1440" value="${Math.round(item.interval_sec / 60)}" style="width:80px" /> мин</td>
         <td><input type="checkbox" class="timed-enabled" title="Включить/выключить" ${item.enabled ? "checked" : ""} /></td>
         <td class="timed-next">${item.enabled ? escAttr(formatNextSend(item.next_send_at)) : "—"}</td>

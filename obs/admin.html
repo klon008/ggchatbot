@@ -72,7 +72,8 @@
       margin-bottom: 14px;
     }
     input[type="text"],
-    input[type="number"] {
+    input[type="number"],
+    textarea {
       padding: 7px 10px;
       border: 1px solid #3d3d5c;
       border-radius: 6px;
@@ -82,6 +83,12 @@
     }
     input[type="text"] { min-width: 160px; }
     input[type="number"] { width: 100px; }
+    textarea {
+      width: 100%;
+      min-height: 52px;
+      resize: vertical;
+      line-height: 1.4;
+    }
     button {
       padding: 7px 14px;
       border: 1px solid #3d3d5c;
@@ -1054,7 +1061,7 @@
           </p>
           <form class="add-form" id="autoAddForm">
             <label>Команда <input type="text" id="autoAddCommand" placeholder="!faq" maxlength="32" required /></label>
-            <label>Ответ <input type="text" id="autoAddReply" placeholder="текст ответа бота" maxlength="500" required /></label>
+            <label style="flex:1;min-width:260px">Ответ <textarea id="autoAddReply" placeholder="текст ответа бота" maxlength="500" required></textarea></label>
             <button type="submit" class="primary">Добавить</button>
           </form>
           <table>
@@ -1082,7 +1089,7 @@
             включении таймер стартует заново.
           </p>
           <form class="add-form" id="timedAddForm">
-            <label>Сообщение <input type="text" id="timedAddText" placeholder="текст сообщения" maxlength="500" required /></label>
+            <label style="flex:1;min-width:260px">Сообщение <textarea id="timedAddText" placeholder="текст сообщения" maxlength="500" required></textarea></label>
             <label>Интервал (мин) <input type="number" id="timedAddInterval" min="1" max="1440" value="15" required /></label>
             <button type="submit" class="primary">Добавить</button>
           </form>
