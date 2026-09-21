@@ -44,6 +44,7 @@ from . import (
     m036_princess_events,
     m037_draw_templates,
     m038_messaging,
+    m039_series_villains,
 )
 
 
@@ -92,4 +93,5 @@ MIGRATIONS: list[Migration] = [
     m036_princess_events,
     m037_draw_templates,
     m038_messaging,
+    m039_series_villains,
 ]
