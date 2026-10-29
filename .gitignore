@@ -56,6 +56,9 @@ env/
 
 
 
+# Local one-off DB query script (not for repo)
+query_card_openings.py
+
 # IDE / OS / agent tooling
 
 .zcode/

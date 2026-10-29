@@ -45,6 +45,7 @@ from . import (
     m037_draw_templates,
     m038_messaging,
     m039_series_villains,
+    m040_series_halloween_2026,
 )
 
 
@@ -94,4 +95,5 @@ MIGRATIONS: list[Migration] = [
     m037_draw_templates,
     m038_messaging,
     m039_series_villains,
+    m040_series_halloween_2026,
 ]
